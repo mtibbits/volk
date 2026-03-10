@@ -111,11 +111,7 @@ static inline void volk_32f_x2_min_32f_u_avx(float* cVector,
     }
 
     number = eighthPoints * 8;
-    for (; number < num_points; number++) {
-        const float a = *aPtr++;
-        const float b = *bPtr++;
-        *cPtr++ = (a < b ? a : b);
-    }
+    volk_32f_x2_min_32f_generic(cPtr, aPtr, bPtr, num_points - number);
 }
 #endif /* LV_HAVE_AVX */
 
@@ -149,11 +145,7 @@ static inline void volk_32f_x2_min_32f_u_avx512f(float* cVector,
     }
 
     number = sixteenthPoints * 16;
-    for (; number < num_points; number++) {
-        const float a = *aPtr++;
-        const float b = *bPtr++;
-        *cPtr++ = (a < b ? a : b);
-    }
+    volk_32f_x2_min_32f_generic(cPtr, aPtr, bPtr, num_points - number);
 }
 #endif /* LV_HAVE_AVX512F */
 
@@ -184,11 +176,8 @@ static inline void volk_32f_x2_min_32f_neon(float* cVector,
         cPtr += 4;
     }
 
-    for (number = quarter_points * 4; number < num_points; number++) {
-        const float a = *aPtr++;
-        const float b = *bPtr++;
-        *cPtr++ = (a < b ? a : b);
-    }
+    number = quarter_points * 4;
+    volk_32f_x2_min_32f_generic(cPtr, aPtr, bPtr, num_points - number);
 }
 #endif /* LV_HAVE_NEON */
 
@@ -222,11 +211,7 @@ static inline void volk_32f_x2_min_32f_neonv8(float* cVector,
         cPtr += 8;
     }
 
-    for (unsigned int number = eighthPoints * 8; number < num_points; number++) {
-        const float a = *aPtr++;
-        const float b = *bPtr++;
-        *cPtr++ = (a < b ? a : b);
-    }
+    volk_32f_x2_min_32f_generic(cPtr, aPtr, bPtr, num_points - eighthPoints * 8);
 }
 #endif /* LV_HAVE_NEONV8 */
 
@@ -303,11 +288,7 @@ static inline void volk_32f_x2_min_32f_a_sse(float* cVector,
     }
 
     number = quarterPoints * 4;
-    for (; number < num_points; number++) {
-        const float a = *aPtr++;
-        const float b = *bPtr++;
-        *cPtr++ = (a < b ? a : b);
-    }
+    volk_32f_x2_min_32f_generic(cPtr, aPtr, bPtr, num_points - number);
 }
 #endif /* LV_HAVE_SSE */
 
@@ -341,11 +322,7 @@ static inline void volk_32f_x2_min_32f_a_avx(float* cVector,
     }
 
     number = eighthPoints * 8;
-    for (; number < num_points; number++) {
-        const float a = *aPtr++;
-        const float b = *bPtr++;
-        *cPtr++ = (a < b ? a : b);
-    }
+    volk_32f_x2_min_32f_generic(cPtr, aPtr, bPtr, num_points - number);
 }
 #endif /* LV_HAVE_AVX */
 
@@ -379,11 +356,7 @@ static inline void volk_32f_x2_min_32f_a_avx512f(float* cVector,
     }
 
     number = sixteenthPoints * 16;
-    for (; number < num_points; number++) {
-        const float a = *aPtr++;
-        const float b = *bPtr++;
-        *cPtr++ = (a < b ? a : b);
-    }
+    volk_32f_x2_min_32f_generic(cPtr, aPtr, bPtr, num_points - number);
 }
 #endif /* LV_HAVE_AVX512F */
 

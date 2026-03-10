@@ -175,15 +175,9 @@ static inline void volk_16ic_magnitude_16i_neonv7(int16_t* magnitudeVector,
         complexVectorPtr += 4;
     }
 
-    // Deal with the rest
-    for (number = quarter_points * 4; number < num_points; number++) {
-        const float real = lv_creal(*complexVectorPtr) * inv_scalar;
-        const float imag = lv_cimag(*complexVectorPtr) * inv_scalar;
-        *magnitudeVectorPtr =
-            (int16_t)rintf(sqrtf((real * real) + (imag * imag)) * scalar);
-        complexVectorPtr++;
-        magnitudeVectorPtr++;
-    }
+    number = quarter_points * 4;
+    volk_16ic_magnitude_16i_generic(
+        magnitudeVectorPtr, complexVectorPtr, num_points - number);
 }
 #endif /* LV_HAVE_NEONV7 */
 
@@ -229,15 +223,9 @@ static inline void volk_16ic_magnitude_16i_neonv8(int16_t* magnitudeVector,
         complexVectorPtr += 4;
     }
 
-    // Deal with the rest
-    for (number = quarter_points * 4; number < num_points; number++) {
-        const float real = lv_creal(*complexVectorPtr) * inv_scalar;
-        const float imag = lv_cimag(*complexVectorPtr) * inv_scalar;
-        *magnitudeVectorPtr =
-            (int16_t)rintf(sqrtf((real * real) + (imag * imag)) * scalar);
-        complexVectorPtr++;
-        magnitudeVectorPtr++;
-    }
+    number = quarter_points * 4;
+    volk_16ic_magnitude_16i_generic(
+        magnitudeVectorPtr, complexVectorPtr, num_points - number);
 }
 #endif /* LV_HAVE_NEONV8 */
 

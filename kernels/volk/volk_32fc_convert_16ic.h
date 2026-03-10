@@ -71,7 +71,6 @@ static inline void volk_32fc_convert_16ic_u_sse2(lv_16sc_t* outputVector,
 
     const float* inputVectorPtr = (const float*)inputVector;
     int16_t* outputVectorPtr = (int16_t*)outputVector;
-    float aux;
 
     const float min_val = (float)SHRT_MIN;
     const float max_val = (float)SHRT_MAX;
@@ -103,14 +102,10 @@ static inline void volk_32fc_convert_16ic_u_sse2(lv_16sc_t* outputVector,
         outputVectorPtr += 8;
     }
 
-    for (i = sse_iters * 8; i < num_points * 2; i++) {
-        aux = *inputVectorPtr++;
-        if (aux > max_val)
-            aux = max_val;
-        else if (aux < min_val)
-            aux = min_val;
-        *outputVectorPtr++ = (int16_t)rintf(aux);
-    }
+    volk_32fc_convert_16ic_generic(
+        (lv_16sc_t*)outputVectorPtr,
+        (const lv_32fc_t*)inputVectorPtr,
+        num_points - sse_iters * 4);
 }
 #endif /* LV_HAVE_SSE2 */
 
@@ -125,7 +120,6 @@ static inline void volk_32fc_convert_16ic_u_avx2(lv_16sc_t* outputVector,
 
     const float* inputVectorPtr = (const float*)inputVector;
     int16_t* outputVectorPtr = (int16_t*)outputVector;
-    float aux;
 
     const float min_val = (float)SHRT_MIN;
     const float max_val = (float)SHRT_MAX;
@@ -158,14 +152,10 @@ static inline void volk_32fc_convert_16ic_u_avx2(lv_16sc_t* outputVector,
         outputVectorPtr += 16;
     }
 
-    for (i = avx_iters * 16; i < num_points * 2; i++) {
-        aux = *inputVectorPtr++;
-        if (aux > max_val)
-            aux = max_val;
-        else if (aux < min_val)
-            aux = min_val;
-        *outputVectorPtr++ = (int16_t)rintf(aux);
-    }
+    volk_32fc_convert_16ic_generic(
+        (lv_16sc_t*)outputVectorPtr,
+        (const lv_32fc_t*)inputVectorPtr,
+        num_points - avx_iters * 8);
 }
 #endif /* LV_HAVE_AVX2 */
 
@@ -180,7 +170,6 @@ static inline void volk_32fc_convert_16ic_u_avx512(lv_16sc_t* outputVector,
 
     const float* inputVectorPtr = (const float*)inputVector;
     int16_t* outputVectorPtr = (int16_t*)outputVector;
-    float aux;
 
     const float min_val = (float)SHRT_MIN;
     const float max_val = (float)SHRT_MAX;
@@ -207,14 +196,10 @@ static inline void volk_32fc_convert_16ic_u_avx512(lv_16sc_t* outputVector,
         outputVectorPtr += 16;
     }
 
-    for (i = avx512_iters * 16; i < num_points * 2; i++) {
-        aux = *inputVectorPtr++;
-        if (aux > max_val)
-            aux = max_val;
-        else if (aux < min_val)
-            aux = min_val;
-        *outputVectorPtr++ = (int16_t)rintf(aux);
-    }
+    volk_32fc_convert_16ic_generic(
+        (lv_16sc_t*)outputVectorPtr,
+        (const lv_32fc_t*)inputVectorPtr,
+        num_points - avx512_iters * 8);
 }
 #endif /* LV_HAVE_AVX512F */
 
@@ -233,7 +218,6 @@ static inline void volk_32fc_convert_16ic_neon(lv_16sc_t* outputVector,
 
     const float min_val_f = (float)SHRT_MIN;
     const float max_val_f = (float)SHRT_MAX;
-    float32_t aux;
     unsigned int i;
 
     const float32x4_t min_val = vmovq_n_f32(min_val_f);
@@ -274,14 +258,10 @@ static inline void volk_32fc_convert_16ic_neon(lv_16sc_t* outputVector,
         outputVectorPtr += 8;
     }
 
-    for (i = neon_iters * 8; i < num_points * 2; i++) {
-        aux = *inputVectorPtr++;
-        if (aux > max_val_f)
-            aux = max_val_f;
-        else if (aux < min_val_f)
-            aux = min_val_f;
-        *outputVectorPtr++ = (int16_t)rintf(aux);
-    }
+    volk_32fc_convert_16ic_generic(
+        (lv_16sc_t*)outputVectorPtr,
+        (const lv_32fc_t*)inputVectorPtr,
+        num_points - neon_iters * 4);
 }
 
 #endif /* LV_HAVE_NEONV7 */
@@ -300,7 +280,6 @@ static inline void volk_32fc_convert_16ic_neonv8(lv_16sc_t* outputVector,
 
     const float min_val_f = (float)SHRT_MIN;
     const float max_val_f = (float)SHRT_MAX;
-    float32_t aux;
     unsigned int i;
 
     const float32x4_t min_val = vmovq_n_f32(min_val_f);
@@ -333,14 +312,10 @@ static inline void volk_32fc_convert_16ic_neonv8(lv_16sc_t* outputVector,
         outputVectorPtr += 8;
     }
 
-    for (i = neon_iters * 8; i < num_points * 2; i++) {
-        aux = *inputVectorPtr++;
-        if (aux > max_val_f)
-            aux = max_val_f;
-        else if (aux < min_val_f)
-            aux = min_val_f;
-        *outputVectorPtr++ = (int16_t)rintf(aux);
-    }
+    volk_32fc_convert_16ic_generic(
+        (lv_16sc_t*)outputVectorPtr,
+        (const lv_32fc_t*)inputVectorPtr,
+        num_points - neon_iters * 4);
 }
 #endif /* LV_HAVE_NEONV8 */
 
@@ -382,7 +357,6 @@ static inline void volk_32fc_convert_16ic_a_sse2(lv_16sc_t* outputVector,
 
     const float* inputVectorPtr = (const float*)inputVector;
     int16_t* outputVectorPtr = (int16_t*)outputVector;
-    float aux;
 
     const float min_val = (float)SHRT_MIN;
     const float max_val = (float)SHRT_MAX;
@@ -414,14 +388,10 @@ static inline void volk_32fc_convert_16ic_a_sse2(lv_16sc_t* outputVector,
         outputVectorPtr += 8;
     }
 
-    for (i = sse_iters * 8; i < num_points * 2; i++) {
-        aux = *inputVectorPtr++;
-        if (aux > max_val)
-            aux = max_val;
-        else if (aux < min_val)
-            aux = min_val;
-        *outputVectorPtr++ = (int16_t)rintf(aux);
-    }
+    volk_32fc_convert_16ic_generic(
+        (lv_16sc_t*)outputVectorPtr,
+        (const lv_32fc_t*)inputVectorPtr,
+        num_points - sse_iters * 4);
 }
 #endif /* LV_HAVE_SSE2 */
 
@@ -436,7 +406,6 @@ static inline void volk_32fc_convert_16ic_a_avx2(lv_16sc_t* outputVector,
 
     const float* inputVectorPtr = (const float*)inputVector;
     int16_t* outputVectorPtr = (int16_t*)outputVector;
-    float aux;
 
     const float min_val = (float)SHRT_MIN;
     const float max_val = (float)SHRT_MAX;
@@ -469,14 +438,10 @@ static inline void volk_32fc_convert_16ic_a_avx2(lv_16sc_t* outputVector,
         outputVectorPtr += 16;
     }
 
-    for (i = avx_iters * 16; i < num_points * 2; i++) {
-        aux = *inputVectorPtr++;
-        if (aux > max_val)
-            aux = max_val;
-        else if (aux < min_val)
-            aux = min_val;
-        *outputVectorPtr++ = (int16_t)rintf(aux);
-    }
+    volk_32fc_convert_16ic_generic(
+        (lv_16sc_t*)outputVectorPtr,
+        (const lv_32fc_t*)inputVectorPtr,
+        num_points - avx_iters * 8);
 }
 #endif /* LV_HAVE_AVX2 */
 
@@ -491,7 +456,6 @@ static inline void volk_32fc_convert_16ic_a_avx512(lv_16sc_t* outputVector,
 
     const float* inputVectorPtr = (const float*)inputVector;
     int16_t* outputVectorPtr = (int16_t*)outputVector;
-    float aux;
 
     const float min_val = (float)SHRT_MIN;
     const float max_val = (float)SHRT_MAX;
@@ -518,14 +482,10 @@ static inline void volk_32fc_convert_16ic_a_avx512(lv_16sc_t* outputVector,
         outputVectorPtr += 16;
     }
 
-    for (i = avx512_iters * 16; i < num_points * 2; i++) {
-        aux = *inputVectorPtr++;
-        if (aux > max_val)
-            aux = max_val;
-        else if (aux < min_val)
-            aux = min_val;
-        *outputVectorPtr++ = (int16_t)rintf(aux);
-    }
+    volk_32fc_convert_16ic_generic(
+        (lv_16sc_t*)outputVectorPtr,
+        (const lv_32fc_t*)inputVectorPtr,
+        num_points - avx512_iters * 8);
 }
 #endif /* LV_HAVE_AVX512F */
 

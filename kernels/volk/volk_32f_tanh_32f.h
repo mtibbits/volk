@@ -298,7 +298,7 @@ volk_32f_tanh_32f_neon(float* cVector, const float* aVector, unsigned int num_po
     }
 
     number = quarterPoints * 4;
-    volk_32f_tanh_32f_series(cPtr, aPtr, num_points - number);
+    volk_32f_tanh_32f_generic(cPtr, aPtr, num_points - number);
 }
 
 #endif /* LV_HAVE_NEON */
@@ -360,7 +360,7 @@ volk_32f_tanh_32f_neonv8(float* cVector, const float* aVector, unsigned int num_
     }
 
     number = eighthPoints * 8;
-    volk_32f_tanh_32f_series(cPtr, aPtr, num_points - number);
+    volk_32f_tanh_32f_generic(cPtr, aPtr, num_points - number);
 }
 
 #endif /* LV_HAVE_NEONV8 */

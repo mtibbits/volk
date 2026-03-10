@@ -133,10 +133,8 @@ static inline void volk_32f_s32f_x2_convert_8u_u_sse(uint8_t* outputVector,
         }
     }
 
-    for (unsigned int number = quarterPoints * 4; number < num_points; number++) {
-        const float r = inputVector[number] * scale + bias;
-        volk_32f_s32f_x2_convert_8u_single(&outputVector[number], r);
-    }
+    volk_32f_s32f_x2_convert_8u_generic(
+        outputVectorPtr, inputVectorPtr, scale, bias, num_points - quarterPoints * 4);
 }
 
 #endif /* LV_HAVE_SSE */
@@ -201,10 +199,8 @@ static inline void volk_32f_s32f_x2_convert_8u_u_sse2(uint8_t* outputVector,
         outputVectorPtr += 16;
     }
 
-    for (unsigned int number = sixteenthPoints * 16; number < num_points; number++) {
-        const float r = inputVector[number] * scale + bias;
-        volk_32f_s32f_x2_convert_8u_single(&outputVector[number], r);
-    }
+    volk_32f_s32f_x2_convert_8u_generic(
+        outputVectorPtr, inputVectorPtr, scale, bias, num_points - sixteenthPoints * 16);
 }
 
 #endif /* LV_HAVE_SSE2 */
@@ -268,10 +264,8 @@ static inline void volk_32f_s32f_x2_convert_8u_u_avx2_fma(uint8_t* outputVector,
         outputVectorPtr += 32;
     }
 
-    for (unsigned int number = thirtysecondPoints * 32; number < num_points; number++) {
-        const float r = inputVector[number] * scale + bias;
-        volk_32f_s32f_x2_convert_8u_single(&outputVector[number], r);
-    }
+    volk_32f_s32f_x2_convert_8u_generic(
+        outputVectorPtr, inputVectorPtr, scale, bias, num_points - thirtysecondPoints * 32);
 }
 
 #endif /* LV_HAVE_AVX2 && LV_HAVE_FMA */
@@ -343,10 +337,8 @@ static inline void volk_32f_s32f_x2_convert_8u_u_avx2(uint8_t* outputVector,
         outputVectorPtr += 32;
     }
 
-    for (unsigned int number = thirtysecondPoints * 32; number < num_points; number++) {
-        float r = inputVector[number] * scale + bias;
-        volk_32f_s32f_x2_convert_8u_single(&outputVector[number], r);
-    }
+    volk_32f_s32f_x2_convert_8u_generic(
+        outputVectorPtr, inputVectorPtr, scale, bias, num_points - thirtysecondPoints * 32);
 }
 
 #endif /* LV_HAVE_AVX2 */
@@ -414,10 +406,8 @@ static inline void volk_32f_s32f_x2_convert_8u_neon(uint8_t* outputVector,
     }
 
     number = sixteenth_points * 16;
-    for (; number < num_points; number++) {
-        const float r = inputVector[number] * scale + bias;
-        volk_32f_s32f_x2_convert_8u_single(&outputVector[number], r);
-    }
+    volk_32f_s32f_x2_convert_8u_generic(
+        outputVectorPtr, inputVectorPtr, scale, bias, num_points - number);
 }
 #endif /* LV_HAVE_NEON */
 
@@ -484,10 +474,8 @@ static inline void volk_32f_s32f_x2_convert_8u_neonv8(uint8_t* outputVector,
     }
 
     number = sixteenth_points * 16;
-    for (; number < num_points; number++) {
-        const float r = inputVector[number] * scale + bias;
-        volk_32f_s32f_x2_convert_8u_single(&outputVector[number], r);
-    }
+    volk_32f_s32f_x2_convert_8u_generic(
+        outputVectorPtr, inputVectorPtr, scale, bias, num_points - number);
 }
 #endif /* LV_HAVE_NEONV8 */
 
@@ -555,10 +543,8 @@ static inline void volk_32f_s32f_x2_convert_8u_a_sse(uint8_t* outputVector,
         }
     }
 
-    for (unsigned int number = quarterPoints * 4; number < num_points; number++) {
-        const float r = inputVector[number] * scale + bias;
-        volk_32f_s32f_x2_convert_8u_single(&outputVector[number], r);
-    }
+    volk_32f_s32f_x2_convert_8u_generic(
+        outputVectorPtr, inputVectorPtr, scale, bias, num_points - quarterPoints * 4);
 }
 
 #endif /* LV_HAVE_SSE */
@@ -623,10 +609,8 @@ static inline void volk_32f_s32f_x2_convert_8u_a_sse2(uint8_t* outputVector,
         outputVectorPtr += 16;
     }
 
-    for (unsigned int number = sixteenthPoints * 16; number < num_points; number++) {
-        const float r = inputVector[number] * scale + bias;
-        volk_32f_s32f_x2_convert_8u_single(&outputVector[number], r);
-    }
+    volk_32f_s32f_x2_convert_8u_generic(
+        outputVectorPtr, inputVectorPtr, scale, bias, num_points - sixteenthPoints * 16);
 }
 #endif /* LV_HAVE_SSE2 */
 
@@ -689,10 +673,8 @@ static inline void volk_32f_s32f_x2_convert_8u_a_avx2_fma(uint8_t* outputVector,
         outputVectorPtr += 32;
     }
 
-    for (unsigned int number = thirtysecondPoints * 32; number < num_points; number++) {
-        const float r = inputVector[number] * scale + bias;
-        volk_32f_s32f_x2_convert_8u_single(&outputVector[number], r);
-    }
+    volk_32f_s32f_x2_convert_8u_generic(
+        outputVectorPtr, inputVectorPtr, scale, bias, num_points - thirtysecondPoints * 32);
 }
 
 #endif /* LV_HAVE_AVX2 && LV_HAVE_FMA */
@@ -764,10 +746,8 @@ static inline void volk_32f_s32f_x2_convert_8u_a_avx2(uint8_t* outputVector,
         outputVectorPtr += 32;
     }
 
-    for (unsigned int number = thirtysecondPoints * 32; number < num_points; number++) {
-        const float r = inputVector[number] * scale + bias;
-        volk_32f_s32f_x2_convert_8u_single(&outputVector[number], r);
-    }
+    volk_32f_s32f_x2_convert_8u_generic(
+        outputVectorPtr, inputVectorPtr, scale, bias, num_points - thirtysecondPoints * 32);
 }
 
 #endif /* LV_HAVE_AVX2 */

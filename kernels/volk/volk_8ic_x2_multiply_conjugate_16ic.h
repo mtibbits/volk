@@ -104,21 +104,8 @@ static inline void volk_8ic_x2_multiply_conjugate_16ic_u_avx2(lv_16sc_t* cVector
     }
 
     number = oneEigthPoints * 8;
-    int16_t* c16Ptr = (int16_t*)&cVector[number];
-    const int8_t* a8Ptr = (const int8_t*)&aVector[number];
-    const int8_t* b8Ptr = (const int8_t*)&bVector[number];
-    for (; number < num_points; number++) {
-        float aReal = (float)*a8Ptr++;
-        float aImag = (float)*a8Ptr++;
-        lv_32fc_t aVal = lv_cmake(aReal, aImag);
-        float bReal = (float)*b8Ptr++;
-        float bImag = (float)*b8Ptr++;
-        lv_32fc_t bVal = lv_cmake(bReal, -bImag);
-        lv_32fc_t temp = aVal * bVal;
-
-        *c16Ptr++ = (int16_t)(lv_creal(temp) > SHRT_MAX ? SHRT_MAX : lv_creal(temp));
-        *c16Ptr++ = (int16_t)lv_cimag(temp);
-    }
+    volk_8ic_x2_multiply_conjugate_16ic_generic(
+        cVector + number, aVector + number, bVector + number, num_points - number);
 }
 #endif /* LV_HAVE_AVX2 */
 
@@ -196,21 +183,8 @@ static inline void volk_8ic_x2_multiply_conjugate_16ic_neon(lv_16sc_t* cVector,
     }
 
     number = eighthPoints * 8;
-    int16_t* c16Ptr = (int16_t*)&cVector[number];
-    const int8_t* a8Ptr = (const int8_t*)&aVector[number];
-    const int8_t* b8Ptr = (const int8_t*)&bVector[number];
-    for (; number < num_points; number++) {
-        float aReal_f = (float)*a8Ptr++;
-        float aImag_f = (float)*a8Ptr++;
-        lv_32fc_t aVal_c = lv_cmake(aReal_f, aImag_f);
-        float bReal_f = (float)*b8Ptr++;
-        float bImag_f = (float)*b8Ptr++;
-        lv_32fc_t bVal_c = lv_cmake(bReal_f, -bImag_f);
-        lv_32fc_t temp = aVal_c * bVal_c;
-
-        *c16Ptr++ = (int16_t)(lv_creal(temp) > SHRT_MAX ? SHRT_MAX : lv_creal(temp));
-        *c16Ptr++ = (int16_t)lv_cimag(temp);
-    }
+    volk_8ic_x2_multiply_conjugate_16ic_generic(
+        cVector + number, aVector + number, bVector + number, num_points - number);
 }
 #endif /* LV_HAVE_NEON */
 
@@ -327,21 +301,8 @@ static inline void volk_8ic_x2_multiply_conjugate_16ic_a_sse4_1(lv_16sc_t* cVect
     }
 
     number = quarterPoints * 4;
-    int16_t* c16Ptr = (int16_t*)&cVector[number];
-    const int8_t* a8Ptr = (const int8_t*)&aVector[number];
-    const int8_t* b8Ptr = (const int8_t*)&bVector[number];
-    for (; number < num_points; number++) {
-        float aReal = (float)*a8Ptr++;
-        float aImag = (float)*a8Ptr++;
-        lv_32fc_t aVal = lv_cmake(aReal, aImag);
-        float bReal = (float)*b8Ptr++;
-        float bImag = (float)*b8Ptr++;
-        lv_32fc_t bVal = lv_cmake(bReal, -bImag);
-        lv_32fc_t temp = aVal * bVal;
-
-        *c16Ptr++ = (int16_t)(lv_creal(temp) > SHRT_MAX ? SHRT_MAX : lv_creal(temp));
-        *c16Ptr++ = (int16_t)lv_cimag(temp);
-    }
+    volk_8ic_x2_multiply_conjugate_16ic_generic(
+        cVector + number, aVector + number, bVector + number, num_points - number);
 }
 #endif /* LV_HAVE_SSE4_1 */
 
@@ -401,21 +362,8 @@ static inline void volk_8ic_x2_multiply_conjugate_16ic_a_avx2(lv_16sc_t* cVector
     }
 
     number = quarterPoints * 8;
-    int16_t* c16Ptr = (int16_t*)&cVector[number];
-    const int8_t* a8Ptr = (const int8_t*)&aVector[number];
-    const int8_t* b8Ptr = (const int8_t*)&bVector[number];
-    for (; number < num_points; number++) {
-        float aReal = (float)*a8Ptr++;
-        float aImag = (float)*a8Ptr++;
-        lv_32fc_t aVal = lv_cmake(aReal, aImag);
-        float bReal = (float)*b8Ptr++;
-        float bImag = (float)*b8Ptr++;
-        lv_32fc_t bVal = lv_cmake(bReal, -bImag);
-        lv_32fc_t temp = aVal * bVal;
-
-        *c16Ptr++ = (int16_t)(lv_creal(temp) > SHRT_MAX ? SHRT_MAX : lv_creal(temp));
-        *c16Ptr++ = (int16_t)lv_cimag(temp);
-    }
+    volk_8ic_x2_multiply_conjugate_16ic_generic(
+        cVector + number, aVector + number, bVector + number, num_points - number);
 }
 #endif /* LV_HAVE_AVX2 */
 

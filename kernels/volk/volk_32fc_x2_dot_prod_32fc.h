@@ -113,7 +113,6 @@ static inline void volk_32fc_x2_dot_prod_32fc_u_sse3(lv_32fc_t* result,
 
     unsigned int number = 0;
     const unsigned int halfPoints = num_points / 2;
-    unsigned int isodd = num_points & 1;
 
     __m128 x, y, yl, yh, z, tmp1, tmp2, dotProdVal;
 
@@ -153,8 +152,11 @@ static inline void volk_32fc_x2_dot_prod_32fc_u_sse3(lv_32fc_t* result,
 
     dotProduct += (dotProductVector[0] + dotProductVector[1]);
 
-    if (isodd) {
-        dotProduct += input[num_points - 1] * taps[num_points - 1];
+    number = halfPoints * 2;
+    if (number < num_points) {
+        lv_32fc_t tailResult = lv_cmake(0, 0);
+        volk_32fc_x2_dot_prod_32fc_generic(&tailResult, a, b, num_points - number);
+        dotProduct += tailResult;
     }
 
     *result = dotProduct;
@@ -172,8 +174,6 @@ static inline void volk_32fc_x2_dot_prod_32fc_u_avx(lv_32fc_t* result,
                                                      unsigned int num_points)
 {
 
-    unsigned int isodd = num_points & 3;
-    unsigned int i = 0;
     lv_32fc_t dotProduct;
     memset(&dotProduct, 0x0, 2 * sizeof(float));
 
@@ -218,8 +218,11 @@ static inline void volk_32fc_x2_dot_prod_32fc_u_avx(lv_32fc_t* result,
     dotProduct += (dotProductVector[0] + dotProductVector[1] + dotProductVector[2] +
                    dotProductVector[3]);
 
-    for (i = num_points - isodd; i < num_points; i++) {
-        dotProduct += input[i] * taps[i];
+    number = quarterPoints * 4;
+    if (number < num_points) {
+        lv_32fc_t tailResult = lv_cmake(0, 0);
+        volk_32fc_x2_dot_prod_32fc_generic(&tailResult, a, b, num_points - number);
+        dotProduct += tailResult;
     }
 
     *result = dotProduct;
@@ -236,8 +239,6 @@ static inline void volk_32fc_x2_dot_prod_32fc_u_avx_fma(lv_32fc_t* result,
                                                          unsigned int num_points)
 {
 
-    unsigned int isodd = num_points & 3;
-    unsigned int i = 0;
     lv_32fc_t dotProduct;
     memset(&dotProduct, 0x0, 2 * sizeof(float));
 
@@ -283,8 +284,11 @@ static inline void volk_32fc_x2_dot_prod_32fc_u_avx_fma(lv_32fc_t* result,
     dotProduct += (dotProductVector[0] + dotProductVector[1] + dotProductVector[2] +
                    dotProductVector[3]);
 
-    for (i = num_points - isodd; i < num_points; i++) {
-        dotProduct += input[i] * taps[i];
+    number = quarterPoints * 4;
+    if (number < num_points) {
+        lv_32fc_t tailResult = lv_cmake(0, 0);
+        volk_32fc_x2_dot_prod_32fc_generic(&tailResult, a, b, num_points - number);
+        dotProduct += tailResult;
     }
 
     *result = dotProduct;
@@ -697,7 +701,6 @@ static inline void volk_32fc_x2_dot_prod_32fc_a_sse3(lv_32fc_t* result,
 {
 
     const unsigned int num_bytes = num_points * 8;
-    unsigned int isodd = num_points & 1;
 
     lv_32fc_t dotProduct;
     memset(&dotProduct, 0x0, 2 * sizeof(float));
@@ -743,8 +746,11 @@ static inline void volk_32fc_x2_dot_prod_32fc_a_sse3(lv_32fc_t* result,
 
     dotProduct += (dotProductVector[0] + dotProductVector[1]);
 
-    if (isodd) {
-        dotProduct += input[num_points - 1] * taps[num_points - 1];
+    number = halfPoints * 2;
+    if (number < num_points) {
+        lv_32fc_t tailResult = lv_cmake(0, 0);
+        volk_32fc_x2_dot_prod_32fc_generic(&tailResult, a, b, num_points - number);
+        dotProduct += tailResult;
     }
 
     *result = dotProduct;
@@ -763,8 +769,6 @@ static inline void volk_32fc_x2_dot_prod_32fc_a_avx(lv_32fc_t* result,
                                                      unsigned int num_points)
 {
 
-    unsigned int isodd = num_points & 3;
-    unsigned int i = 0;
     lv_32fc_t dotProduct;
     memset(&dotProduct, 0x0, 2 * sizeof(float));
 
@@ -810,8 +814,11 @@ static inline void volk_32fc_x2_dot_prod_32fc_a_avx(lv_32fc_t* result,
     dotProduct += (dotProductVector[0] + dotProductVector[1] + dotProductVector[2] +
                    dotProductVector[3]);
 
-    for (i = num_points - isodd; i < num_points; i++) {
-        dotProduct += input[i] * taps[i];
+    number = quarterPoints * 4;
+    if (number < num_points) {
+        lv_32fc_t tailResult = lv_cmake(0, 0);
+        volk_32fc_x2_dot_prod_32fc_generic(&tailResult, a, b, num_points - number);
+        dotProduct += tailResult;
     }
 
     *result = dotProduct;
@@ -828,8 +835,6 @@ static inline void volk_32fc_x2_dot_prod_32fc_a_avx_fma(lv_32fc_t* result,
                                                          unsigned int num_points)
 {
 
-    unsigned int isodd = num_points & 3;
-    unsigned int i = 0;
     lv_32fc_t dotProduct;
     memset(&dotProduct, 0x0, 2 * sizeof(float));
 
@@ -875,8 +880,11 @@ static inline void volk_32fc_x2_dot_prod_32fc_a_avx_fma(lv_32fc_t* result,
     dotProduct += (dotProductVector[0] + dotProductVector[1] + dotProductVector[2] +
                    dotProductVector[3]);
 
-    for (i = num_points - isodd; i < num_points; i++) {
-        dotProduct += input[i] * taps[i];
+    number = quarterPoints * 4;
+    if (number < num_points) {
+        lv_32fc_t tailResult = lv_cmake(0, 0);
+        volk_32fc_x2_dot_prod_32fc_generic(&tailResult, a, b, num_points - number);
+        dotProduct += tailResult;
     }
 
     *result = dotProduct;

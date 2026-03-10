@@ -109,10 +109,8 @@ static inline void volk_32fc_deinterleave_real_64f_u_avx2(double* iBuffer,
     }
 
     number = quarterPoints * 4;
-    for (; number < num_points; number++) {
-        *iBufferPtr++ = (double)*complexVectorPtr++;
-        complexVectorPtr++;
-    }
+    volk_32fc_deinterleave_real_64f_generic(
+        iBufferPtr, (const lv_32fc_t*)complexVectorPtr, num_points - number);
 }
 #endif /* LV_HAVE_AVX2 */
 
@@ -150,10 +148,9 @@ static inline void volk_32fc_deinterleave_real_64f_neon(double* iBuffer,
         complexVectorPtr += 8;
     }
 
-    for (number = quarter_points * 4; number < num_points; number++) {
-        *iBufferPtr++ = (double)*complexVectorPtr++;
-        complexVectorPtr++;
-    }
+    number = quarter_points * 4;
+    volk_32fc_deinterleave_real_64f_generic(
+        iBufferPtr, (const lv_32fc_t*)complexVectorPtr, num_points - number);
 }
 #endif /* LV_HAVE_NEONV8 */
 
@@ -211,10 +208,8 @@ static inline void volk_32fc_deinterleave_real_64f_a_sse2(double* iBuffer,
     }
 
     number = halfPoints * 2;
-    for (; number < num_points; number++) {
-        *iBufferPtr++ = (double)*complexVectorPtr++;
-        complexVectorPtr++;
-    }
+    volk_32fc_deinterleave_real_64f_generic(
+        iBufferPtr, (const lv_32fc_t*)complexVectorPtr, num_points - number);
 }
 #endif /* LV_HAVE_SSE2 */
 
@@ -250,10 +245,8 @@ static inline void volk_32fc_deinterleave_real_64f_a_avx2(double* iBuffer,
     }
 
     number = quarterPoints * 4;
-    for (; number < num_points; number++) {
-        *iBufferPtr++ = (double)*complexVectorPtr++;
-        complexVectorPtr++;
-    }
+    volk_32fc_deinterleave_real_64f_generic(
+        iBufferPtr, (const lv_32fc_t*)complexVectorPtr, num_points - number);
 }
 #endif /* LV_HAVE_AVX2 */
 

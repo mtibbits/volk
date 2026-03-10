@@ -217,9 +217,8 @@ static inline void volk_32i_s32f_convert_32f_neon(float* outputVector,
     }
 
     number = quarterPoints * 4;
-    for (; number < num_points; number++) {
-        outputVector[number] = ((float)(inputVector[number])) * iScalar;
-    }
+    volk_32i_s32f_convert_32f_generic(
+        outputVectorPtr, inputPtr, scalar, num_points - number);
 }
 #endif /* LV_HAVE_NEON */
 
@@ -258,9 +257,8 @@ static inline void volk_32i_s32f_convert_32f_neonv8(float* outputVector,
     }
 
     number = eighthPoints * 8;
-    for (; number < num_points; number++) {
-        outputVector[number] = ((float)(inputVector[number])) * iScalar;
-    }
+    volk_32i_s32f_convert_32f_generic(
+        outputVectorPtr, inputPtr, scalar, num_points - number);
 }
 #endif /* LV_HAVE_NEONV8 */
 

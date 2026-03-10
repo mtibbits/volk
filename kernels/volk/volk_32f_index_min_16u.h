@@ -134,10 +134,15 @@ volk_32f_index_min_16u_u_avx(uint16_t* target, const float* source, uint32_t num
         }
     }
 
-    for (uint32_t number = eighthPoints * 8; number < num_points; number++) {
-        if (source[number] < min) {
-            index = number;
-            min = source[number];
+    uint32_t processed = eighthPoints * 8;
+    if (processed < num_points) {
+        uint16_t tailIdx = 0;
+        volk_32f_index_min_16u_generic(
+            &tailIdx, source + processed, num_points - processed);
+        float tailVal = source[processed + tailIdx];
+        if (tailVal < min) {
+            min = tailVal;
+            index = processed + tailIdx;
         }
     }
     target[0] = (uint16_t)index;
@@ -198,11 +203,15 @@ static inline void volk_32f_index_min_16u_u_avx512f(uint16_t* target,
         }
     }
 
-    number = sixteenthPoints * 16;
-    for (; number < num_points; number++) {
-        if (source[number] < min) {
-            index = number;
-            min = source[number];
+    uint32_t processed = sixteenthPoints * 16;
+    if (processed < num_points) {
+        uint16_t tailIdx = 0;
+        volk_32f_index_min_16u_generic(
+            &tailIdx, source + processed, num_points - processed);
+        float tailVal = source[processed + tailIdx];
+        if (tailVal < min) {
+            min = tailVal;
+            index = processed + tailIdx;
         }
     }
     target[0] = (uint16_t)index;
@@ -265,10 +274,15 @@ volk_32f_index_min_16u_neon(uint16_t* target, const float* source, uint32_t num_
     }
 
     // Handle tail
-    for (uint32_t i = quarter_points * 4; i < num_points; i++) {
-        if (source[i] < min_val) {
-            min_val = source[i];
-            result_idx = i;
+    uint32_t processed = quarter_points * 4;
+    if (processed < num_points) {
+        uint16_t tailIdx = 0;
+        volk_32f_index_min_16u_generic(
+            &tailIdx, source + processed, num_points - processed);
+        float tailVal = source[processed + tailIdx];
+        if (tailVal < min_val) {
+            min_val = tailVal;
+            result_idx = processed + tailIdx;
         }
     }
 
@@ -322,10 +336,15 @@ volk_32f_index_min_16u_neonv8(uint16_t* target, const float* source, uint32_t nu
     uint32_t result_idx = vminvq_u32(idx_masked);
 
     // Handle tail
-    for (uint32_t i = quarter_points * 4; i < num_points; i++) {
-        if (source[i] < min_val) {
-            min_val = source[i];
-            result_idx = i;
+    uint32_t processed = quarter_points * 4;
+    if (processed < num_points) {
+        uint16_t tailIdx = 0;
+        volk_32f_index_min_16u_generic(
+            &tailIdx, source + processed, num_points - processed);
+        float tailVal = source[processed + tailIdx];
+        if (tailVal < min_val) {
+            min_val = tailVal;
+            result_idx = processed + tailIdx;
         }
     }
 
@@ -432,10 +451,15 @@ volk_32f_index_min_16u_a_sse(uint16_t* target, const float* source, uint32_t num
         }
     }
 
-    for (uint32_t number = quarterPoints * 4; number < num_points; number++) {
-        if (source[number] < min) {
-            index = number;
-            min = source[number];
+    uint32_t processed = quarterPoints * 4;
+    if (processed < num_points) {
+        uint16_t tailIdx = 0;
+        volk_32f_index_min_16u_generic(
+            &tailIdx, source + processed, num_points - processed);
+        float tailVal = source[processed + tailIdx];
+        if (tailVal < min) {
+            min = tailVal;
+            index = processed + tailIdx;
         }
     }
     target[0] = (uint16_t)index;
@@ -494,10 +518,15 @@ static inline void volk_32f_index_min_16u_a_sse4_1(uint16_t* target,
         }
     }
 
-    for (uint32_t number = quarterPoints * 4; number < num_points; number++) {
-        if (source[number] < min) {
-            index = number;
-            min = source[number];
+    uint32_t processed = quarterPoints * 4;
+    if (processed < num_points) {
+        uint16_t tailIdx = 0;
+        volk_32f_index_min_16u_generic(
+            &tailIdx, source + processed, num_points - processed);
+        float tailVal = source[processed + tailIdx];
+        if (tailVal < min) {
+            min = tailVal;
+            index = processed + tailIdx;
         }
     }
     target[0] = (uint16_t)index;
@@ -555,10 +584,15 @@ volk_32f_index_min_16u_a_avx(uint16_t* target, const float* source, uint32_t num
         }
     }
 
-    for (uint32_t number = eighthPoints * 8; number < num_points; number++) {
-        if (source[number] < min) {
-            index = number;
-            min = source[number];
+    uint32_t processed = eighthPoints * 8;
+    if (processed < num_points) {
+        uint16_t tailIdx = 0;
+        volk_32f_index_min_16u_generic(
+            &tailIdx, source + processed, num_points - processed);
+        float tailVal = source[processed + tailIdx];
+        if (tailVal < min) {
+            min = tailVal;
+            index = processed + tailIdx;
         }
     }
     target[0] = (uint16_t)index;
@@ -619,11 +653,15 @@ static inline void volk_32f_index_min_16u_a_avx512f(uint16_t* target,
         }
     }
 
-    number = sixteenthPoints * 16;
-    for (; number < num_points; number++) {
-        if (source[number] < min) {
-            index = number;
-            min = source[number];
+    uint32_t processed = sixteenthPoints * 16;
+    if (processed < num_points) {
+        uint16_t tailIdx = 0;
+        volk_32f_index_min_16u_generic(
+            &tailIdx, source + processed, num_points - processed);
+        float tailVal = source[processed + tailIdx];
+        if (tailVal < min) {
+            min = tailVal;
+            index = processed + tailIdx;
         }
     }
     target[0] = (uint16_t)index;

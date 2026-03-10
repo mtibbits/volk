@@ -108,11 +108,8 @@ static inline void volk_32fc_magnitude_32f_u_sse(float* magnitudeVector,
     }
 
     number = quarterPoints * 4;
-    for (; number < num_points; number++) {
-        float val1Real = *complexVectorPtr++;
-        float val1Imag = *complexVectorPtr++;
-        *magnitudeVectorPtr++ = sqrtf((val1Real * val1Real) + (val1Imag * val1Imag));
-    }
+    volk_32fc_magnitude_32f_generic(
+        magnitudeVectorPtr, (const lv_32fc_t*)complexVectorPtr, num_points - number);
 }
 #endif /* LV_HAVE_SSE */
 
@@ -145,11 +142,8 @@ static inline void volk_32fc_magnitude_32f_u_sse3(float* magnitudeVector,
     }
 
     number = quarterPoints * 4;
-    for (; number < num_points; number++) {
-        float val1Real = *complexVectorPtr++;
-        float val1Imag = *complexVectorPtr++;
-        *magnitudeVectorPtr++ = sqrtf((val1Real * val1Real) + (val1Imag * val1Imag));
-    }
+    volk_32fc_magnitude_32f_generic(
+        magnitudeVectorPtr, (const lv_32fc_t*)complexVectorPtr, num_points - number);
 }
 #endif /* LV_HAVE_SSE3 */
 
@@ -180,11 +174,8 @@ static inline void volk_32fc_magnitude_32f_u_avx(float* magnitudeVector,
     }
 
     number = eighthPoints * 8;
-    for (; number < num_points; number++) {
-        float val1Real = *complexVectorPtr++;
-        float val1Imag = *complexVectorPtr++;
-        *magnitudeVectorPtr++ = sqrtf((val1Real * val1Real) + (val1Imag * val1Imag));
-    }
+    volk_32fc_magnitude_32f_generic(
+        magnitudeVectorPtr, (const lv_32fc_t*)complexVectorPtr, num_points - number);
 }
 #endif /* LV_HAVE_AVX */
 
@@ -265,11 +256,9 @@ static inline void volk_32fc_magnitude_32f_neon(float* magnitudeVector,
         magnitudeVectorPtr += 4;
     }
 
-    for (number = quarter_points * 4; number < num_points; number++) {
-        const float real = *complexVectorPtr++;
-        const float imag = *complexVectorPtr++;
-        *magnitudeVectorPtr++ = sqrtf((real * real) + (imag * imag));
-    }
+    number = quarter_points * 4;
+    volk_32fc_magnitude_32f_generic(
+        magnitudeVectorPtr, (const lv_32fc_t*)complexVectorPtr, num_points - number);
 }
 #endif /* LV_HAVE_NEON */
 
@@ -302,11 +291,9 @@ static inline void volk_32fc_magnitude_32f_neonv8(float* magnitudeVector,
         magnitudeVectorPtr += 4;
     }
 
-    for (number = quarter_points * 4; number < num_points; number++) {
-        const float real = *complexVectorPtr++;
-        const float imag = *complexVectorPtr++;
-        *magnitudeVectorPtr++ = sqrtf((real * real) + (imag * imag));
-    }
+    number = quarter_points * 4;
+    volk_32fc_magnitude_32f_generic(
+        magnitudeVectorPtr, (const lv_32fc_t*)complexVectorPtr, num_points - number);
 }
 #endif /* LV_HAVE_NEONV8 */
 
@@ -378,11 +365,9 @@ static inline void volk_32fc_magnitude_32f_neon_fancy_sweet(
         magnitudeVectorPtr += 4;
     }
 
-    for (number = quarter_points * 4; number < num_points; number++) {
-        const float real = *complexVectorPtr++;
-        const float imag = *complexVectorPtr++;
-        *magnitudeVectorPtr++ = sqrtf((real * real) + (imag * imag));
-    }
+    number = quarter_points * 4;
+    volk_32fc_magnitude_32f_generic(
+        magnitudeVectorPtr, (const lv_32fc_t*)complexVectorPtr, num_points - number);
 }
 #endif /* LV_HAVE_NEON */
 
@@ -460,11 +445,8 @@ static inline void volk_32fc_magnitude_32f_a_sse(float* magnitudeVector,
     }
 
     number = quarterPoints * 4;
-    for (; number < num_points; number++) {
-        float val1Real = *complexVectorPtr++;
-        float val1Imag = *complexVectorPtr++;
-        *magnitudeVectorPtr++ = sqrtf((val1Real * val1Real) + (val1Imag * val1Imag));
-    }
+    volk_32fc_magnitude_32f_generic(
+        magnitudeVectorPtr, (const lv_32fc_t*)complexVectorPtr, num_points - number);
 }
 #endif /* LV_HAVE_SSE */
 
@@ -496,11 +478,8 @@ static inline void volk_32fc_magnitude_32f_a_sse3(float* magnitudeVector,
     }
 
     number = quarterPoints * 4;
-    for (; number < num_points; number++) {
-        float val1Real = *complexVectorPtr++;
-        float val1Imag = *complexVectorPtr++;
-        *magnitudeVectorPtr++ = sqrtf((val1Real * val1Real) + (val1Imag * val1Imag));
-    }
+    volk_32fc_magnitude_32f_generic(
+        magnitudeVectorPtr, (const lv_32fc_t*)complexVectorPtr, num_points - number);
 }
 #endif /* LV_HAVE_SSE3 */
 
@@ -532,11 +511,8 @@ static inline void volk_32fc_magnitude_32f_a_avx(float* magnitudeVector,
     }
 
     number = eighthPoints * 8;
-    for (; number < num_points; number++) {
-        float val1Real = *complexVectorPtr++;
-        float val1Imag = *complexVectorPtr++;
-        *magnitudeVectorPtr++ = sqrtf((val1Real * val1Real) + (val1Imag * val1Imag));
-    }
+    volk_32fc_magnitude_32f_generic(
+        magnitudeVectorPtr, (const lv_32fc_t*)complexVectorPtr, num_points - number);
 }
 #endif /* LV_HAVE_AVX */
 

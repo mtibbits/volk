@@ -108,9 +108,7 @@ volk_32f_atan_32f_u_sse4_1(float* out, const float* in, unsigned int num_points)
         out += 4;
     }
 
-    for (unsigned int number = quarter_points * 4; number < num_points; number++) {
-        *out++ = volk_arctan(*in++);
-    }
+    volk_32f_atan_32f_generic(out, in, num_points - quarter_points * 4);
 }
 #endif /* LV_HAVE_SSE4_1 */
 
@@ -141,9 +139,7 @@ volk_32f_atan_32f_u_avx2(float* out, const float* in, unsigned int num_points)
         out += 8;
     }
 
-    for (unsigned int number = eighth_points * 8; number < num_points; number++) {
-        *out++ = volk_arctan(*in++);
-    }
+    volk_32f_atan_32f_generic(out, in, num_points - eighth_points * 8);
 }
 #endif /* LV_HAVE_AVX */
 
@@ -173,9 +169,7 @@ volk_32f_atan_32f_u_avx2_fma(float* out, const float* in, unsigned int num_point
         out += 8;
     }
 
-    for (unsigned int number = eighth_points * 8; number < num_points; number++) {
-        *out++ = volk_arctan(*in++);
-    }
+    volk_32f_atan_32f_generic(out, in, num_points - eighth_points * 8);
 }
 #endif /* LV_HAVE_AVX2 && LV_HAVE_FMA */
 
@@ -207,9 +201,7 @@ volk_32f_atan_32f_u_avx512dq(float* out, const float* in, unsigned int num_point
         out += 16;
     }
 
-    for (unsigned int number = sixteenth_points * 16; number < num_points; number++) {
-        *out++ = volk_arctan(*in++);
-    }
+    volk_32f_atan_32f_generic(out, in, num_points - sixteenth_points * 16);
 }
 #endif /* LV_HAVE_AVX512F && LV_HAVE_AVX512DQ */
 
@@ -250,9 +242,7 @@ volk_32f_atan_32f_neon(float* out, const float* in, unsigned int num_points)
         out += 4;
     }
 
-    for (unsigned int number = quarter_points * 4; number < num_points; number++) {
-        *out++ = volk_arctan(*in++);
-    }
+    volk_32f_atan_32f_generic(out, in, num_points - quarter_points * 4);
 }
 #endif /* LV_HAVE_NEON */
 
@@ -302,9 +292,7 @@ volk_32f_atan_32f_neonv8(float* out, const float* in, unsigned int num_points)
         out += 8;
     }
 
-    for (unsigned int number = eighth_points * 8; number < num_points; number++) {
-        *out++ = volk_arctan(*in++);
-    }
+    volk_32f_atan_32f_generic(out, in, num_points - eighth_points * 8);
 }
 #endif /* LV_HAVE_NEONV8 */
 
@@ -384,9 +372,7 @@ volk_32f_atan_32f_a_sse4_1(float* out, const float* in, unsigned int num_points)
         out += 4;
     }
 
-    for (unsigned int number = quarter_points * 4; number < num_points; number++) {
-        *out++ = volk_arctan(*in++);
-    }
+    volk_32f_atan_32f_generic(out, in, num_points - quarter_points * 4);
 }
 #endif /* LV_HAVE_SSE4_1 */
 
@@ -417,9 +403,7 @@ volk_32f_atan_32f_a_avx2(float* out, const float* in, unsigned int num_points)
         out += 8;
     }
 
-    for (unsigned int number = eighth_points * 8; number < num_points; number++) {
-        *out++ = volk_arctan(*in++);
-    }
+    volk_32f_atan_32f_generic(out, in, num_points - eighth_points * 8);
 }
 #endif /* LV_HAVE_AVX */
 
@@ -450,9 +434,7 @@ volk_32f_atan_32f_a_avx2_fma(float* out, const float* in, unsigned int num_point
         out += 8;
     }
 
-    for (unsigned int number = eighth_points * 8; number < num_points; number++) {
-        *out++ = volk_arctan(*in++);
-    }
+    volk_32f_atan_32f_generic(out, in, num_points - eighth_points * 8);
 }
 #endif /* LV_HAVE_AVX2 && LV_HAVE_FMA */
 
@@ -484,9 +466,7 @@ volk_32f_atan_32f_a_avx512dq(float* out, const float* in, unsigned int num_point
         out += 16;
     }
 
-    for (unsigned int number = sixteenth_points * 16; number < num_points; number++) {
-        *out++ = volk_arctan(*in++);
-    }
+    volk_32f_atan_32f_generic(out, in, num_points - sixteenth_points * 16);
 }
 #endif /* LV_HAVE_AVX512F && LV_HAVE_AVX512DQ */
 

@@ -174,9 +174,7 @@ volk_32f_exp_32f_u_sse2(float* bVector, const float* aVector, unsigned int num_p
     }
 
     number = quarterPoints * 4;
-    for (; number < num_points; number++) {
-        *bPtr++ = expf(*aPtr++);
-    }
+    volk_32f_exp_32f_generic(bPtr, aPtr, num_points - number);
 }
 
 #endif /* LV_HAVE_SSE2 */
@@ -260,9 +258,7 @@ volk_32f_exp_32f_neon(float* bVector, const float* aVector, unsigned int num_poi
     }
 
     number = quarterPoints * 4;
-    for (; number < num_points; number++) {
-        *bPtr++ = expf(*aPtr++);
-    }
+    volk_32f_exp_32f_generic(bPtr, aPtr, num_points - number);
 }
 
 #endif /* LV_HAVE_NEON */
@@ -376,9 +372,7 @@ volk_32f_exp_32f_neonv8(float* bVector, const float* aVector, unsigned int num_p
     }
 
     number = eighthPoints * 8;
-    for (; number < num_points; number++) {
-        *bPtr++ = expf(*aPtr++);
-    }
+    volk_32f_exp_32f_generic(bPtr, aPtr, num_points - number);
 }
 
 #endif /* LV_HAVE_NEONV8 */
@@ -513,9 +507,7 @@ volk_32f_exp_32f_a_sse2(float* bVector, const float* aVector, unsigned int num_p
     }
 
     number = quarterPoints * 4;
-    for (; number < num_points; number++) {
-        *bPtr++ = expf(*aPtr++);
-    }
+    volk_32f_exp_32f_generic(bPtr, aPtr, num_points - number);
 }
 
 #endif /* LV_HAVE_SSE2 */

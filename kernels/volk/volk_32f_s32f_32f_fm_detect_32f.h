@@ -230,16 +230,13 @@ static inline void volk_32f_s32f_32f_fm_detect_32f_neon(float* outputVector,
     }
 
     // Handle remainder
-    for (unsigned int number = (4 > (quarterPoints * 4) ? 4 : (4 * quarterPoints));
-         number < num_points;
-         number++) {
-        *outPtr = *inPtr - *(inPtr - 1);
-        if (*outPtr > bound)
-            *outPtr -= 2 * bound;
-        if (*outPtr < -bound)
-            *outPtr += 2 * bound;
-        inPtr++;
-        outPtr++;
+    {
+        unsigned int number = (4 > (quarterPoints * 4) ? 4 : (4 * quarterPoints));
+        if (number < num_points) {
+            *saveValue = *(inPtr - 1);
+            volk_32f_s32f_32f_fm_detect_32f_generic(
+                outPtr, inPtr, bound, saveValue, num_points - number);
+        }
     }
 
     *saveValue = inputVector[num_points - 1];
@@ -324,16 +321,13 @@ static inline void volk_32f_s32f_32f_fm_detect_32f_neonv8(float* outputVector,
     }
 
     /* Handle remainder */
-    for (unsigned int number = (8 > (eighthPoints * 8) ? 8 : (8 * eighthPoints));
-         number < num_points;
-         number++) {
-        *outPtr = *inPtr - *(inPtr - 1);
-        if (*outPtr > bound)
-            *outPtr -= 2 * bound;
-        if (*outPtr < -bound)
-            *outPtr += 2 * bound;
-        inPtr++;
-        outPtr++;
+    {
+        unsigned int number = (8 > (eighthPoints * 8) ? 8 : (8 * eighthPoints));
+        if (number < num_points) {
+            *saveValue = *(inPtr - 1);
+            volk_32f_s32f_32f_fm_detect_32f_generic(
+                outPtr, inPtr, bound, saveValue, num_points - number);
+        }
     }
 
     *saveValue = inputVector[num_points - 1];

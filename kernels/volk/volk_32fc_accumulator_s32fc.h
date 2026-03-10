@@ -238,8 +238,10 @@ static inline void volk_32fc_accumulator_s32fc_neon(lv_32fc_t* result,
     returnValue += lv_cmake(tempBuffer[2], tempBuffer[3]);
 
     number = eighthPoints * 8;
-    for (; number < num_points; number++) {
-        returnValue += (*aPtr++);
+    if (number < num_points) {
+        lv_32fc_t tailResult = lv_cmake(0, 0);
+        volk_32fc_accumulator_s32fc_generic(&tailResult, aPtr, num_points - number);
+        returnValue += tailResult;
     }
     *result = returnValue;
 }
@@ -295,8 +297,11 @@ static inline void volk_32fc_accumulator_s32fc_neonv8(lv_32fc_t* result,
     lv_32fc_t returnValue = lv_cmake(vget_lane_f32(sum, 0), vget_lane_f32(sum, 1));
 
     /* Tail case */
-    for (number = eighthPoints * 8; number < num_points; number++) {
-        returnValue += (*aPtr++);
+    number = eighthPoints * 8;
+    if (number < num_points) {
+        lv_32fc_t tailResult = lv_cmake(0, 0);
+        volk_32fc_accumulator_s32fc_generic(&tailResult, aPtr, num_points - number);
+        returnValue += tailResult;
     }
 
     *result = returnValue;

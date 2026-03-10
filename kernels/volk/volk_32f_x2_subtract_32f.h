@@ -204,10 +204,7 @@ static inline void volk_32f_x2_subtract_32f_neonv8(float* cVector,
     }
 
     /* Scalar tail */
-    while (n > 0) {
-        *c++ = *a++ - *b++;
-        n--;
-    }
+    volk_32f_x2_subtract_32f_generic(c, a, b, n);
 }
 
 #endif /* LV_HAVE_NEONV8 */

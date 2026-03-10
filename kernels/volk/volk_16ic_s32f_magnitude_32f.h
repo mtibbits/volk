@@ -118,13 +118,8 @@ static inline void volk_16ic_s32f_magnitude_32f_u_avx2(float* magnitudeVector,
     }
 
     number = eighthPoints * 8;
-    magnitudeVectorPtr = &magnitudeVector[number];
-    complexVectorPtr = (const int16_t*)&complexVector[number];
-    for (; number < num_points; number++) {
-        float val1Real = (float)(*complexVectorPtr++) / scalar;
-        float val1Imag = (float)(*complexVectorPtr++) / scalar;
-        *magnitudeVectorPtr++ = sqrtf((val1Real * val1Real) + (val1Imag * val1Imag));
-    }
+    volk_16ic_s32f_magnitude_32f_generic(
+        magnitudeVector + number, complexVector + number, scalar, num_points - number);
 }
 #endif /* LV_HAVE_AVX2 */
 
@@ -176,12 +171,8 @@ static inline void volk_16ic_s32f_magnitude_32f_neon(float* magnitudeVector,
     }
 
     number = quarter_points * 4;
-    complexVectorPtr = (const int16_t*)&complexVector[number];
-    for (; number < num_points; number++) {
-        float real = ((float)(*complexVectorPtr++)) * invScalar;
-        float imag = ((float)(*complexVectorPtr++)) * invScalar;
-        *magnitudeVectorPtr++ = sqrtf((real * real) + (imag * imag));
-    }
+    volk_16ic_s32f_magnitude_32f_generic(
+        magnitudeVectorPtr, complexVector + number, scalar, num_points - number);
 }
 #endif /* LV_HAVE_NEON */
 
@@ -240,12 +231,8 @@ static inline void volk_16ic_s32f_magnitude_32f_neonv8(float* magnitudeVector,
     }
 
     number = eighth_points * 8;
-    complexVectorPtr = (const int16_t*)&complexVector[number];
-    for (; number < num_points; number++) {
-        float real = ((float)(*complexVectorPtr++)) * invScalar;
-        float imag = ((float)(*complexVectorPtr++)) * invScalar;
-        *magnitudeVectorPtr++ = sqrtf((real * real) + (imag * imag));
-    }
+    volk_16ic_s32f_magnitude_32f_generic(
+        magnitudeVectorPtr, complexVector + number, scalar, num_points - number);
 }
 #endif /* LV_HAVE_NEONV8 */
 
@@ -359,13 +346,8 @@ static inline void volk_16ic_s32f_magnitude_32f_a_sse(float* magnitudeVector,
     }
 
     number = quarterPoints * 4;
-    magnitudeVectorPtr = &magnitudeVector[number];
-    complexVectorPtr = (const int16_t*)&complexVector[number];
-    for (; number < num_points; number++) {
-        float val1Real = (float)(*complexVectorPtr++) * iScalar;
-        float val1Imag = (float)(*complexVectorPtr++) * iScalar;
-        *magnitudeVectorPtr++ = sqrtf((val1Real * val1Real) + (val1Imag * val1Imag));
-    }
+    volk_16ic_s32f_magnitude_32f_generic(
+        magnitudeVector + number, complexVector + number, scalar, num_points - number);
 }
 
 
@@ -424,13 +406,8 @@ static inline void volk_16ic_s32f_magnitude_32f_a_sse3(float* magnitudeVector,
     }
 
     number = quarterPoints * 4;
-    magnitudeVectorPtr = &magnitudeVector[number];
-    complexVectorPtr = (const int16_t*)&complexVector[number];
-    for (; number < num_points; number++) {
-        float val1Real = (float)(*complexVectorPtr++) / scalar;
-        float val1Imag = (float)(*complexVectorPtr++) / scalar;
-        *magnitudeVectorPtr++ = sqrtf((val1Real * val1Real) + (val1Imag * val1Imag));
-    }
+    volk_16ic_s32f_magnitude_32f_generic(
+        magnitudeVector + number, complexVector + number, scalar, num_points - number);
 }
 #endif /* LV_HAVE_SSE3 */
 
@@ -484,13 +461,8 @@ static inline void volk_16ic_s32f_magnitude_32f_a_avx2(float* magnitudeVector,
     }
 
     number = eighthPoints * 8;
-    magnitudeVectorPtr = &magnitudeVector[number];
-    complexVectorPtr = (const int16_t*)&complexVector[number];
-    for (; number < num_points; number++) {
-        float val1Real = (float)(*complexVectorPtr++) / scalar;
-        float val1Imag = (float)(*complexVectorPtr++) / scalar;
-        *magnitudeVectorPtr++ = sqrtf((val1Real * val1Real) + (val1Imag * val1Imag));
-    }
+    volk_16ic_s32f_magnitude_32f_generic(
+        magnitudeVector + number, complexVector + number, scalar, num_points - number);
 }
 #endif /* LV_HAVE_AVX2 */
 

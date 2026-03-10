@@ -129,11 +129,11 @@ static inline void volk_16i_x5_add_quad_16i_x4_neon(short* target0,
         target3 += 8;
     }
 
-    for (number = eighth_points * 8; number < num_points; ++number) {
-        *target0++ = *src0 + *src1++;
-        *target1++ = *src0 + *src2++;
-        *target2++ = *src0 + *src3++;
-        *target3++ = *src0++ + *src4++;
+    number = eighth_points * 8;
+    if (number < num_points) {
+        volk_16i_x5_add_quad_16i_x4_generic(
+            target0, target1, target2, target3,
+            src0, src1, src2, src3, src4, num_points - number);
     }
 }
 
@@ -181,7 +181,6 @@ static inline void volk_16i_x5_add_quad_16i_x4_a_sse2(short* target0,
     int i = 0;
 
     int bound = (num_bytes >> 4);
-    int leftovers = (num_bytes >> 1) & 7;
 
     for (; i < bound; ++i) {
         xmm0 = _mm_load_si128(p_src0);
@@ -214,11 +213,11 @@ static inline void volk_16i_x5_add_quad_16i_x4_a_sse2(short* target0,
         p_target3 += 1;
     }
 
-    for (i = bound * 8; i < (bound * 8) + leftovers; ++i) {
-        target0[i] = src0[i] + src1[i];
-        target1[i] = src0[i] + src2[i];
-        target2[i] = src0[i] + src3[i];
-        target3[i] = src0[i] + src4[i];
+    i = bound * 8;
+    if (i < (int)num_points) {
+        volk_16i_x5_add_quad_16i_x4_generic(
+            target0 + i, target1 + i, target2 + i, target3 + i,
+            src0 + i, src1 + i, src2 + i, src3 + i, src4 + i, num_points - i);
     }
 }
 #endif /* LV_HAVE_SSE2 */

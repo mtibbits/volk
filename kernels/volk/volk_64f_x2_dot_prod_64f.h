@@ -108,8 +108,11 @@ static inline void volk_64f_x2_dot_prod_64f_u_sse2(double* result,
     _mm_store_pd(tmp, acc0);
     double dot = tmp[0] + tmp[1];
 
-    for (number = eighthPoints * 8; number < num_points; number++) {
-        dot += (*input++) * (*taps++);
+    number = eighthPoints * 8;
+    if (number < num_points) {
+        double tailResult = 0.0;
+        volk_64f_x2_dot_prod_64f_generic(&tailResult, input, taps, num_points - number);
+        dot += tailResult;
     }
     *result = dot;
 }
@@ -146,8 +149,11 @@ static inline void volk_64f_x2_dot_prod_64f_u_avx(double* result,
     _mm256_storeu_pd(tmp, acc0);
     double dot = tmp[0] + tmp[1] + tmp[2] + tmp[3];
 
-    for (number = eighthPoints * 8; number < num_points; number++) {
-        dot += (*input++) * (*taps++);
+    number = eighthPoints * 8;
+    if (number < num_points) {
+        double tailResult = 0.0;
+        volk_64f_x2_dot_prod_64f_generic(&tailResult, input, taps, num_points - number);
+        dot += tailResult;
     }
     *result = dot;
 }
@@ -183,8 +189,11 @@ static inline void volk_64f_x2_dot_prod_64f_u_avx2_fma(double* result,
     _mm256_storeu_pd(tmp, acc0);
     double dot = tmp[0] + tmp[1] + tmp[2] + tmp[3];
 
-    for (number = eighthPoints * 8; number < num_points; number++) {
-        dot += (*input++) * (*taps++);
+    number = eighthPoints * 8;
+    if (number < num_points) {
+        double tailResult = 0.0;
+        volk_64f_x2_dot_prod_64f_generic(&tailResult, input, taps, num_points - number);
+        dot += tailResult;
     }
     *result = dot;
 }
@@ -213,8 +222,11 @@ static inline void volk_64f_x2_dot_prod_64f_u_avx512f(double* result,
 
     double dot = _mm512_reduce_add_pd(acc);
 
-    for (number = eighthPoints * 8; number < num_points; number++) {
-        dot += (*input++) * (*taps++);
+    number = eighthPoints * 8;
+    if (number < num_points) {
+        double tailResult = 0.0;
+        volk_64f_x2_dot_prod_64f_generic(&tailResult, input, taps, num_points - number);
+        dot += tailResult;
     }
     *result = dot;
 }
@@ -256,8 +268,11 @@ static inline void volk_64f_x2_dot_prod_64f_neonv8(double* result,
 
     double dot = vaddvq_f64(acc0);
 
-    for (number = eighthPoints * 8; number < num_points; number++) {
-        dot += (*input++) * (*taps++);
+    number = eighthPoints * 8;
+    if (number < num_points) {
+        double tailResult = 0.0;
+        volk_64f_x2_dot_prod_64f_generic(&tailResult, input, taps, num_points - number);
+        dot += tailResult;
     }
     *result = dot;
 }
@@ -335,8 +350,11 @@ static inline void volk_64f_x2_dot_prod_64f_a_sse2(double* result,
     _mm_store_pd(tmp, acc0);
     double dot = tmp[0] + tmp[1];
 
-    for (number = eighthPoints * 8; number < num_points; number++) {
-        dot += (*input++) * (*taps++);
+    number = eighthPoints * 8;
+    if (number < num_points) {
+        double tailResult = 0.0;
+        volk_64f_x2_dot_prod_64f_generic(&tailResult, input, taps, num_points - number);
+        dot += tailResult;
     }
     *result = dot;
 }
@@ -373,8 +391,11 @@ static inline void volk_64f_x2_dot_prod_64f_a_avx(double* result,
     _mm256_store_pd(tmp, acc0);
     double dot = tmp[0] + tmp[1] + tmp[2] + tmp[3];
 
-    for (number = eighthPoints * 8; number < num_points; number++) {
-        dot += (*input++) * (*taps++);
+    number = eighthPoints * 8;
+    if (number < num_points) {
+        double tailResult = 0.0;
+        volk_64f_x2_dot_prod_64f_generic(&tailResult, input, taps, num_points - number);
+        dot += tailResult;
     }
     *result = dot;
 }
@@ -409,8 +430,11 @@ static inline void volk_64f_x2_dot_prod_64f_a_avx2_fma(double* result,
     _mm256_store_pd(tmp, acc0);
     double dot = tmp[0] + tmp[1] + tmp[2] + tmp[3];
 
-    for (number = eighthPoints * 8; number < num_points; number++) {
-        dot += (*input++) * (*taps++);
+    number = eighthPoints * 8;
+    if (number < num_points) {
+        double tailResult = 0.0;
+        volk_64f_x2_dot_prod_64f_generic(&tailResult, input, taps, num_points - number);
+        dot += tailResult;
     }
     *result = dot;
 }
@@ -439,8 +463,11 @@ static inline void volk_64f_x2_dot_prod_64f_a_avx512f(double* result,
 
     double dot = _mm512_reduce_add_pd(acc);
 
-    for (number = eighthPoints * 8; number < num_points; number++) {
-        dot += (*input++) * (*taps++);
+    number = eighthPoints * 8;
+    if (number < num_points) {
+        double tailResult = 0.0;
+        volk_64f_x2_dot_prod_64f_generic(&tailResult, input, taps, num_points - number);
+        dot += tailResult;
     }
     *result = dot;
 }

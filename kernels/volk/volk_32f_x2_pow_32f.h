@@ -632,9 +632,7 @@ static inline void volk_32f_x2_pow_32f_neon(float* cVector,
     }
 
     number = quarterPoints * 4;
-    for (; number < num_points; number++) {
-        *cPtr++ = powf(*aPtr++, *bPtr++);
-    }
+    volk_32f_x2_pow_32f_generic(cPtr, bPtr, aPtr, num_points - number);
 }
 
 #endif /* LV_HAVE_NEON */
@@ -750,9 +748,7 @@ static inline void volk_32f_x2_pow_32f_neonv8(float* cVector,
     }
 
     number = quarterPoints * 4;
-    for (; number < num_points; number++) {
-        *cPtr++ = powf(*aPtr++, *bPtr++);
-    }
+    volk_32f_x2_pow_32f_generic(cPtr, bPtr, aPtr, num_points - number);
 }
 
 #endif /* LV_HAVE_NEONV8 */

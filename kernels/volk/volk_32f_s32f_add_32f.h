@@ -197,9 +197,8 @@ static inline void volk_32f_s32f_add_32f_neonv8(float* cVector,
         cPtr += 8;
     }
 
-    for (unsigned int number = eighthPoints * 8; number < num_points; number++) {
-        *cPtr++ = (*aPtr++) + scalar;
-    }
+    unsigned int number = eighthPoints * 8;
+    volk_32f_s32f_add_32f_generic(cPtr, aPtr, scalar, num_points - number);
 }
 #endif /* LV_HAVE_NEONV8 */
 

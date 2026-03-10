@@ -281,15 +281,7 @@ static inline void volk_32f_s32f_convert_32i_neon(int32_t* outputVector,
     }
 
     number = quarter_points * 4;
-    for (; number < num_points; number++) {
-        float r = *inputPtr++ * scalar;
-        if (r >= max_val)
-            *outputPtr++ = INT_MAX;
-        else if (r < min_val)
-            *outputPtr++ = INT_MIN;
-        else
-            *outputPtr++ = (int32_t)rintf(r);
-    }
+    volk_32f_s32f_convert_32i_generic(outputPtr, inputPtr, scalar, num_points - number);
 }
 #endif /* LV_HAVE_NEON */
 
@@ -334,15 +326,7 @@ static inline void volk_32f_s32f_convert_32i_neonv8(int32_t* outputVector,
     }
 
     number = eighth_points * 8;
-    for (; number < num_points; number++) {
-        float r = *inputPtr++ * scalar;
-        if (r >= max_val)
-            *outputPtr++ = INT_MAX;
-        else if (r < min_val)
-            *outputPtr++ = INT_MIN;
-        else
-            *outputPtr++ = (int32_t)rintf(r);
-    }
+    volk_32f_s32f_convert_32i_generic(outputPtr, inputPtr, scalar, num_points - number);
 }
 #endif /* LV_HAVE_NEONV8 */
 

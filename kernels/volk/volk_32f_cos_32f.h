@@ -151,9 +151,7 @@ volk_32f_cos_32f_u_sse4_1(float* bVector, const float* aVector, unsigned int num
     }
 
     number = quarterPoints * 4;
-    for (; number < num_points; number++) {
-        *bPtr++ = cosf(*aPtr++);
-    }
+    volk_32f_cos_32f_generic(bPtr, aPtr, num_points - number);
 }
 
 #endif /* LV_HAVE_SSE4_1 */
@@ -217,9 +215,7 @@ volk_32f_cos_32f_u_avx2_fma(float* bVector, const float* aVector, unsigned int n
     }
 
     number = eighthPoints * 8;
-    for (; number < num_points; number++) {
-        *bPtr++ = cosf(*aPtr++);
-    }
+    volk_32f_cos_32f_generic(bPtr, aPtr, num_points - number);
 }
 
 #endif /* LV_HAVE_AVX2 && LV_HAVE_FMA */
@@ -283,9 +279,7 @@ volk_32f_cos_32f_u_avx2(float* bVector, const float* aVector, unsigned int num_p
     }
 
     number = eighthPoints * 8;
-    for (; number < num_points; number++) {
-        *bPtr++ = cosf(*aPtr++);
-    }
+    volk_32f_cos_32f_generic(bPtr, aPtr, num_points - number);
 }
 
 #endif /* LV_HAVE_AVX2 */
@@ -354,9 +348,7 @@ static inline void volk_32f_cos_32f_u_avx512f(float* cosVector,
     }
 
     number = sixteenPoints * 16;
-    for (; number < num_points; number++) {
-        *cosPtr++ = cosf(*inPtr++);
-    }
+    volk_32f_cos_32f_generic(cosPtr, inPtr, num_points - number);
 }
 #endif /* LV_HAVE_AVX512F */
 
@@ -420,9 +412,8 @@ volk_32f_cos_32f_neon(float* bVector, const float* aVector, unsigned int num_poi
         bVector += 4;
     }
 
-    for (number = quarterPoints * 4; number < num_points; number++) {
-        *bVector++ = cosf(*aVector++);
-    }
+    number = quarterPoints * 4;
+    volk_32f_cos_32f_generic(bVector, aVector, num_points - number);
 }
 #endif /* LV_HAVE_NEON */
 
@@ -480,9 +471,8 @@ volk_32f_cos_32f_neonv8(float* bVector, const float* aVector, unsigned int num_p
         bVector += 4;
     }
 
-    for (number = quarterPoints * 4; number < num_points; number++) {
-        *bVector++ = cosf(*aVector++);
-    }
+    number = quarterPoints * 4;
+    volk_32f_cos_32f_generic(bVector, aVector, num_points - number);
 }
 
 #endif /* LV_HAVE_NEONV8 */
@@ -613,9 +603,7 @@ volk_32f_cos_32f_a_sse4_1(float* bVector, const float* aVector, unsigned int num
     }
 
     number = quarterPoints * 4;
-    for (; number < num_points; number++) {
-        *bPtr++ = cosf(*aPtr++);
-    }
+    volk_32f_cos_32f_generic(bPtr, aPtr, num_points - number);
 }
 
 #endif /* LV_HAVE_SSE4_1 */
@@ -679,9 +667,7 @@ volk_32f_cos_32f_a_avx2_fma(float* bVector, const float* aVector, unsigned int n
     }
 
     number = eighthPoints * 8;
-    for (; number < num_points; number++) {
-        *bPtr++ = cosf(*aPtr++);
-    }
+    volk_32f_cos_32f_generic(bPtr, aPtr, num_points - number);
 }
 
 #endif /* LV_HAVE_AVX2 && LV_HAVE_FMA */
@@ -745,9 +731,7 @@ volk_32f_cos_32f_a_avx2(float* bVector, const float* aVector, unsigned int num_p
     }
 
     number = eighthPoints * 8;
-    for (; number < num_points; number++) {
-        *bPtr++ = cosf(*aPtr++);
-    }
+    volk_32f_cos_32f_generic(bPtr, aPtr, num_points - number);
 }
 
 #endif /* LV_HAVE_AVX2 */
@@ -816,9 +800,7 @@ static inline void volk_32f_cos_32f_a_avx512f(float* cosVector,
     }
 
     number = sixteenPoints * 16;
-    for (; number < num_points; number++) {
-        *cosPtr++ = cosf(*inPtr++);
-    }
+    volk_32f_cos_32f_generic(cosPtr, inPtr, num_points - number);
 }
 #endif /* LV_HAVE_AVX512F */
 

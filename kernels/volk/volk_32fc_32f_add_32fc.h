@@ -125,9 +125,7 @@ static inline void volk_32fc_32f_add_32fc_u_avx(lv_32fc_t* cVector,
     }
 
     number = eighthPoints * 8;
-    for (; number < num_points; number++) {
-        *cPtr++ = (*aPtr++) + (*bPtr++);
-    }
+    volk_32fc_32f_add_32fc_generic(cPtr, aPtr, bPtr, num_points - number);
 }
 #endif /* LV_HAVE_AVX */
 
@@ -173,9 +171,8 @@ static inline void volk_32fc_32f_add_32fc_neon(lv_32fc_t* cVector,
         cPtr += 8;
     }
 
-    for (number = sixteenthPoints * 16; number < num_points; number++) {
-        *cPtr++ = (*aPtr++) + (*bPtr++);
-    }
+    number = sixteenthPoints * 16;
+    volk_32fc_32f_add_32fc_generic(cPtr, aPtr, bPtr, num_points - number);
 }
 #endif /* LV_HAVE_NEON */
 
@@ -221,9 +218,9 @@ static inline void volk_32fc_32f_add_32fc_neonv8(lv_32fc_t* cVector,
         cPtr += 16;
     }
 
-    for (unsigned int number = eighthPoints * 8; number < num_points; number++) {
-        cVector[number] = aVector[number] + bVector[number];
-    }
+    unsigned int number = eighthPoints * 8;
+    volk_32fc_32f_add_32fc_generic(
+        cVector + number, aVector + number, bVector + number, num_points - number);
 }
 #endif /* LV_HAVE_NEONV8 */
 
@@ -297,9 +294,7 @@ static inline void volk_32fc_32f_add_32fc_a_avx(lv_32fc_t* cVector,
     }
 
     number = eighthPoints * 8;
-    for (; number < num_points; number++) {
-        *cPtr++ = (*aPtr++) + (*bPtr++);
-    }
+    volk_32fc_32f_add_32fc_generic(cPtr, aPtr, bPtr, num_points - number);
 }
 #endif /* LV_HAVE_AVX */
 

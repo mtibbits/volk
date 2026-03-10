@@ -295,9 +295,7 @@ volk_32u_reverse_32u_arm(uint32_t* out, const uint32_t* in, unsigned int num_poi
         DO_RBIT;
     }
     number = eighthPoints * 8;
-    for (; number < num_points; ++number) {
-        DO_RBIT;
-    }
+    volk_32u_reverse_32u_generic(out_ptr, in_ptr, num_points - number);
 }
 #undef DO_RBIT
 #endif /* LV_HAVE_NEON */
@@ -325,14 +323,7 @@ volk_32u_reverse_32u_neonv8(uint32_t* out, const uint32_t* in, unsigned int num_
         out_ptr += 4;
     }
     number = quarterPoints * 4;
-    for (; number < num_points; ++number) {
-        *out_ptr = ((uint32_t)BitReverseTable256[*in_ptr & 0xff] << 24) |
-                   (BitReverseTable256[(*in_ptr >> 8) & 0xff] << 16) |
-                   (BitReverseTable256[(*in_ptr >> 16) & 0xff] << 8) |
-                   (BitReverseTable256[(*in_ptr >> 24) & 0xff]);
-        ++in_ptr;
-        ++out_ptr;
-    }
+    volk_32u_reverse_32u_generic(out_ptr, in_ptr, num_points - number);
 }
 
 #endif /* LV_HAVE_NEONV8 */

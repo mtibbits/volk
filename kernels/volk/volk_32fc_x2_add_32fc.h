@@ -111,9 +111,7 @@ static inline void volk_32fc_x2_add_32fc_u_sse(lv_32fc_t* cVector,
     }
 
     number = halfPoints * 2;
-    for (; number < num_points; number++) {
-        *cPtr++ = (*aPtr++) + (*bPtr++);
-    }
+    volk_32fc_x2_add_32fc_generic(cPtr, aPtr, bPtr, num_points - number);
 }
 #endif /* LV_HAVE_SSE */
 
@@ -150,9 +148,7 @@ static inline void volk_32fc_x2_add_32fc_u_avx(lv_32fc_t* cVector,
     }
 
     number = quarterPoints * 4;
-    for (; number < num_points; number++) {
-        *cPtr++ = (*aPtr++) + (*bPtr++);
-    }
+    volk_32fc_x2_add_32fc_generic(cPtr, aPtr, bPtr, num_points - number);
 }
 #endif /* LV_HAVE_AVX */
 
@@ -189,10 +185,8 @@ static inline void volk_32fc_x2_add_32fc_u_neon(lv_32fc_t* cVector,
         cPtr += 2;
     }
 
-    number = halfPoints * 2; // should be = num_points
-    for (; number < num_points; number++) {
-        *cPtr++ = (*aPtr++) + (*bPtr++);
-    }
+    number = halfPoints * 2;
+    volk_32fc_x2_add_32fc_generic(cPtr, aPtr, bPtr, num_points - number);
 }
 
 #endif /* LV_HAVE_NEON */
@@ -227,9 +221,9 @@ static inline void volk_32fc_x2_add_32fc_neonv8(lv_32fc_t* cVector,
         cPtr += 8;
     }
 
-    for (unsigned int number = quarterPoints * 4; number < num_points; number++) {
-        cVector[number] = aVector[number] + bVector[number];
-    }
+    unsigned int number = quarterPoints * 4;
+    volk_32fc_x2_add_32fc_generic(
+        cVector + number, aVector + number, bVector + number, num_points - number);
 }
 #endif /* LV_HAVE_NEONV8 */
 
@@ -289,9 +283,7 @@ static inline void volk_32fc_x2_add_32fc_a_sse(lv_32fc_t* cVector,
     }
 
     number = halfPoints * 2;
-    for (; number < num_points; number++) {
-        *cPtr++ = (*aPtr++) + (*bPtr++);
-    }
+    volk_32fc_x2_add_32fc_generic(cPtr, aPtr, bPtr, num_points - number);
 }
 #endif /* LV_HAVE_SSE */
 
@@ -328,9 +320,7 @@ static inline void volk_32fc_x2_add_32fc_a_avx(lv_32fc_t* cVector,
     }
 
     number = quarterPoints * 4;
-    for (; number < num_points; number++) {
-        *cPtr++ = (*aPtr++) + (*bPtr++);
-    }
+    volk_32fc_x2_add_32fc_generic(cPtr, aPtr, bPtr, num_points - number);
 }
 #endif /* LV_HAVE_AVX */
 

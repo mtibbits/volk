@@ -109,9 +109,8 @@ static inline void volk_32fc_x2_multiply_32fc_u_sse3(lv_32fc_t* cVector,
         c += 2;
     }
 
-    if ((num_points % 2) != 0) {
-        *c = (*a) * (*b);
-    }
+    number = halfPoints * 2;
+    volk_32fc_x2_multiply_32fc_generic(c, a, b, num_points - number);
 }
 #endif /* LV_HAVE_SSE3 */
 
@@ -147,10 +146,7 @@ static inline void volk_32fc_x2_multiply_32fc_u_avx(lv_32fc_t* cVector,
     }
 
     number = quarterPoints * 4;
-
-    for (; number < num_points; number++) {
-        *c++ = (*a++) * (*b++);
-    }
+    volk_32fc_x2_multiply_32fc_generic(c, a, b, num_points - number);
 }
 #endif /* LV_HAVE_AVX */
 
@@ -201,9 +197,7 @@ static inline void volk_32fc_x2_multiply_32fc_u_avx2_fma(lv_32fc_t* cVector,
     }
 
     number = quarterPoints * 4;
-    for (; number < num_points; number++) {
-        *c++ = (*a++) * (*b++);
-    }
+    volk_32fc_x2_multiply_32fc_generic(c, a, b, num_points - number);
 }
 #endif /* LV_HAVE_AVX2 && LV_HAVE_FMA */
 
@@ -251,9 +245,8 @@ static inline void volk_32fc_x2_multiply_32fc_neon(lv_32fc_t* cVector,
         cVector += 4;
     }
 
-    for (number = quarter_points * 4; number < num_points; number++) {
-        *cVector++ = (*a_ptr++) * (*b_ptr++);
-    }
+    number = quarter_points * 4;
+    volk_32fc_x2_multiply_32fc_generic(cVector, a_ptr, b_ptr, num_points - number);
 }
 #endif /* LV_HAVE_NEON */
 
@@ -327,10 +320,7 @@ static inline void volk_32fc_x2_multiply_32fc_neonv8(lv_32fc_t* cVector,
     }
 
     /* Scalar tail */
-    while (n > 0) {
-        *c++ = (*a++) * (*b++);
-        n--;
-    }
+    volk_32fc_x2_multiply_32fc_generic(c, a, b, n);
 }
 
 #endif /* LV_HAVE_NEONV8 */
@@ -441,9 +431,8 @@ static inline void volk_32fc_x2_multiply_32fc_a_sse3(lv_32fc_t* cVector,
         c += 2;
     }
 
-    if ((num_points % 2) != 0) {
-        *c = (*a) * (*b);
-    }
+    number = halfPoints * 2;
+    volk_32fc_x2_multiply_32fc_generic(c, a, b, num_points - number);
 }
 #endif /* LV_HAVE_SSE3 */
 
@@ -477,10 +466,7 @@ static inline void volk_32fc_x2_multiply_32fc_a_avx(lv_32fc_t* cVector,
     }
 
     number = quarterPoints * 4;
-
-    for (; number < num_points; number++) {
-        *c++ = (*a++) * (*b++);
-    }
+    volk_32fc_x2_multiply_32fc_generic(c, a, b, num_points - number);
 }
 #endif /* LV_HAVE_AVX */
 
@@ -530,9 +516,7 @@ static inline void volk_32fc_x2_multiply_32fc_a_avx2_fma(lv_32fc_t* cVector,
     }
 
     number = quarterPoints * 4;
-    for (; number < num_points; number++) {
-        *c++ = (*a++) * (*b++);
-    }
+    volk_32fc_x2_multiply_32fc_generic(c, a, b, num_points - number);
 }
 #endif /* LV_HAVE_AVX2 && LV_HAVE_FMA */
 

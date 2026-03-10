@@ -81,12 +81,7 @@ static inline void volk_16u_byteswap_u_sse2(uint16_t* intsToSwap, unsigned int n
     }
 
     // Byteswap any remaining points:
-    for (unsigned int number = eighthPoints * 8; number < num_points; number++) {
-        uint16_t outputVal = *inputPtr;
-        outputVal = (((outputVal >> 8) & 0xff) | ((outputVal << 8) & 0xff00));
-        *inputPtr = outputVal;
-        inputPtr++;
-    }
+    volk_16u_byteswap_generic(inputPtr, num_points - eighthPoints * 8);
 }
 #endif /* LV_HAVE_SSE2 */
 
@@ -117,12 +112,7 @@ static inline void volk_16u_byteswap_u_avx2(uint16_t* intsToSwap, unsigned int n
     }
 
     // Byteswap any remaining points:
-    for (unsigned int number = nPerSet * nSets; number < num_points; number++) {
-        uint16_t outputVal = *inputPtr;
-        outputVal = (((outputVal >> 8) & 0xff) | ((outputVal << 8) & 0xff00));
-        *inputPtr = outputVal;
-        inputPtr++;
-    }
+    volk_16u_byteswap_generic(inputPtr, num_points - nPerSet * nSets);
 }
 #endif /* LV_HAVE_AVX2 */
 
@@ -213,11 +203,7 @@ static inline void volk_16u_byteswap_neonv8(uint16_t* intsToSwap, unsigned int n
         inputPtr += 16;
     }
 
-    for (unsigned int number = sixteenthPoints * 16; number < num_points; number++) {
-        uint16_t output = *inputPtr;
-        output = (((output >> 8) & 0xff) | ((output << 8) & 0xff00));
-        *inputPtr++ = output;
-    }
+    volk_16u_byteswap_generic(inputPtr, num_points - sixteenthPoints * 16);
 }
 #endif /* LV_HAVE_NEONV8 */
 
@@ -340,12 +326,7 @@ static inline void volk_16u_byteswap_a_avx2(uint16_t* intsToSwap, unsigned int n
     }
 
     // Byteswap any remaining points:
-    for (unsigned int number = nPerSet * nSets; number < num_points; number++) {
-        uint16_t outputVal = *inputPtr;
-        outputVal = (((outputVal >> 8) & 0xff) | ((outputVal << 8) & 0xff00));
-        *inputPtr = outputVal;
-        inputPtr++;
-    }
+    volk_16u_byteswap_generic(inputPtr, num_points - nPerSet * nSets);
 }
 #endif /* LV_HAVE_AVX2 */
 

@@ -94,9 +94,7 @@ static inline void volk_8i_convert_16i_u_sse4_1(int16_t* outputVector,
     }
 
     number = sixteenthPoints * 16;
-    for (; number < num_points; number++) {
-        outputVector[number] = (int16_t)(inputVector[number]) * 256;
-    }
+    volk_8i_convert_16i_generic(outputVector + number, inputVector + number, num_points - number);
 }
 #endif /* LV_HAVE_SSE4_1 */
 
@@ -127,9 +125,7 @@ static inline void volk_8i_convert_16i_u_avx2(int16_t* outputVector,
     }
 
     number = sixteenthPoints * 16;
-    for (; number < num_points; number++) {
-        outputVector[number] = (int16_t)(inputVector[number]) * 256;
-    }
+    volk_8i_convert_16i_generic(outputVector + number, inputVector + number, num_points - number);
 }
 #endif /* LV_HAVE_AVX2 */
 
@@ -159,9 +155,7 @@ static inline void volk_8i_convert_16i_u_avx512bw(int16_t* outputVector,
     }
 
     number = thirtysecondPoints * 32;
-    for (; number < num_points; number++) {
-        outputVector[number] = (int16_t)(inputVector[number]) * 256;
-    }
+    volk_8i_convert_16i_generic(outputVector + number, inputVector + number, num_points - number);
 }
 #endif /* LV_HAVE_AVX512BW */
 
@@ -195,9 +189,7 @@ static inline void volk_8i_convert_16i_neon(int16_t* outputVector,
         outputVectorPtr += 8;
     }
 
-    for (number = eighth_points * 8; number < num_points; number++) {
-        *outputVectorPtr++ = ((int16_t)(*inputVectorPtr++)) * 256;
-    }
+    volk_8i_convert_16i_generic(outputVectorPtr, inputVectorPtr, num_points - eighth_points * 8);
 }
 #endif /* LV_HAVE_NEON */
 
@@ -226,9 +218,7 @@ static inline void volk_8i_convert_16i_neonv8(int16_t* outputVector,
         outputVectorPtr += 16;
     }
 
-    for (unsigned int number = sixteenthPoints * 16; number < num_points; number++) {
-        *outputVectorPtr++ = ((int16_t)(*inputVectorPtr++)) * 256;
-    }
+    volk_8i_convert_16i_generic(outputVectorPtr, inputVectorPtr, num_points - sixteenthPoints * 16);
 }
 #endif /* LV_HAVE_NEONV8 */
 
@@ -305,9 +295,7 @@ static inline void volk_8i_convert_16i_a_sse4_1(int16_t* outputVector,
     }
 
     number = sixteenthPoints * 16;
-    for (; number < num_points; number++) {
-        outputVector[number] = (int16_t)(inputVector[number]) * 256;
-    }
+    volk_8i_convert_16i_generic(outputVector + number, inputVector + number, num_points - number);
 }
 #endif /* LV_HAVE_SSE4_1 */
 
@@ -338,9 +326,7 @@ static inline void volk_8i_convert_16i_a_avx2(int16_t* outputVector,
     }
 
     number = sixteenthPoints * 16;
-    for (; number < num_points; number++) {
-        outputVector[number] = (int16_t)(inputVector[number]) * 256;
-    }
+    volk_8i_convert_16i_generic(outputVector + number, inputVector + number, num_points - number);
 }
 #endif /* LV_HAVE_AVX2 */
 
@@ -370,9 +356,7 @@ static inline void volk_8i_convert_16i_a_avx512bw(int16_t* outputVector,
     }
 
     number = thirtysecondPoints * 32;
-    for (; number < num_points; number++) {
-        outputVector[number] = (int16_t)(inputVector[number]) * 256;
-    }
+    volk_8i_convert_16i_generic(outputVector + number, inputVector + number, num_points - number);
 }
 #endif /* LV_HAVE_AVX512BW */
 

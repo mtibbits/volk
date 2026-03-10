@@ -151,9 +151,9 @@ volk_32fc_x2_s32fc_multiply_conjugate_add2_32fc_u_sse3(lv_32fc_t* cVector,
         c += 2;
     }
 
-    if ((num_points % 2) != 0) {
-        *c = *a + lv_conj(*b) * (*scalar);
-    }
+    number = halfPoints * 2;
+    volk_32fc_x2_s32fc_multiply_conjugate_add2_32fc_generic(
+        c, a, b, scalar, num_points - number);
 }
 #endif /* LV_HAVE_SSE3 */
 
@@ -170,9 +170,7 @@ volk_32fc_x2_s32fc_multiply_conjugate_add2_32fc_u_avx(lv_32fc_t* cVector,
                                                       unsigned int num_points)
 {
     unsigned int number = 0;
-    unsigned int i = 0;
     const unsigned int quarterPoints = num_points / 4;
-    unsigned int isodd = num_points & 3;
 
     __m256 x, y, s, z;
     lv_32fc_t v_scalar[4] = { *scalar, *scalar, *scalar, *scalar };
@@ -196,9 +194,9 @@ volk_32fc_x2_s32fc_multiply_conjugate_add2_32fc_u_avx(lv_32fc_t* cVector,
         c += 4;
     }
 
-    for (i = num_points - isodd; i < num_points; i++) {
-        *c++ = (*a++) + lv_conj(*b++) * (*scalar);
-    }
+    number = quarterPoints * 4;
+    volk_32fc_x2_s32fc_multiply_conjugate_add2_32fc_generic(
+        c, a, b, scalar, num_points - number);
 }
 #endif /* LV_HAVE_AVX */
 
@@ -248,9 +246,9 @@ volk_32fc_x2_s32fc_multiply_conjugate_add2_32fc_neon(lv_32fc_t* cVector,
         cPtr += 4;
     }
 
-    for (number = quarter_points * 4; number < num_points; number++) {
-        *cPtr++ = (*aPtr++) + lv_conj(*bPtr++) * (*scalar);
-    }
+    number = quarter_points * 4;
+    volk_32fc_x2_s32fc_multiply_conjugate_add2_32fc_generic(
+        cPtr, aPtr, bPtr, scalar, num_points - number);
 }
 #endif /* LV_HAVE_NEON */
 
@@ -302,9 +300,9 @@ volk_32fc_x2_s32fc_multiply_conjugate_add2_32fc_neonv8(lv_32fc_t* cVector,
         cPtr += 4;
     }
 
-    for (number = quarter_points * 4; number < num_points; number++) {
-        *cPtr++ = (*aPtr++) + lv_conj(*bPtr++) * (*scalar);
-    }
+    number = quarter_points * 4;
+    volk_32fc_x2_s32fc_multiply_conjugate_add2_32fc_generic(
+        cPtr, aPtr, bPtr, scalar, num_points - number);
 }
 #endif /* LV_HAVE_NEONV8 */
 
@@ -414,9 +412,9 @@ volk_32fc_x2_s32fc_multiply_conjugate_add2_32fc_a_sse3(lv_32fc_t* cVector,
         c += 2;
     }
 
-    if ((num_points % 2) != 0) {
-        *c = *a + lv_conj(*b) * (*scalar);
-    }
+    number = halfPoints * 2;
+    volk_32fc_x2_s32fc_multiply_conjugate_add2_32fc_generic(
+        c, a, b, scalar, num_points - number);
 }
 #endif /* LV_HAVE_SSE3 */
 
@@ -433,9 +431,7 @@ volk_32fc_x2_s32fc_multiply_conjugate_add2_32fc_a_avx(lv_32fc_t* cVector,
                                                       unsigned int num_points)
 {
     unsigned int number = 0;
-    unsigned int i = 0;
     const unsigned int quarterPoints = num_points / 4;
-    unsigned int isodd = num_points & 3;
 
     __m256 x, y, s, z;
     lv_32fc_t v_scalar[4] = { *scalar, *scalar, *scalar, *scalar };
@@ -459,9 +455,9 @@ volk_32fc_x2_s32fc_multiply_conjugate_add2_32fc_a_avx(lv_32fc_t* cVector,
         c += 4;
     }
 
-    for (i = num_points - isodd; i < num_points; i++) {
-        *c++ = (*a++) + lv_conj(*b++) * (*scalar);
-    }
+    number = quarterPoints * 4;
+    volk_32fc_x2_s32fc_multiply_conjugate_add2_32fc_generic(
+        c, a, b, scalar, num_points - number);
 }
 #endif /* LV_HAVE_AVX */
 

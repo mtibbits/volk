@@ -134,11 +134,8 @@ static inline void volk_32f_x2_s32f_interleave_16ic_u_avx2(lv_16sc_t* complexVec
     }
 
     number = eighthPoints * 8;
-    complexVectorPtr = (int16_t*)(&complexVector[number]);
-    for (; number < num_points; number++) {
-        *complexVectorPtr++ = (int16_t)rintf(*iBufferPtr++ * scalar);
-        *complexVectorPtr++ = (int16_t)rintf(*qBufferPtr++ * scalar);
-    }
+    volk_32f_x2_s32f_interleave_16ic_generic(
+        complexVector + number, iBufferPtr, qBufferPtr, scalar, num_points - number);
 }
 #endif /* LV_HAVE_AVX2 */
 
@@ -193,11 +190,8 @@ static inline void volk_32f_x2_s32f_interleave_16ic_neon(lv_16sc_t* complexVecto
     }
 
     number = quarter_points * 4;
-    complexVectorPtr = (int16_t*)(&complexVector[number]);
-    for (; number < num_points; number++) {
-        *complexVectorPtr++ = (int16_t)rintf(*iBufferPtr++ * scalar);
-        *complexVectorPtr++ = (int16_t)rintf(*qBufferPtr++ * scalar);
-    }
+    volk_32f_x2_s32f_interleave_16ic_generic(
+        complexVector + number, iBufferPtr, qBufferPtr, scalar, num_points - number);
 }
 #endif /* LV_HAVE_NEON */
 
@@ -257,11 +251,8 @@ static inline void volk_32f_x2_s32f_interleave_16ic_neonv8(lv_16sc_t* complexVec
     }
 
     number = eighth_points * 8;
-    complexVectorPtr = (int16_t*)(&complexVector[number]);
-    for (; number < num_points; number++) {
-        *complexVectorPtr++ = (int16_t)rintf(*iBufferPtr++ * scalar);
-        *complexVectorPtr++ = (int16_t)rintf(*qBufferPtr++ * scalar);
-    }
+    volk_32f_x2_s32f_interleave_16ic_generic(
+        complexVector + number, iBufferPtr, qBufferPtr, scalar, num_points - number);
 }
 #endif /* LV_HAVE_NEONV8 */
 
@@ -375,11 +366,8 @@ static inline void volk_32f_x2_s32f_interleave_16ic_a_sse(lv_16sc_t* complexVect
     }
 
     number = quarterPoints * 4;
-    complexVectorPtr = (int16_t*)(&complexVector[number]);
-    for (; number < num_points; number++) {
-        *complexVectorPtr++ = (int16_t)rintf(*iBufferPtr++ * scalar);
-        *complexVectorPtr++ = (int16_t)rintf(*qBufferPtr++ * scalar);
-    }
+    volk_32f_x2_s32f_interleave_16ic_generic(
+        complexVector + number, iBufferPtr, qBufferPtr, scalar, num_points - number);
 }
 #endif /* LV_HAVE_SSE */
 
@@ -431,11 +419,8 @@ static inline void volk_32f_x2_s32f_interleave_16ic_a_sse2(lv_16sc_t* complexVec
     }
 
     number = quarterPoints * 4;
-    complexVectorPtr = (int16_t*)(&complexVector[number]);
-    for (; number < num_points; number++) {
-        *complexVectorPtr++ = (int16_t)rintf(*iBufferPtr++ * scalar);
-        *complexVectorPtr++ = (int16_t)rintf(*qBufferPtr++ * scalar);
-    }
+    volk_32f_x2_s32f_interleave_16ic_generic(
+        complexVector + number, iBufferPtr, qBufferPtr, scalar, num_points - number);
 }
 #endif /* LV_HAVE_SSE2 */
 
@@ -487,11 +472,8 @@ static inline void volk_32f_x2_s32f_interleave_16ic_a_avx2(lv_16sc_t* complexVec
     }
 
     number = eighthPoints * 8;
-    complexVectorPtr = (int16_t*)(&complexVector[number]);
-    for (; number < num_points; number++) {
-        *complexVectorPtr++ = (int16_t)rintf(*iBufferPtr++ * scalar);
-        *complexVectorPtr++ = (int16_t)rintf(*qBufferPtr++ * scalar);
-    }
+    volk_32f_x2_s32f_interleave_16ic_generic(
+        complexVector + number, iBufferPtr, qBufferPtr, scalar, num_points - number);
 }
 #endif /* LV_HAVE_AVX2 */
 

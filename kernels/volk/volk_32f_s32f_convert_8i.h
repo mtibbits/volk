@@ -127,10 +127,11 @@ static inline void volk_32f_s32f_convert_8i_u_sse(int8_t* outputVector,
         }
     }
 
-    for (unsigned int number = quarterPoints * 4; number < num_points; number++) {
-        const float r = inputVector[number] * scalar;
-        volk_32f_s32f_convert_8i_single(&outputVector[number], r);
-    }
+    volk_32f_s32f_convert_8i_generic(
+        outputVector + quarterPoints * 4,
+        inputVector + quarterPoints * 4,
+        scalar,
+        num_points - quarterPoints * 4);
 }
 
 #endif /* LV_HAVE_SSE */
@@ -189,10 +190,11 @@ static inline void volk_32f_s32f_convert_8i_u_sse2(int8_t* outputVector,
         outputVectorPtr += 16;
     }
 
-    for (unsigned int number = sixteenthPoints * 16; number < num_points; number++) {
-        const float r = inputVector[number] * scalar;
-        volk_32f_s32f_convert_8i_single(&outputVector[number], r);
-    }
+    volk_32f_s32f_convert_8i_generic(
+        outputVector + sixteenthPoints * 16,
+        inputVector + sixteenthPoints * 16,
+        scalar,
+        num_points - sixteenthPoints * 16);
 }
 
 #endif /* LV_HAVE_SSE2 */
@@ -254,10 +256,11 @@ static inline void volk_32f_s32f_convert_8i_u_avx2(int8_t* outputVector,
         outputVectorPtr += 32;
     }
 
-    for (unsigned int number = thirtysecondPoints * 32; number < num_points; number++) {
-        float r = inputVector[number] * scalar;
-        volk_32f_s32f_convert_8i_single(&outputVector[number], r);
-    }
+    volk_32f_s32f_convert_8i_generic(
+        outputVector + thirtysecondPoints * 32,
+        inputVector + thirtysecondPoints * 32,
+        scalar,
+        num_points - thirtysecondPoints * 32);
 }
 
 #endif /* LV_HAVE_AVX2 */
@@ -279,7 +282,6 @@ static inline void volk_32f_s32f_convert_8i_u_avx512(int8_t* outputVector,
 
     float min_val = INT8_MIN;
     float max_val = INT8_MAX;
-    float r;
 
     __m512 vScalar = _mm512_set1_ps(scalar);
     __m512 inputVal1, inputVal2;
@@ -313,10 +315,8 @@ static inline void volk_32f_s32f_convert_8i_u_avx512(int8_t* outputVector,
     }
 
     number = thirtysecondPoints * 32;
-    for (; number < num_points; number++) {
-        r = inputVector[number] * scalar;
-        volk_32f_s32f_convert_8i_single(&outputVector[number], r);
-    }
+    volk_32f_s32f_convert_8i_generic(
+        outputVector + number, inputVector + number, scalar, num_points - number);
 }
 
 #endif /* LV_HAVE_AVX512F */
@@ -397,10 +397,8 @@ static inline void volk_32f_s32f_convert_8i_neon(int8_t* outputVector,
     }
 
     number = sixteenthPoints * 16;
-    for (; number < num_points; number++) {
-        float r = inputVector[number] * scalar;
-        volk_32f_s32f_convert_8i_single(&outputVector[number], r);
-    }
+    volk_32f_s32f_convert_8i_generic(
+        outputVector + number, inputVector + number, scalar, num_points - number);
 }
 #endif /* LV_HAVE_NEON */
 
@@ -496,10 +494,8 @@ static inline void volk_32f_s32f_convert_8i_neonv8(int8_t* outputVector,
     }
 
     number = thirtysecondPoints * 32;
-    for (; number < num_points; number++) {
-        float r = inputVector[number] * scalar;
-        volk_32f_s32f_convert_8i_single(&outputVector[number], r);
-    }
+    volk_32f_s32f_convert_8i_generic(
+        outputVector + number, inputVector + number, scalar, num_points - number);
 }
 #endif /* LV_HAVE_NEONV8 */
 
@@ -562,10 +558,11 @@ static inline void volk_32f_s32f_convert_8i_a_sse(int8_t* outputVector,
         }
     }
 
-    for (unsigned int number = quarterPoints * 4; number < num_points; number++) {
-        const float r = inputVector[number] * scalar;
-        volk_32f_s32f_convert_8i_single(&outputVector[number], r);
-    }
+    volk_32f_s32f_convert_8i_generic(
+        outputVector + quarterPoints * 4,
+        inputVector + quarterPoints * 4,
+        scalar,
+        num_points - quarterPoints * 4);
 }
 
 #endif /* LV_HAVE_SSE */
@@ -624,10 +621,11 @@ static inline void volk_32f_s32f_convert_8i_a_sse2(int8_t* outputVector,
         outputVectorPtr += 16;
     }
 
-    for (unsigned int number = sixteenthPoints * 16; number < num_points; number++) {
-        const float r = inputVector[number] * scalar;
-        volk_32f_s32f_convert_8i_single(&outputVector[number], r);
-    }
+    volk_32f_s32f_convert_8i_generic(
+        outputVector + sixteenthPoints * 16,
+        inputVector + sixteenthPoints * 16,
+        scalar,
+        num_points - sixteenthPoints * 16);
 }
 #endif /* LV_HAVE_SSE2 */
 
@@ -688,10 +686,11 @@ static inline void volk_32f_s32f_convert_8i_a_avx2(int8_t* outputVector,
         outputVectorPtr += 32;
     }
 
-    for (unsigned int number = thirtysecondPoints * 32; number < num_points; number++) {
-        const float r = inputVector[number] * scalar;
-        volk_32f_s32f_convert_8i_single(&outputVector[number], r);
-    }
+    volk_32f_s32f_convert_8i_generic(
+        outputVector + thirtysecondPoints * 32,
+        inputVector + thirtysecondPoints * 32,
+        scalar,
+        num_points - thirtysecondPoints * 32);
 }
 
 #endif /* LV_HAVE_AVX2 */
@@ -713,7 +712,6 @@ static inline void volk_32f_s32f_convert_8i_a_avx512(int8_t* outputVector,
 
     float min_val = INT8_MIN;
     float max_val = INT8_MAX;
-    float r;
 
     __m512 vScalar = _mm512_set1_ps(scalar);
     __m512 inputVal1, inputVal2;
@@ -747,10 +745,8 @@ static inline void volk_32f_s32f_convert_8i_a_avx512(int8_t* outputVector,
     }
 
     number = thirtysecondPoints * 32;
-    for (; number < num_points; number++) {
-        r = inputVector[number] * scalar;
-        volk_32f_s32f_convert_8i_single(&outputVector[number], r);
-    }
+    volk_32f_s32f_convert_8i_generic(
+        outputVector + number, inputVector + number, scalar, num_points - number);
 }
 
 #endif /* LV_HAVE_AVX512F */

@@ -149,14 +149,7 @@ static inline void volk_32f_s32f_x2_clamp_32f_neon(float* out,
     }
 
     number = quarter_points * 4;
-    for (; number < num_points; number++) {
-        float val = *in++;
-        if (val < min)
-            val = min;
-        else if (val > max)
-            val = max;
-        *out++ = val;
-    }
+    volk_32f_s32f_x2_clamp_32f_generic(out, in, min, max, num_points - number);
 }
 #endif /* LV_HAVE_NEON */
 
@@ -192,14 +185,7 @@ static inline void volk_32f_s32f_x2_clamp_32f_neonv8(float* out,
     }
 
     number = eighth_points * 8;
-    for (; number < num_points; number++) {
-        float val = *in++;
-        if (val < min)
-            val = min;
-        else if (val > max)
-            val = max;
-        *out++ = val;
-    }
+    volk_32f_s32f_x2_clamp_32f_generic(out, in, min, max, num_points - number);
 }
 #endif /* LV_HAVE_NEONV8 */
 

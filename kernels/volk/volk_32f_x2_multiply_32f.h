@@ -110,9 +110,7 @@ static inline void volk_32f_x2_multiply_32f_u_sse(float* cVector,
     }
 
     number = quarterPoints * 4;
-    for (; number < num_points; number++) {
-        *cPtr++ = (*aPtr++) * (*bPtr++);
-    }
+    volk_32f_x2_multiply_32f_generic(cPtr, aPtr, bPtr, num_points - number);
 }
 #endif /* LV_HAVE_SSE */
 
@@ -147,9 +145,7 @@ static inline void volk_32f_x2_multiply_32f_u_avx(float* cVector,
     }
 
     number = eighthPoints * 8;
-    for (; number < num_points; number++) {
-        *cPtr++ = (*aPtr++) * (*bPtr++);
-    }
+    volk_32f_x2_multiply_32f_generic(cPtr, aPtr, bPtr, num_points - number);
 }
 #endif /* LV_HAVE_AVX */
 
@@ -184,9 +180,7 @@ static inline void volk_32f_x2_multiply_32f_u_avx512f(float* cVector,
     }
 
     number = sixteenthPoints * 16;
-    for (; number < num_points; number++) {
-        *cPtr++ = (*aPtr++) * (*bPtr++);
-    }
+    volk_32f_x2_multiply_32f_generic(cPtr, aPtr, bPtr, num_points - number);
 }
 #endif /* LV_HAVE_AVX512F */
 
@@ -210,9 +204,8 @@ static inline void volk_32f_x2_multiply_32f_neon(float* cVector,
         bVector += 4;
         cVector += 4;
     }
-    for (number = quarter_points * 4; number < num_points; ++number) {
-        *cVector++ = *aVector++ * *bVector++;
-    }
+    number = quarter_points * 4;
+    volk_32f_x2_multiply_32f_generic(cVector, aVector, bVector, num_points - number);
 }
 #endif /* LV_HAVE_NEON */
 
@@ -257,10 +250,7 @@ static inline void volk_32f_x2_multiply_32f_neonv8(float* cVector,
     }
 
     /* Scalar tail */
-    while (n > 0) {
-        *c++ = *a++ * *b++;
-        n--;
-    }
+    volk_32f_x2_multiply_32f_generic(c, a, b, n);
 }
 
 #endif /* LV_HAVE_NEONV8 */
@@ -338,9 +328,7 @@ static inline void volk_32f_x2_multiply_32f_a_sse(float* cVector,
     }
 
     number = quarterPoints * 4;
-    for (; number < num_points; number++) {
-        *cPtr++ = (*aPtr++) * (*bPtr++);
-    }
+    volk_32f_x2_multiply_32f_generic(cPtr, aPtr, bPtr, num_points - number);
 }
 #endif /* LV_HAVE_SSE */
 
@@ -375,9 +363,7 @@ static inline void volk_32f_x2_multiply_32f_a_avx(float* cVector,
     }
 
     number = eighthPoints * 8;
-    for (; number < num_points; number++) {
-        *cPtr++ = (*aPtr++) * (*bPtr++);
-    }
+    volk_32f_x2_multiply_32f_generic(cPtr, aPtr, bPtr, num_points - number);
 }
 #endif /* LV_HAVE_AVX */
 
@@ -412,9 +398,7 @@ static inline void volk_32f_x2_multiply_32f_a_avx512f(float* cVector,
     }
 
     number = sixteenthPoints * 16;
-    for (; number < num_points; number++) {
-        *cPtr++ = (*aPtr++) * (*bPtr++);
-    }
+    volk_32f_x2_multiply_32f_generic(cPtr, aPtr, bPtr, num_points - number);
 }
 #endif /* LV_HAVE_AVX512F */
 

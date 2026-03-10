@@ -167,13 +167,12 @@ static inline void volk_32fc_x2_conjugate_dot_prod_32fc_u_sse3(lv_32fc_t* result
     // Store result.
     _mm_storel_pi((__m64*)result, sum);
 
-    // Handle the last element if num_points mod 2 is 1.
+    // Handle remaining elements.
     if (num_points & 1u) {
-        *result += lv_cmake(
-            lv_creal(input[num_points - 1]) * lv_creal(taps[num_points - 1]) +
-                lv_cimag(input[num_points - 1]) * lv_cimag(taps[num_points - 1]),
-            lv_cimag(input[num_points - 1]) * lv_creal(taps[num_points - 1]) -
-                lv_creal(input[num_points - 1]) * lv_cimag(taps[num_points - 1]));
+        lv_32fc_t tailResult = lv_cmake(0, 0);
+        volk_32fc_x2_conjugate_dot_prod_32fc_generic(
+            &tailResult, input + (num_points - 1), taps + (num_points - 1), 1);
+        *result += tailResult;
     }
 }
 
@@ -229,12 +228,13 @@ static inline void volk_32fc_x2_conjugate_dot_prod_32fc_u_avx(lv_32fc_t* result,
     __m128 lower = _mm256_extractf128_ps(sum, 0);
     _mm_storel_pi((__m64*)result, lower);
 
-    // Handle the last elements if num_points mod 4 is bigger than 0.
-    for (long unsigned i = num_points & ~3u; i < num_points; ++i) {
-        *result += lv_cmake(lv_creal(input[i]) * lv_creal(taps[i]) +
-                                lv_cimag(input[i]) * lv_cimag(taps[i]),
-                            lv_cimag(input[i]) * lv_creal(taps[i]) -
-                                lv_creal(input[i]) * lv_cimag(taps[i]));
+    // Handle remaining elements.
+    if ((num_points & 3u) > 0) {
+        unsigned int processed = num_points & ~3u;
+        lv_32fc_t tailResult = lv_cmake(0, 0);
+        volk_32fc_x2_conjugate_dot_prod_32fc_generic(
+            &tailResult, input + processed, taps + processed, num_points - processed);
+        *result += tailResult;
     }
 }
 
@@ -316,12 +316,13 @@ volk_32fc_x2_conjugate_dot_prod_32fc_u_avx512dq(lv_32fc_t* result,
     // Store result
     _mm_storel_pi((__m64*)result, sum128);
 
-    // Handle remaining elements
-    for (long unsigned i = num_points & ~7u; i < num_points; ++i) {
-        *result += lv_cmake(lv_creal(input[i]) * lv_creal(taps[i]) +
-                                lv_cimag(input[i]) * lv_cimag(taps[i]),
-                            lv_cimag(input[i]) * lv_creal(taps[i]) -
-                                lv_creal(input[i]) * lv_cimag(taps[i]));
+    // Handle remaining elements.
+    if ((num_points & 7u) > 0) {
+        unsigned int processed = num_points & ~7u;
+        lv_32fc_t tailResult = lv_cmake(0, 0);
+        volk_32fc_x2_conjugate_dot_prod_32fc_generic(
+            &tailResult, input + processed, taps + processed, num_points - processed);
+        *result += tailResult;
     }
 }
 
@@ -595,13 +596,12 @@ static inline void volk_32fc_x2_conjugate_dot_prod_32fc_a_sse3(lv_32fc_t* result
     // Store result.
     _mm_storel_pi((__m64*)result, sum);
 
-    // Handle the last element if num_points mod 2 is 1.
+    // Handle remaining elements.
     if (num_points & 1u) {
-        *result += lv_cmake(
-            lv_creal(input[num_points - 1]) * lv_creal(taps[num_points - 1]) +
-                lv_cimag(input[num_points - 1]) * lv_cimag(taps[num_points - 1]),
-            lv_cimag(input[num_points - 1]) * lv_creal(taps[num_points - 1]) -
-                lv_creal(input[num_points - 1]) * lv_cimag(taps[num_points - 1]));
+        lv_32fc_t tailResult = lv_cmake(0, 0);
+        volk_32fc_x2_conjugate_dot_prod_32fc_generic(
+            &tailResult, input + (num_points - 1), taps + (num_points - 1), 1);
+        *result += tailResult;
     }
 }
 
@@ -657,12 +657,13 @@ static inline void volk_32fc_x2_conjugate_dot_prod_32fc_a_avx(lv_32fc_t* result,
     __m128 lower = _mm256_extractf128_ps(sum, 0);
     _mm_storel_pi((__m64*)result, lower);
 
-    // Handle the last elements if num_points mod 4 is bigger than 0.
-    for (long unsigned i = num_points & ~3u; i < num_points; ++i) {
-        *result += lv_cmake(lv_creal(input[i]) * lv_creal(taps[i]) +
-                                lv_cimag(input[i]) * lv_cimag(taps[i]),
-                            lv_cimag(input[i]) * lv_creal(taps[i]) -
-                                lv_creal(input[i]) * lv_cimag(taps[i]));
+    // Handle remaining elements.
+    if ((num_points & 3u) > 0) {
+        unsigned int processed = num_points & ~3u;
+        lv_32fc_t tailResult = lv_cmake(0, 0);
+        volk_32fc_x2_conjugate_dot_prod_32fc_generic(
+            &tailResult, input + processed, taps + processed, num_points - processed);
+        *result += tailResult;
     }
 }
 
@@ -740,12 +741,13 @@ volk_32fc_x2_conjugate_dot_prod_32fc_a_avx512dq(lv_32fc_t* result,
 
     _mm_storel_pi((__m64*)result, sum128);
 
-    // Handle remaining elements
-    for (long unsigned i = num_points & ~7u; i < num_points; ++i) {
-        *result += lv_cmake(lv_creal(input[i]) * lv_creal(taps[i]) +
-                                lv_cimag(input[i]) * lv_cimag(taps[i]),
-                            lv_cimag(input[i]) * lv_creal(taps[i]) -
-                                lv_creal(input[i]) * lv_cimag(taps[i]));
+    // Handle remaining elements.
+    if ((num_points & 7u) > 0) {
+        unsigned int processed = num_points & ~7u;
+        lv_32fc_t tailResult = lv_cmake(0, 0);
+        volk_32fc_x2_conjugate_dot_prod_32fc_generic(
+            &tailResult, input + processed, taps + processed, num_points - processed);
+        *result += tailResult;
     }
 }
 

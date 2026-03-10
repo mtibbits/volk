@@ -126,17 +126,8 @@ static inline void volk_16i_x4_quad_max_star_16i_neon(short* target,
         target += 8;
     }
 
-    short temp0 = 0;
-    short temp1 = 0;
-    for (i = eighth_points * 8; i < num_points; ++i) {
-        temp0 = ((short)(*src0 - *src1) > 0) ? *src0 : *src1;
-        temp1 = ((short)(*src2 - *src3) > 0) ? *src2 : *src3;
-        *target++ = ((short)(temp0 - temp1) > 0) ? temp0 : temp1;
-        src0++;
-        src1++;
-        src2++;
-        src3++;
-    }
+    volk_16i_x4_quad_max_star_16i_generic(
+        target, src0, src1, src2, src3, num_points - eighth_points * 8);
 }
 #endif /* LV_HAVE_NEON */
 
@@ -164,7 +155,6 @@ static inline void volk_16i_x4_quad_max_star_16i_a_sse2(short* target,
 
     int bound = (num_bytes >> 4);
     int bound_copy = bound;
-    int leftovers = (num_bytes >> 1) & 7;
 
     __m128i *p_target, *p_src0, *p_src1, *p_src2, *p_src3;
     p_target = (__m128i*)target;
@@ -222,13 +212,9 @@ static inline void volk_16i_x4_quad_max_star_16i_a_sse2(short* target,
         p_target += 1;
     }
 
-    short temp0 = 0;
-    short temp1 = 0;
-    for (i = bound * 8; i < (bound * 8) + leftovers; ++i) {
-        temp0 = ((short)(src0[i] - src1[i]) > 0) ? src0[i] : src1[i];
-        temp1 = ((short)(src2[i] - src3[i]) > 0) ? src2[i] : src3[i];
-        target[i] = ((short)(temp0 - temp1) > 0) ? temp0 : temp1;
-    }
+    i = bound * 8;
+    volk_16i_x4_quad_max_star_16i_generic(
+        target + i, src0 + i, src1 + i, src2 + i, src3 + i, num_points - i);
     return;
 }
 

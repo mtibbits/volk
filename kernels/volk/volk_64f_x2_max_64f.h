@@ -113,11 +113,7 @@ static inline void volk_64f_x2_max_64f_u_avx(double* cVector,
     }
 
     number = quarterPoints * 4;
-    for (; number < num_points; number++) {
-        const double a = *aPtr++;
-        const double b = *bPtr++;
-        *cPtr++ = (a > b ? a : b);
-    }
+    volk_64f_x2_max_64f_generic(cPtr, aPtr, bPtr, num_points - number);
 }
 #endif /* LV_HAVE_AVX */
 
@@ -153,11 +149,7 @@ static inline void volk_64f_x2_max_64f_u_avx512f(double* cVector,
     }
 
     number = eigthPoints * 8;
-    for (; number < num_points; number++) {
-        const double a = *aPtr++;
-        const double b = *bPtr++;
-        *cPtr++ = (a > b ? a : b);
-    }
+    volk_64f_x2_max_64f_generic(cPtr, aPtr, bPtr, num_points - number);
 }
 #endif /* LV_HAVE_AVX512F */
 
@@ -197,11 +189,7 @@ static inline void volk_64f_x2_max_64f_neonv8(double* cVector,
     }
 
     number = quarter_points * 4;
-    for (; number < num_points; number++) {
-        const double a = *aPtr++;
-        const double b = *bPtr++;
-        *cPtr++ = (a > b ? a : b);
-    }
+    volk_64f_x2_max_64f_generic(cPtr, aPtr, bPtr, num_points - number);
 }
 #endif /* LV_HAVE_NEONV8 */
 
@@ -263,11 +251,7 @@ static inline void volk_64f_x2_max_64f_a_sse2(double* cVector,
     }
 
     number = halfPoints * 2;
-    for (; number < num_points; number++) {
-        const double a = *aPtr++;
-        const double b = *bPtr++;
-        *cPtr++ = (a > b ? a : b);
-    }
+    volk_64f_x2_max_64f_generic(cPtr, aPtr, bPtr, num_points - number);
 }
 #endif /* LV_HAVE_SSE2 */
 
@@ -303,11 +287,7 @@ static inline void volk_64f_x2_max_64f_a_avx(double* cVector,
     }
 
     number = quarterPoints * 4;
-    for (; number < num_points; number++) {
-        const double a = *aPtr++;
-        const double b = *bPtr++;
-        *cPtr++ = (a > b ? a : b);
-    }
+    volk_64f_x2_max_64f_generic(cPtr, aPtr, bPtr, num_points - number);
 }
 #endif /* LV_HAVE_AVX */
 
@@ -343,11 +323,7 @@ static inline void volk_64f_x2_max_64f_a_avx512f(double* cVector,
     }
 
     number = eigthPoints * 8;
-    for (; number < num_points; number++) {
-        const double a = *aPtr++;
-        const double b = *bPtr++;
-        *cPtr++ = (a > b ? a : b);
-    }
+    volk_64f_x2_max_64f_generic(cPtr, aPtr, bPtr, num_points - number);
 }
 #endif /* LV_HAVE_AVX512F */
 

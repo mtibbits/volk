@@ -120,10 +120,8 @@ static inline void volk_32fc_deinterleave_64f_x2_u_sse2(double* iBuffer,
     }
 
     number = halfPoints * 2;
-    for (; number < num_points; number++) {
-        *iBufferPtr++ = *complexVectorPtr++;
-        *qBufferPtr++ = *complexVectorPtr++;
-    }
+    volk_32fc_deinterleave_64f_x2_generic(
+        iBufferPtr, qBufferPtr, (const lv_32fc_t*)complexVectorPtr, num_points - number);
 }
 #endif /* LV_HAVE_SSE2 */
 
@@ -169,10 +167,8 @@ static inline void volk_32fc_deinterleave_64f_x2_u_avx(double* iBuffer,
     }
 
     number = quarterPoints * 4;
-    for (; number < num_points; number++) {
-        *iBufferPtr++ = *complexVectorPtr++;
-        *qBufferPtr++ = *complexVectorPtr++;
-    }
+    volk_32fc_deinterleave_64f_x2_generic(
+        iBufferPtr, qBufferPtr, (const lv_32fc_t*)complexVectorPtr, num_points - number);
 }
 #endif /* LV_HAVE_AVX */
 
@@ -206,10 +202,9 @@ static inline void volk_32fc_deinterleave_64f_x2_neon(double* iBuffer,
         qBufferPtr += 2;
     }
 
-    for (number = half_points * 2; number < num_points; number++) {
-        *iBufferPtr++ = (double)*complexVectorPtr++;
-        *qBufferPtr++ = (double)*complexVectorPtr++;
-    }
+    number = half_points * 2;
+    volk_32fc_deinterleave_64f_x2_generic(
+        iBufferPtr, qBufferPtr, (const lv_32fc_t*)complexVectorPtr, num_points - number);
 }
 #endif /* LV_HAVE_NEONV8 */
 
@@ -298,10 +293,8 @@ static inline void volk_32fc_deinterleave_64f_x2_a_sse2(double* iBuffer,
     }
 
     number = halfPoints * 2;
-    for (; number < num_points; number++) {
-        *iBufferPtr++ = *complexVectorPtr++;
-        *qBufferPtr++ = *complexVectorPtr++;
-    }
+    volk_32fc_deinterleave_64f_x2_generic(
+        iBufferPtr, qBufferPtr, (const lv_32fc_t*)complexVectorPtr, num_points - number);
 }
 #endif /* LV_HAVE_SSE2 */
 
@@ -347,10 +340,8 @@ static inline void volk_32fc_deinterleave_64f_x2_a_avx(double* iBuffer,
     }
 
     number = quarterPoints * 4;
-    for (; number < num_points; number++) {
-        *iBufferPtr++ = *complexVectorPtr++;
-        *qBufferPtr++ = *complexVectorPtr++;
-    }
+    volk_32fc_deinterleave_64f_x2_generic(
+        iBufferPtr, qBufferPtr, (const lv_32fc_t*)complexVectorPtr, num_points - number);
 }
 #endif /* LV_HAVE_AVX */
 

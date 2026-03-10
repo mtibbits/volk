@@ -105,9 +105,8 @@ static inline void volk_16ic_x2_multiply_16ic_u_sse2(lv_16sc_t* out,
         _out += 4;
     }
 
-    for (number = sse_iters * 4; number < num_points; ++number) {
-        *_out++ = (*_in_a++) * (*_in_b++);
-    }
+    number = sse_iters * 4;
+    volk_16ic_x2_multiply_16ic_generic(_out, _in_a, _in_b, num_points - number);
 }
 #endif /* LV_HAVE_SSE2 */
 
@@ -226,9 +225,7 @@ static inline void volk_16ic_x2_multiply_16ic_u_avx2(lv_16sc_t* out,
     }
 
     number = avx2_points * 8;
-    for (; number < num_points; number++) {
-        *_out++ = (*_in_a++) * (*_in_b++);
-    }
+    volk_16ic_x2_multiply_16ic_generic(_out, _in_a, _in_b, num_points - number);
 }
 #endif /* LV_HAVE_AVX2 */
 
@@ -276,9 +273,8 @@ static inline void volk_16ic_x2_multiply_16ic_neon(lv_16sc_t* out,
         out += 4;
     }
 
-    for (number = quarter_points * 4; number < num_points; number++) {
-        *out++ = (*a_ptr++) * (*b_ptr++);
-    }
+    number = quarter_points * 4;
+    volk_16ic_x2_multiply_16ic_generic(out, a_ptr, b_ptr, num_points - number);
 }
 #endif /* LV_HAVE_NEON */
 
@@ -322,9 +318,8 @@ static inline void volk_16ic_x2_multiply_16ic_neonv8(lv_16sc_t* out,
         out += 8;
     }
 
-    for (number = eighth_points * 8; number < num_points; number++) {
-        *out++ = (*a_ptr++) * (*b_ptr++);
-    }
+    number = eighth_points * 8;
+    volk_16ic_x2_multiply_16ic_generic(out, a_ptr, b_ptr, num_points - number);
 }
 #endif /* LV_HAVE_NEONV8 */
 
@@ -434,9 +429,8 @@ static inline void volk_16ic_x2_multiply_16ic_a_sse2(lv_16sc_t* out,
         _out += 4;
     }
 
-    for (number = sse_iters * 4; number < num_points; ++number) {
-        *_out++ = (*_in_a++) * (*_in_b++);
-    }
+    number = sse_iters * 4;
+    volk_16ic_x2_multiply_16ic_generic(_out, _in_a, _in_b, num_points - number);
 }
 #endif /* LV_HAVE_SSE2 */
 
@@ -555,9 +549,7 @@ static inline void volk_16ic_x2_multiply_16ic_a_avx2(lv_16sc_t* out,
     }
 
     number = avx2_points * 8;
-    for (; number < num_points; number++) {
-        *_out++ = (*_in_a++) * (*_in_b++);
-    }
+    volk_16ic_x2_multiply_16ic_generic(_out, _in_a, _in_b, num_points - number);
 }
 #endif /* LV_HAVE_AVX2 */
 

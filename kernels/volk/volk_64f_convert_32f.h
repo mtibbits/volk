@@ -222,9 +222,7 @@ static inline void volk_64f_convert_32f_neonv8(float* outputVector,
     }
 
     number = eighth_points * 8;
-    for (; number < num_points; number++) {
-        *outputPtr++ = (float)(*inputPtr++);
-    }
+    volk_64f_convert_32f_generic(outputPtr, inputPtr, num_points - number);
 }
 #endif /* LV_HAVE_NEONV8 */
 

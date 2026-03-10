@@ -174,10 +174,8 @@ volk_32fc_s32f_deinterleave_real_16i_neon(int16_t* iBuffer,
     }
 
     number = quarter_points * 4;
-    for (; number < num_points; number++) {
-        *iBufferPtr++ = (int16_t)rintf(*complexVectorPtr++ * scalar);
-        complexVectorPtr++;
-    }
+    volk_32fc_s32f_deinterleave_real_16i_generic(
+        iBufferPtr, (const lv_32fc_t*)complexVectorPtr, scalar, num_points - number);
 }
 #endif /* LV_HAVE_NEON */
 
@@ -218,10 +216,8 @@ volk_32fc_s32f_deinterleave_real_16i_neonv8(int16_t* iBuffer,
     }
 
     number = eighth_points * 8;
-    for (; number < num_points; number++) {
-        *iBufferPtr++ = (int16_t)rintf(*complexVectorPtr++ * scalar);
-        complexVectorPtr++;
-    }
+    volk_32fc_s32f_deinterleave_real_16i_generic(
+        iBufferPtr, (const lv_32fc_t*)complexVectorPtr, scalar, num_points - number);
 }
 #endif /* LV_HAVE_NEONV8 */
 

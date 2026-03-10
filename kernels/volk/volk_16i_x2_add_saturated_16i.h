@@ -94,14 +94,9 @@ static inline void volk_16i_x2_add_saturated_16i_u_sse2(int16_t* outVector,
         _mm_storeu_si128((__m128i*)(outVector + 8 * number), result);
     }
 
-    for (number = eighthPoints * 8; number < num_points; number++) {
-        int32_t sum = (int32_t)inVectorA[number] + (int32_t)inVectorB[number];
-        if (sum > 32767)
-            sum = 32767;
-        else if (sum < -32768)
-            sum = -32768;
-        outVector[number] = (int16_t)sum;
-    }
+    number = eighthPoints * 8;
+    volk_16i_x2_add_saturated_16i_generic(
+        outVector + number, inVectorA + number, inVectorB + number, num_points - number);
 }
 
 #endif /* LV_HAVE_SSE2 */
@@ -125,14 +120,9 @@ static inline void volk_16i_x2_add_saturated_16i_u_avx2(int16_t* outVector,
         _mm256_storeu_si256((__m256i*)(outVector + 16 * number), result);
     }
 
-    for (number = sixteenthPoints * 16; number < num_points; number++) {
-        int32_t sum = (int32_t)inVectorA[number] + (int32_t)inVectorB[number];
-        if (sum > 32767)
-            sum = 32767;
-        else if (sum < -32768)
-            sum = -32768;
-        outVector[number] = (int16_t)sum;
-    }
+    number = sixteenthPoints * 16;
+    volk_16i_x2_add_saturated_16i_generic(
+        outVector + number, inVectorA + number, inVectorB + number, num_points - number);
 }
 
 #endif /* LV_HAVE_AVX2 */
@@ -156,14 +146,9 @@ static inline void volk_16i_x2_add_saturated_16i_u_avx512bw(int16_t* outVector,
         _mm512_storeu_si512((__m512i*)(outVector + 32 * number), result);
     }
 
-    for (number = thirtysecondPoints * 32; number < num_points; number++) {
-        int32_t sum = (int32_t)inVectorA[number] + (int32_t)inVectorB[number];
-        if (sum > 32767)
-            sum = 32767;
-        else if (sum < -32768)
-            sum = -32768;
-        outVector[number] = (int16_t)sum;
-    }
+    number = thirtysecondPoints * 32;
+    volk_16i_x2_add_saturated_16i_generic(
+        outVector + number, inVectorA + number, inVectorB + number, num_points - number);
 }
 
 #endif /* LV_HAVE_AVX512BW */
@@ -186,14 +171,9 @@ static inline void volk_16i_x2_add_saturated_16i_neon(int16_t* outVector,
         vst1q_s16(outVector + 8 * number, vqaddq_s16(a, b));
     }
 
-    for (number = eighthPoints * 8; number < num_points; number++) {
-        int32_t sum = (int32_t)inVectorA[number] + (int32_t)inVectorB[number];
-        if (sum > 32767)
-            sum = 32767;
-        else if (sum < -32768)
-            sum = -32768;
-        outVector[number] = (int16_t)sum;
-    }
+    number = eighthPoints * 8;
+    volk_16i_x2_add_saturated_16i_generic(
+        outVector + number, inVectorA + number, inVectorB + number, num_points - number);
 }
 
 #endif /* LV_HAVE_NEON */
@@ -225,14 +205,9 @@ static inline void volk_16i_x2_add_saturated_16i_neonv8(int16_t* outVector,
         outVector += 16;
     }
 
-    for (number = sixteenthPoints * 16; number < num_points; number++) {
-        int32_t sum = (int32_t)(*inVectorA++) + (int32_t)(*inVectorB++);
-        if (sum > 32767)
-            sum = 32767;
-        else if (sum < -32768)
-            sum = -32768;
-        *outVector++ = (int16_t)sum;
-    }
+    number = sixteenthPoints * 16;
+    volk_16i_x2_add_saturated_16i_generic(
+        outVector, inVectorA, inVectorB, num_points - number);
 }
 
 #endif /* LV_HAVE_NEONV8 */
@@ -284,14 +259,9 @@ static inline void volk_16i_x2_add_saturated_16i_a_sse2(int16_t* outVector,
         _mm_store_si128((__m128i*)(outVector + 8 * number), result);
     }
 
-    for (number = eighthPoints * 8; number < num_points; number++) {
-        int32_t sum = (int32_t)inVectorA[number] + (int32_t)inVectorB[number];
-        if (sum > 32767)
-            sum = 32767;
-        else if (sum < -32768)
-            sum = -32768;
-        outVector[number] = (int16_t)sum;
-    }
+    number = eighthPoints * 8;
+    volk_16i_x2_add_saturated_16i_generic(
+        outVector + number, inVectorA + number, inVectorB + number, num_points - number);
 }
 
 #endif /* LV_HAVE_SSE2 */
@@ -315,14 +285,9 @@ static inline void volk_16i_x2_add_saturated_16i_a_avx2(int16_t* outVector,
         _mm256_store_si256((__m256i*)(outVector + 16 * number), result);
     }
 
-    for (number = sixteenthPoints * 16; number < num_points; number++) {
-        int32_t sum = (int32_t)inVectorA[number] + (int32_t)inVectorB[number];
-        if (sum > 32767)
-            sum = 32767;
-        else if (sum < -32768)
-            sum = -32768;
-        outVector[number] = (int16_t)sum;
-    }
+    number = sixteenthPoints * 16;
+    volk_16i_x2_add_saturated_16i_generic(
+        outVector + number, inVectorA + number, inVectorB + number, num_points - number);
 }
 
 #endif /* LV_HAVE_AVX2 */
@@ -346,14 +311,9 @@ static inline void volk_16i_x2_add_saturated_16i_a_avx512bw(int16_t* outVector,
         _mm512_store_si512((__m512i*)(outVector + 32 * number), result);
     }
 
-    for (number = thirtysecondPoints * 32; number < num_points; number++) {
-        int32_t sum = (int32_t)inVectorA[number] + (int32_t)inVectorB[number];
-        if (sum > 32767)
-            sum = 32767;
-        else if (sum < -32768)
-            sum = -32768;
-        outVector[number] = (int16_t)sum;
-    }
+    number = thirtysecondPoints * 32;
+    volk_16i_x2_add_saturated_16i_generic(
+        outVector + number, inVectorA + number, inVectorB + number, num_points - number);
 }
 
 #endif /* LV_HAVE_AVX512BW */

@@ -96,10 +96,9 @@ static inline void volk_16i_max_star_horizontal_16i_neon(int16_t* target,
         src0 += 16;
         target += 8;
     }
-    for (number = 0; number < num_points % 16; number += 2) {
-        target[number >> 1] = ((int16_t)(src0[number] - src0[number + 1]) > 0)
-                                  ? src0[number]
-                                  : src0[number + 1];
+    number = eighth_points * 16;
+    if (number < num_points) {
+        volk_16i_max_star_horizontal_16i_generic(target, src0, num_points - number);
     }
 }
 #endif /* LV_HAVE_NEON */
@@ -212,10 +211,10 @@ static inline void volk_16i_max_star_horizontal_16i_a_ssse3(int16_t* target,
         p_target = (__m128i*)((int8_t*)p_target + 8);
     }
 
-    for (i = (bound << 4) + (intermediate << 3);
-         i < (bound << 4) + (intermediate << 3) + leftovers;
-         i += 2) {
-        target[i >> 1] = ((int16_t)(src0[i] - src0[i + 1]) > 0) ? src0[i] : src0[i + 1];
+    if (leftovers > 0) {
+        int processed = (bound << 4) + (intermediate << 3);
+        volk_16i_max_star_horizontal_16i_generic(
+            target + (processed >> 1), src0 + processed, leftovers);
     }
 }
 

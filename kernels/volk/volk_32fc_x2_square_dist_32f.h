@@ -195,10 +195,8 @@ static inline void volk_32fc_x2_square_dist_32f_neon(float* target,
         points += 4;
         target += 4;
     }
-    for (number = quarter_points * 4; number < num_points; ++number) {
-        lv_32fc_t diff = src0[0] - *points++;
-        *target++ = lv_creal(diff) * lv_creal(diff) + lv_cimag(diff) * lv_cimag(diff);
-    }
+    number = quarter_points * 4;
+    volk_32fc_x2_square_dist_32f_generic(target, src0, points, num_points - number);
 }
 #endif /* LV_HAVE_NEON */
 
@@ -233,10 +231,8 @@ static inline void volk_32fc_x2_square_dist_32f_neonv8(float* target,
         target += 4;
     }
 
-    for (number = quarter_points * 4; number < num_points; ++number) {
-        lv_32fc_t diff = src0[0] - *points++;
-        *target++ = lv_creal(diff) * lv_creal(diff) + lv_cimag(diff) * lv_cimag(diff);
-    }
+    number = quarter_points * 4;
+    volk_32fc_x2_square_dist_32f_generic(target, src0, points, num_points - number);
 }
 #endif /* LV_HAVE_NEONV8 */
 

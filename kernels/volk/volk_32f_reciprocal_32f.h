@@ -152,9 +152,7 @@ volk_32f_reciprocal_32f_neonv8(float* out, const float* in, unsigned int num_poi
     }
 
     const unsigned int done = eighth_points * 8;
-    for (unsigned int i = done; i < num_points; i++) {
-        *out++ = 1.0f / *in++;
-    }
+    volk_32f_reciprocal_32f_generic(out, in, num_points - done);
 }
 #endif /* LV_HAVE_NEONV8 */
 

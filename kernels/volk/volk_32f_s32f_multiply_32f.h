@@ -96,9 +96,7 @@ static inline void volk_32f_s32f_multiply_32f_u_sse(float* cVector,
         cPtr += 4;
     }
 
-    for (unsigned int number = quarterPoints * 4; number < num_points; number++) {
-        *cPtr++ = (*aPtr++) * scalar;
-    }
+    volk_32f_s32f_multiply_32f_generic(cPtr, aPtr, scalar, num_points - quarterPoints * 4);
 }
 #endif /* LV_HAVE_SSE */
 
@@ -127,9 +125,7 @@ static inline void volk_32f_s32f_multiply_32f_u_avx(float* cVector,
         cPtr += 8;
     }
 
-    for (unsigned int number = eighthPoints * 8; number < num_points; number++) {
-        *cPtr++ = (*aPtr++) * scalar;
-    }
+    volk_32f_s32f_multiply_32f_generic(cPtr, aPtr, scalar, num_points - eighthPoints * 8);
 }
 #endif /* LV_HAVE_AVX */
 
@@ -154,9 +150,8 @@ static inline void volk_32f_s32f_multiply_32f_u_neon(float* cVector,
         outputPtr += 4;
     }
 
-    for (unsigned int number = quarterPoints * 4; number < num_points; number++) {
-        *outputPtr++ = (*inputPtr++) * scalar;
-    }
+    volk_32f_s32f_multiply_32f_generic(
+        outputPtr, inputPtr, scalar, num_points - quarterPoints * 4);
 }
 #endif /* LV_HAVE_NEON */
 
@@ -186,9 +181,7 @@ static inline void volk_32f_s32f_multiply_32f_neonv8(float* cVector,
         cPtr += 8;
     }
 
-    for (unsigned int number = eighthPoints * 8; number < num_points; number++) {
-        *cPtr++ = (*aPtr++) * scalar;
-    }
+    volk_32f_s32f_multiply_32f_generic(cPtr, aPtr, scalar, num_points - eighthPoints * 8);
 }
 #endif /* LV_HAVE_NEONV8 */
 
@@ -267,9 +260,7 @@ static inline void volk_32f_s32f_multiply_32f_a_sse(float* cVector,
         cPtr += 4;
     }
 
-    for (unsigned int number = quarterPoints * 4; number < num_points; number++) {
-        *cPtr++ = (*aPtr++) * scalar;
-    }
+    volk_32f_s32f_multiply_32f_generic(cPtr, aPtr, scalar, num_points - quarterPoints * 4);
 }
 #endif /* LV_HAVE_SSE */
 
@@ -298,9 +289,7 @@ static inline void volk_32f_s32f_multiply_32f_a_avx(float* cVector,
         cPtr += 8;
     }
 
-    for (unsigned int number = eighthPoints * 8; number < num_points; number++) {
-        *cPtr++ = (*aPtr++) * scalar;
-    }
+    volk_32f_s32f_multiply_32f_generic(cPtr, aPtr, scalar, num_points - eighthPoints * 8);
 }
 #endif /* LV_HAVE_AVX */
 

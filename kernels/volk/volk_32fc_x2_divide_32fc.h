@@ -170,12 +170,7 @@ static inline void volk_32fc_x2_divide_32fc_u_sse3(lv_32fc_t* cVector,
     }
 
     number *= 4;
-    for (; number < num_points; number++) {
-        *c = (*a) / (*b);
-        a++;
-        b++;
-        c++;
-    }
+    volk_32fc_x2_divide_32fc_generic(c, a, b, num_points - number);
 }
 #endif /* LV_HAVE_SSE3 */
 
@@ -225,10 +220,7 @@ static inline void volk_32fc_x2_divide_32fc_u_avx(lv_32fc_t* cVector,
     }
 
     number = quarterPoints * 4;
-
-    for (; number < num_points; number++) {
-        *c++ = (*a++) / (*b++);
-    }
+    volk_32fc_x2_divide_32fc_generic(c, a, b, num_points - number);
 }
 #endif /* LV_HAVE_AVX */
 
@@ -381,9 +373,8 @@ static inline void volk_32fc_x2_divide_32fc_neon(lv_32fc_t* cVector,
         cPtr += 4;
     }
 
-    for (number = quarterPoints * 4; number < num_points; number++) {
-        *cPtr++ = (*aPtr++) / (*bPtr++);
-    }
+    number = quarterPoints * 4;
+    volk_32fc_x2_divide_32fc_generic(cPtr, aPtr, bPtr, num_points - number);
 }
 #endif /* LV_HAVE_NEON */
 
@@ -433,9 +424,8 @@ static inline void volk_32fc_x2_divide_32fc_neonv8(lv_32fc_t* cVector,
         cPtr += 4;
     }
 
-    for (number = quarterPoints * 4; number < num_points; number++) {
-        *cPtr++ = (*aPtr++) / (*bPtr++);
-    }
+    number = quarterPoints * 4;
+    volk_32fc_x2_divide_32fc_generic(cPtr, aPtr, bPtr, num_points - number);
 }
 #endif /* LV_HAVE_NEONV8 */
 
@@ -563,12 +553,7 @@ static inline void volk_32fc_x2_divide_32fc_a_sse3(lv_32fc_t* cVector,
     }
 
     number *= 4;
-    for (; number < num_points; number++) {
-        *c = (*a) / (*b);
-        a++;
-        b++;
-        c++;
-    }
+    volk_32fc_x2_divide_32fc_generic(c, a, b, num_points - number);
 }
 #endif /* LV_HAVE_SSE3 */
 

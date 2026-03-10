@@ -180,10 +180,7 @@ static inline void volk_32fc_conjugate_32fc_neonv8(lv_32fc_t* cVector,
     }
 
     /* Scalar tail */
-    while (n > 0) {
-        *c++ = lv_conj(*a++);
-        n--;
-    }
+    volk_32fc_conjugate_32fc_generic(c, a, n);
 }
 
 #endif /* LV_HAVE_NEONV8 */
@@ -311,9 +308,8 @@ static inline void volk_32fc_conjugate_32fc_a_neon(lv_32fc_t* cVector,
         c += 4;
     }
 
-    for (number = quarterPoints * 4; number < num_points; number++) {
-        *c++ = lv_conj(*a++);
-    }
+    number = quarterPoints * 4;
+    volk_32fc_conjugate_32fc_generic(c, a, num_points - number);
 }
 #endif /* LV_HAVE_NEON */
 

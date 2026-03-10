@@ -139,14 +139,16 @@ static inline void volk_32fc_index_min_16u_u_avx2_variant_0(uint16_t* target,
     }
 
     // handle tail not processed by the vectorized loop
-    for (unsigned i = num_points & (~7u); i < num_points; ++i) {
-        const float abs_squared =
-            lv_creal(*source) * lv_creal(*source) + lv_cimag(*source) * lv_cimag(*source);
-        if (abs_squared < min) {
-            min = abs_squared;
-            index = i;
+    uint32_t processed = num_points & (~7u);
+    if (processed < num_points) {
+        uint16_t tailIdx = 0;
+        volk_32fc_index_min_16u_generic(&tailIdx, source, num_points - processed);
+        float tailVal = lv_creal(source[tailIdx]) * lv_creal(source[tailIdx]) +
+                        lv_cimag(source[tailIdx]) * lv_cimag(source[tailIdx]);
+        if (tailVal < min) {
+            min = tailVal;
+            index = processed + tailIdx;
         }
-        ++source;
     }
 
     *target = index;
@@ -199,14 +201,16 @@ static inline void volk_32fc_index_min_16u_u_avx2_variant_1(uint16_t* target,
     }
 
     // handle tail not processed by the vectorized loop
-    for (unsigned i = num_points & (~7u); i < num_points; ++i) {
-        const float abs_squared =
-            lv_creal(*source) * lv_creal(*source) + lv_cimag(*source) * lv_cimag(*source);
-        if (abs_squared < min) {
-            min = abs_squared;
-            index = i;
+    uint32_t processed = num_points & (~7u);
+    if (processed < num_points) {
+        uint16_t tailIdx = 0;
+        volk_32fc_index_min_16u_generic(&tailIdx, source, num_points - processed);
+        float tailVal = lv_creal(source[tailIdx]) * lv_creal(source[tailIdx]) +
+                        lv_cimag(source[tailIdx]) * lv_cimag(source[tailIdx]);
+        if (tailVal < min) {
+            min = tailVal;
+            index = processed + tailIdx;
         }
-        ++source;
     }
 
     *target = index;
@@ -284,15 +288,16 @@ static inline void volk_32fc_index_min_16u_u_avx512f(uint16_t* target,
     }
 
     // Handle tail
-    for (uint32_t number = sixteenthPoints * 16; number < num_points; number++) {
-        const float re = lv_creal(*src0Ptr);
-        const float im = lv_cimag(*src0Ptr);
-        const float sq_dist = re * re + im * im;
-        if (sq_dist < min) {
-            min = sq_dist;
-            index = number;
+    uint32_t processed = sixteenthPoints * 16;
+    if (processed < num_points) {
+        uint16_t tailIdx = 0;
+        volk_32fc_index_min_16u_generic(&tailIdx, src0Ptr, num_points - processed);
+        float tailVal = lv_creal(src0Ptr[tailIdx]) * lv_creal(src0Ptr[tailIdx]) +
+                        lv_cimag(src0Ptr[tailIdx]) * lv_cimag(src0Ptr[tailIdx]);
+        if (tailVal < min) {
+            min = tailVal;
+            index = processed + tailIdx;
         }
-        src0Ptr++;
     }
     *target = (uint16_t)index;
 }
@@ -361,13 +366,17 @@ static inline void volk_32fc_index_min_16u_neon(uint16_t* target,
     }
 
     // Handle tail
-    for (uint32_t i = quarter_points * 4; i < num_points; i++) {
-        float re = lv_creal(source[i]);
-        float im = lv_cimag(source[i]);
-        float mag2 = re * re + im * im;
-        if (mag2 < min_val) {
-            min_val = mag2;
-            result_idx = i;
+    uint32_t processed = quarter_points * 4;
+    if (processed < num_points) {
+        uint16_t tailIdx = 0;
+        volk_32fc_index_min_16u_generic(
+            &tailIdx, source + processed, num_points - processed);
+        float tailVal =
+            lv_creal(source[processed + tailIdx]) * lv_creal(source[processed + tailIdx]) +
+            lv_cimag(source[processed + tailIdx]) * lv_cimag(source[processed + tailIdx]);
+        if (tailVal < min_val) {
+            min_val = tailVal;
+            result_idx = processed + tailIdx;
         }
     }
 
@@ -427,13 +436,17 @@ static inline void volk_32fc_index_min_16u_neonv8(uint16_t* target,
     uint32_t result_idx = vminvq_u32(idx_masked);
 
     // Handle tail
-    for (uint32_t i = quarter_points * 4; i < num_points; i++) {
-        float re = lv_creal(source[i]);
-        float im = lv_cimag(source[i]);
-        float mag2 = re * re + im * im;
-        if (mag2 < min_val) {
-            min_val = mag2;
-            result_idx = i;
+    uint32_t processed = quarter_points * 4;
+    if (processed < num_points) {
+        uint16_t tailIdx = 0;
+        volk_32fc_index_min_16u_generic(
+            &tailIdx, source + processed, num_points - processed);
+        float tailVal =
+            lv_creal(source[processed + tailIdx]) * lv_creal(source[processed + tailIdx]) +
+            lv_cimag(source[processed + tailIdx]) * lv_cimag(source[processed + tailIdx]);
+        if (tailVal < min_val) {
+            min_val = tailVal;
+            result_idx = processed + tailIdx;
         }
     }
 
@@ -698,14 +711,16 @@ static inline void volk_32fc_index_min_16u_a_avx2_variant_0(uint16_t* target,
     }
 
     // handle tail not processed by the vectorized loop
-    for (unsigned i = num_points & (~7u); i < num_points; ++i) {
-        const float abs_squared =
-            lv_creal(*source) * lv_creal(*source) + lv_cimag(*source) * lv_cimag(*source);
-        if (abs_squared < min) {
-            min = abs_squared;
-            index = i;
+    uint32_t processed = num_points & (~7u);
+    if (processed < num_points) {
+        uint16_t tailIdx = 0;
+        volk_32fc_index_min_16u_generic(&tailIdx, source, num_points - processed);
+        float tailVal = lv_creal(source[tailIdx]) * lv_creal(source[tailIdx]) +
+                        lv_cimag(source[tailIdx]) * lv_cimag(source[tailIdx]);
+        if (tailVal < min) {
+            min = tailVal;
+            index = processed + tailIdx;
         }
-        ++source;
     }
 
     *target = index;
@@ -758,14 +773,16 @@ static inline void volk_32fc_index_min_16u_a_avx2_variant_1(uint16_t* target,
     }
 
     // handle tail not processed by the vectorized loop
-    for (unsigned i = num_points & (~7u); i < num_points; ++i) {
-        const float abs_squared =
-            lv_creal(*source) * lv_creal(*source) + lv_cimag(*source) * lv_cimag(*source);
-        if (abs_squared < min) {
-            min = abs_squared;
-            index = i;
+    uint32_t processed = num_points & (~7u);
+    if (processed < num_points) {
+        uint16_t tailIdx = 0;
+        volk_32fc_index_min_16u_generic(&tailIdx, source, num_points - processed);
+        float tailVal = lv_creal(source[tailIdx]) * lv_creal(source[tailIdx]) +
+                        lv_cimag(source[tailIdx]) * lv_cimag(source[tailIdx]);
+        if (tailVal < min) {
+            min = tailVal;
+            index = processed + tailIdx;
         }
-        ++source;
     }
 
     *target = index;
@@ -843,15 +860,16 @@ static inline void volk_32fc_index_min_16u_a_avx512f(uint16_t* target,
     }
 
     // Handle tail
-    for (uint32_t number = sixteenthPoints * 16; number < num_points; number++) {
-        const float re = lv_creal(*src0Ptr);
-        const float im = lv_cimag(*src0Ptr);
-        const float sq_dist = re * re + im * im;
-        if (sq_dist < min) {
-            min = sq_dist;
-            index = number;
+    uint32_t processed = sixteenthPoints * 16;
+    if (processed < num_points) {
+        uint16_t tailIdx = 0;
+        volk_32fc_index_min_16u_generic(&tailIdx, src0Ptr, num_points - processed);
+        float tailVal = lv_creal(src0Ptr[tailIdx]) * lv_creal(src0Ptr[tailIdx]) +
+                        lv_cimag(src0Ptr[tailIdx]) * lv_cimag(src0Ptr[tailIdx]);
+        if (tailVal < min) {
+            min = tailVal;
+            index = processed + tailIdx;
         }
-        src0Ptr++;
     }
     *target = (uint16_t)index;
 }

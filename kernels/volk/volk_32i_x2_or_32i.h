@@ -121,9 +121,7 @@ static inline void volk_32i_x2_or_32i_u_avx2(int32_t* cVector,
     }
 
     number = oneEightPoints * 8;
-    for (; number < num_points; number++) {
-        cVector[number] = aVector[number] | bVector[number];
-    }
+    volk_32i_x2_or_32i_generic(cPtr, aPtr, bPtr, num_points - number);
 }
 #endif /* LV_HAVE_AVX2 */
 
@@ -158,9 +156,7 @@ static inline void volk_32i_x2_or_32i_u_avx512f(int32_t* cVector,
     }
 
     number = sixteenthPoints * 16;
-    for (; number < num_points; number++) {
-        cVector[number] = aVector[number] | bVector[number];
-    }
+    volk_32i_x2_or_32i_generic(cPtr, aPtr, bPtr, num_points - number);
 }
 #endif /* LV_HAVE_AVX512F */
 
@@ -190,9 +186,8 @@ static inline void volk_32i_x2_or_32i_neon(int32_t* cVector,
         cPtr += 4;
     }
 
-    for (number = quarter_points * 4; number < num_points; number++) {
-        *cPtr++ = (*aPtr++) | (*bPtr++);
-    }
+    number = quarter_points * 4;
+    volk_32i_x2_or_32i_generic(cPtr, aPtr, bPtr, num_points - number);
 }
 #endif /* LV_HAVE_NEON */
 
@@ -226,9 +221,7 @@ static inline void volk_32i_x2_or_32i_neonv8(int32_t* cVector,
         cPtr += 8;
     }
 
-    for (unsigned int number = eighthPoints * 8; number < num_points; number++) {
-        *cPtr++ = (*aPtr++) | (*bPtr++);
-    }
+    volk_32i_x2_or_32i_generic(cPtr, aPtr, bPtr, num_points - eighthPoints * 8);
 }
 #endif /* LV_HAVE_NEONV8 */
 
@@ -304,9 +297,8 @@ static inline void volk_32i_x2_or_32i_a_sse(int32_t* cVector,
     }
 
     number = quarterPoints * 4;
-    for (; number < num_points; number++) {
-        cVector[number] = aVector[number] | bVector[number];
-    }
+    volk_32i_x2_or_32i_generic(
+        cVector + number, aVector + number, bVector + number, num_points - number);
 }
 #endif /* LV_HAVE_SSE */
 
@@ -342,9 +334,7 @@ static inline void volk_32i_x2_or_32i_a_avx2(int32_t* cVector,
     }
 
     number = oneEightPoints * 8;
-    for (; number < num_points; number++) {
-        cVector[number] = aVector[number] | bVector[number];
-    }
+    volk_32i_x2_or_32i_generic(cPtr, aPtr, bPtr, num_points - number);
 }
 #endif /* LV_HAVE_AVX2 */
 
@@ -379,9 +369,7 @@ static inline void volk_32i_x2_or_32i_a_avx512f(int32_t* cVector,
     }
 
     number = sixteenthPoints * 16;
-    for (; number < num_points; number++) {
-        cVector[number] = aVector[number] | bVector[number];
-    }
+    volk_32i_x2_or_32i_generic(cPtr, aPtr, bPtr, num_points - number);
 }
 #endif /* LV_HAVE_AVX512F */
 

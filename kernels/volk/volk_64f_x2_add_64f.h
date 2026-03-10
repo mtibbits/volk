@@ -112,9 +112,7 @@ static inline void volk_64f_x2_add_64f_u_sse2(double* cVector,
     }
 
     number = half_points * 2;
-    for (; number < num_points; number++) {
-        *cPtr++ = (*aPtr++) + (*bPtr++);
-    }
+    volk_64f_x2_add_64f_generic(cPtr, aPtr, bPtr, num_points - number);
 }
 
 #endif /* LV_HAVE_SSE2 */
@@ -152,9 +150,7 @@ static inline void volk_64f_x2_add_64f_u_avx(double* cVector,
     }
 
     number = quarter_points * 4;
-    for (; number < num_points; number++) {
-        *cPtr++ = (*aPtr++) + (*bPtr++);
-    }
+    volk_64f_x2_add_64f_generic(cPtr, aPtr, bPtr, num_points - number);
 }
 
 #endif /* LV_HAVE_AVX */
@@ -195,9 +191,7 @@ static inline void volk_64f_x2_add_64f_neonv8(double* cVector,
     }
 
     number = quarter_points * 4;
-    for (; number < num_points; number++) {
-        *cPtr++ = (*aPtr++) + (*bPtr++);
-    }
+    volk_64f_x2_add_64f_generic(cPtr, aPtr, bPtr, num_points - number);
 }
 
 #endif /* LV_HAVE_NEONV8 */
@@ -258,9 +252,7 @@ static inline void volk_64f_x2_add_64f_a_sse2(double* cVector,
     }
 
     number = half_points * 2;
-    for (; number < num_points; number++) {
-        *cPtr++ = (*aPtr++) + (*bPtr++);
-    }
+    volk_64f_x2_add_64f_generic(cPtr, aPtr, bPtr, num_points - number);
 }
 
 #endif /* LV_HAVE_SSE2 */
@@ -298,9 +290,7 @@ static inline void volk_64f_x2_add_64f_a_avx(double* cVector,
     }
 
     number = quarter_points * 4;
-    for (; number < num_points; number++) {
-        *cPtr++ = (*aPtr++) + (*bPtr++);
-    }
+    volk_64f_x2_add_64f_generic(cPtr, aPtr, bPtr, num_points - number);
 }
 
 #endif /* LV_HAVE_AVX */

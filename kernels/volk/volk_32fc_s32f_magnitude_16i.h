@@ -180,12 +180,8 @@ static inline void volk_32fc_s32f_magnitude_16i_neon(int16_t* magnitudeVector,
     }
 
     number = quarter_points * 4;
-    for (; number < num_points; number++) {
-        float real = *complexVectorPtr++;
-        float imag = *complexVectorPtr++;
-        *magnitudeVectorPtr++ =
-            (int16_t)rintf(scalar * sqrtf((real * real) + (imag * imag)));
-    }
+    volk_32fc_s32f_magnitude_16i_generic(
+        magnitudeVector + number, complexVector + number, scalar, num_points - number);
 }
 #endif /* LV_HAVE_NEON */
 
@@ -233,12 +229,8 @@ static inline void volk_32fc_s32f_magnitude_16i_neonv8(int16_t* magnitudeVector,
     }
 
     number = eighth_points * 8;
-    for (; number < num_points; number++) {
-        float real = *complexVectorPtr++;
-        float imag = *complexVectorPtr++;
-        *magnitudeVectorPtr++ =
-            (int16_t)rintf(scalar * sqrtf((real * real) + (imag * imag)));
-    }
+    volk_32fc_s32f_magnitude_16i_generic(
+        magnitudeVector + number, complexVector + number, scalar, num_points - number);
 }
 #endif /* LV_HAVE_NEONV8 */
 

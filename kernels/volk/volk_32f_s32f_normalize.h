@@ -132,9 +132,7 @@ static inline void volk_32f_s32f_normalize_neon(float* vecBuffer,
     }
 
     number = quarter_points * 4;
-    for (; number < num_points; number++) {
-        *inputPtr++ *= invScalar;
-    }
+    volk_32f_s32f_normalize_generic(inputPtr, scalar, num_points - number);
 }
 #endif /* LV_HAVE_NEON */
 
@@ -165,9 +163,7 @@ static inline void volk_32f_s32f_normalize_neonv8(float* vecBuffer,
     }
 
     number = eighth_points * 8;
-    for (; number < num_points; number++) {
-        *inputPtr++ *= invScalar;
-    }
+    volk_32f_s32f_normalize_generic(inputPtr, scalar, num_points - number);
 }
 #endif /* LV_HAVE_NEONV8 */
 

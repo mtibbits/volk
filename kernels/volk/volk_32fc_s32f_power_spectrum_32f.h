@@ -131,15 +131,9 @@ volk_32fc_s32f_power_spectrum_32f_neon(float* logPowerOutput,
     }
 
     // deal with the rest
-    for (number = quarter_points * 4; number < num_points; number++) {
-        const float real = lv_creal(*complexFFTInputPtr) * iNormalizationFactor;
-        const float imag = lv_cimag(*complexFFTInputPtr) * iNormalizationFactor;
-
-        *logPowerOutputPtr =
-            VOLK_LOG2TO10FACTOR * volk_log2f_non_ieee(((real * real) + (imag * imag)));
-        complexFFTInputPtr++;
-        logPowerOutputPtr++;
-    }
+    number = quarter_points * 4;
+    volk_32fc_s32f_power_spectrum_32f_generic(
+        logPowerOutputPtr, complexFFTInputPtr, normalizationFactor, num_points - number);
 }
 
 #endif /* LV_HAVE_NEON */

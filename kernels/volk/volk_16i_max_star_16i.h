@@ -128,10 +128,10 @@ volk_16i_max_star_16i_a_ssse3(short* target, short* src0, unsigned int num_point
         candidate = ((short)(candidate - cands[i]) > 0) ? candidate : cands[i];
     }
 
-    for (i = 0; i < leftovers; ++i) {
-        candidate = ((short)(candidate - src0[(bound << 3) + i]) > 0)
-                        ? candidate
-                        : src0[(bound << 3) + i];
+    if (leftovers > 0) {
+        short tailResult;
+        volk_16i_max_star_16i_generic(&tailResult, src0 + (bound << 3), leftovers);
+        candidate = ((short)(candidate - tailResult) > 0) ? candidate : tailResult;
     }
 
     target[0] = candidate;

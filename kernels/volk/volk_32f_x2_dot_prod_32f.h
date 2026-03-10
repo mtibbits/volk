@@ -151,8 +151,10 @@ static inline void volk_32f_x2_dot_prod_32f_u_sse(float* result,
     dotProduct += dotProductVector[3];
 
     number = sixteenthPoints * 16;
-    for (; number < num_points; number++) {
-        dotProduct += ((*aPtr++) * (*bPtr++));
+    if (number < num_points) {
+        float tailResult = 0.0f;
+        volk_32f_x2_dot_prod_32f_generic(&tailResult, aPtr, bPtr, num_points - number);
+        dotProduct += tailResult;
     }
 
     *result = dotProduct;
@@ -224,8 +226,10 @@ static inline void volk_32f_x2_dot_prod_32f_u_sse3(float* result,
     dotProduct += dotProductVector[3];
 
     number = sixteenthPoints * 16;
-    for (; number < num_points; number++) {
-        dotProduct += ((*aPtr++) * (*bPtr++));
+    if (number < num_points) {
+        float tailResult = 0.0f;
+        volk_32f_x2_dot_prod_32f_generic(&tailResult, aPtr, bPtr, num_points - number);
+        dotProduct += tailResult;
     }
 
     *result = dotProduct;
@@ -298,8 +302,10 @@ static inline void volk_32f_x2_dot_prod_32f_u_sse4_1(float* result,
     dotProduct += dotProductVector[3];
 
     number = sixteenthPoints * 16;
-    for (; number < num_points; number++) {
-        dotProduct += ((*aPtr++) * (*bPtr++));
+    if (number < num_points) {
+        float tailResult = 0.0f;
+        volk_32f_x2_dot_prod_32f_generic(&tailResult, aPtr, bPtr, num_points - number);
+        dotProduct += tailResult;
     }
 
     *result = dotProduct;
@@ -365,8 +371,10 @@ static inline void volk_32f_x2_dot_prod_32f_u_avx(float* result,
     dotProduct += dotProductVector[7];
 
     number = sixteenthPoints * 16;
-    for (; number < num_points; number++) {
-        dotProduct += ((*aPtr++) * (*bPtr++));
+    if (number < num_points) {
+        float tailResult = 0.0f;
+        volk_32f_x2_dot_prod_32f_generic(&tailResult, aPtr, bPtr, num_points - number);
+        dotProduct += tailResult;
     }
 
     *result = dotProduct;
@@ -408,8 +416,11 @@ static inline void volk_32f_x2_dot_prod_32f_u_avx2_fma(float* result,
                        dotProductVector[3] + dotProductVector[4] + dotProductVector[5] +
                        dotProductVector[6] + dotProductVector[7];
 
-    for (number = eighthPoints * 8; number < num_points; number++) {
-        dotProduct += ((*aPtr++) * (*bPtr++));
+    number = eighthPoints * 8;
+    if (number < num_points) {
+        float tailResult = 0.0f;
+        volk_32f_x2_dot_prod_32f_generic(&tailResult, aPtr, bPtr, num_points - number);
+        dotProduct += tailResult;
     }
 
     *result = dotProduct;
@@ -453,8 +464,11 @@ static inline void volk_32f_x2_dot_prod_32f_u_avx512f(float* result,
                        dotProductVector[12] + dotProductVector[13] +
                        dotProductVector[14] + dotProductVector[15];
 
-    for (number = sixteenthPoints * 16; number < num_points; number++) {
-        dotProduct += ((*aPtr++) * (*bPtr++));
+    number = sixteenthPoints * 16;
+    if (number < num_points) {
+        float tailResult = 0.0f;
+        volk_32f_x2_dot_prod_32f_generic(&tailResult, aPtr, bPtr, num_points - number);
+        dotProduct += tailResult;
     }
 
     *result = dotProduct;
@@ -510,8 +524,11 @@ static inline void volk_32f_x2_dot_prod_32f_neon(float* result,
     float dotProduct = vget_lane_f32(sum, 0);
 
     // Handle remainder
-    for (unsigned int number = sixteenthPoints * 16; number < num_points; number++) {
-        dotProduct += (*aPtr++) * (*bPtr++);
+    unsigned int number = sixteenthPoints * 16;
+    if (number < num_points) {
+        float tailResult = 0.0f;
+        volk_32f_x2_dot_prod_32f_generic(&tailResult, aPtr, bPtr, num_points - number);
+        dotProduct += tailResult;
     }
 
     *result = dotProduct;
@@ -569,8 +586,11 @@ static inline void volk_32f_x2_dot_prod_32f_neonv8(float* result,
     float dotProduct = vaddvq_f32(acc0);
 
     /* Handle remainder */
-    for (unsigned int number = sixteenthPoints * 16; number < num_points; number++) {
-        dotProduct += (*aPtr++) * (*bPtr++);
+    unsigned int number = sixteenthPoints * 16;
+    if (number < num_points) {
+        float tailResult = 0.0f;
+        volk_32f_x2_dot_prod_32f_generic(&tailResult, aPtr, bPtr, num_points - number);
+        dotProduct += tailResult;
     }
 
     *result = dotProduct;
@@ -675,8 +695,10 @@ static inline void volk_32f_x2_dot_prod_32f_a_sse(float* result,
     dotProduct += dotProductVector[3];
 
     number = sixteenthPoints * 16;
-    for (; number < num_points; number++) {
-        dotProduct += ((*aPtr++) * (*bPtr++));
+    if (number < num_points) {
+        float tailResult = 0.0f;
+        volk_32f_x2_dot_prod_32f_generic(&tailResult, aPtr, bPtr, num_points - number);
+        dotProduct += tailResult;
     }
 
     *result = dotProduct;
@@ -748,8 +770,10 @@ static inline void volk_32f_x2_dot_prod_32f_a_sse3(float* result,
     dotProduct += dotProductVector[3];
 
     number = sixteenthPoints * 16;
-    for (; number < num_points; number++) {
-        dotProduct += ((*aPtr++) * (*bPtr++));
+    if (number < num_points) {
+        float tailResult = 0.0f;
+        volk_32f_x2_dot_prod_32f_generic(&tailResult, aPtr, bPtr, num_points - number);
+        dotProduct += tailResult;
     }
 
     *result = dotProduct;
@@ -822,8 +846,10 @@ static inline void volk_32f_x2_dot_prod_32f_a_sse4_1(float* result,
     dotProduct += dotProductVector[3];
 
     number = sixteenthPoints * 16;
-    for (; number < num_points; number++) {
-        dotProduct += ((*aPtr++) * (*bPtr++));
+    if (number < num_points) {
+        float tailResult = 0.0f;
+        volk_32f_x2_dot_prod_32f_generic(&tailResult, aPtr, bPtr, num_points - number);
+        dotProduct += tailResult;
     }
 
     *result = dotProduct;
@@ -889,8 +915,10 @@ static inline void volk_32f_x2_dot_prod_32f_a_avx(float* result,
     dotProduct += dotProductVector[7];
 
     number = sixteenthPoints * 16;
-    for (; number < num_points; number++) {
-        dotProduct += ((*aPtr++) * (*bPtr++));
+    if (number < num_points) {
+        float tailResult = 0.0f;
+        volk_32f_x2_dot_prod_32f_generic(&tailResult, aPtr, bPtr, num_points - number);
+        dotProduct += tailResult;
     }
 
     *result = dotProduct;
@@ -932,8 +960,11 @@ static inline void volk_32f_x2_dot_prod_32f_a_avx2_fma(float* result,
                        dotProductVector[3] + dotProductVector[4] + dotProductVector[5] +
                        dotProductVector[6] + dotProductVector[7];
 
-    for (number = eighthPoints * 8; number < num_points; number++) {
-        dotProduct += ((*aPtr++) * (*bPtr++));
+    number = eighthPoints * 8;
+    if (number < num_points) {
+        float tailResult = 0.0f;
+        volk_32f_x2_dot_prod_32f_generic(&tailResult, aPtr, bPtr, num_points - number);
+        dotProduct += tailResult;
     }
 
     *result = dotProduct;
@@ -977,8 +1008,11 @@ static inline void volk_32f_x2_dot_prod_32f_a_avx512f(float* result,
                        dotProductVector[12] + dotProductVector[13] +
                        dotProductVector[14] + dotProductVector[15];
 
-    for (number = sixteenthPoints * 16; number < num_points; number++) {
-        dotProduct += ((*aPtr++) * (*bPtr++));
+    number = sixteenthPoints * 16;
+    if (number < num_points) {
+        float tailResult = 0.0f;
+        volk_32f_x2_dot_prod_32f_generic(&tailResult, aPtr, bPtr, num_points - number);
+        dotProduct += tailResult;
     }
 
     *result = dotProduct;

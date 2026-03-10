@@ -518,7 +518,7 @@ static inline void volk_32fc_s32f_atan2_32f_neon(float* outputVector,
     }
 
     unsigned int number = quarter_points * 4;
-    volk_32fc_s32f_atan2_32f_polynomial(
+    volk_32fc_s32f_atan2_32f_generic(
         out, complexVector + number, normalizeFactor, num_points - number);
 }
 #endif /* LV_HAVE_NEON */
@@ -679,7 +679,7 @@ static inline void volk_32fc_s32f_atan2_32f_neonv8(float* outputVector,
     }
 
     unsigned int number = eighth_points * 8;
-    volk_32fc_s32f_atan2_32f_polynomial(
+    volk_32fc_s32f_atan2_32f_generic(
         out, complexVector + number, normalizeFactor, num_points - number);
 }
 #endif /* LV_HAVE_NEONV8 */

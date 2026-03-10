@@ -101,8 +101,10 @@ static inline void volk_32f_accumulator_s32f_u_sse(float* result,
     returnValue += tempBuffer[3];
 
     number = quarterPoints * 4;
-    for (; number < num_points; number++) {
-        returnValue += (*aPtr++);
+    if (number < num_points) {
+        float tailResult = 0.0f;
+        volk_32f_accumulator_s32f_generic(&tailResult, aPtr, num_points - number);
+        returnValue += tailResult;
     }
     *result = returnValue;
 }
@@ -144,8 +146,10 @@ static inline void volk_32f_accumulator_s32f_u_avx(float* result,
     returnValue += tempBuffer[7];
 
     number = eighthPoints * 8;
-    for (; number < num_points; number++) {
-        returnValue += (*aPtr++);
+    if (number < num_points) {
+        float tailResult = 0.0f;
+        volk_32f_accumulator_s32f_generic(&tailResult, aPtr, num_points - number);
+        returnValue += tailResult;
     }
     *result = returnValue;
 }
@@ -178,8 +182,10 @@ static inline void volk_32f_accumulator_s32f_u_avx512f(float* result,
     returnValue = _mm512_reduce_add_ps(accumulator);
 
     number = sixteenthPoints * 16;
-    for (; number < num_points; number++) {
-        returnValue += (*aPtr++);
+    if (number < num_points) {
+        float tailResult = 0.0f;
+        volk_32f_accumulator_s32f_generic(&tailResult, aPtr, num_points - number);
+        returnValue += tailResult;
     }
     *result = returnValue;
 }
@@ -214,8 +220,10 @@ static inline void volk_32f_accumulator_s32f_neon(float* result,
     returnValue = vget_lane_f32(sum_pair, 0);
 
     number = quarterPoints * 4;
-    for (; number < num_points; number++) {
-        returnValue += (*aPtr++);
+    if (number < num_points) {
+        float tailResult = 0.0f;
+        volk_32f_accumulator_s32f_generic(&tailResult, aPtr, num_points - number);
+        returnValue += tailResult;
     }
     *result = returnValue;
 }
@@ -254,8 +262,10 @@ static inline void volk_32f_accumulator_s32f_neonv8(float* result,
     returnValue = vaddvq_f32(accumulator0);
 
     number = eighthPoints * 8;
-    for (; number < num_points; number++) {
-        returnValue += (*aPtr++);
+    if (number < num_points) {
+        float tailResult = 0.0f;
+        volk_32f_accumulator_s32f_generic(&tailResult, aPtr, num_points - number);
+        returnValue += tailResult;
     }
     *result = returnValue;
 }
@@ -320,8 +330,10 @@ static inline void volk_32f_accumulator_s32f_a_sse(float* result,
     returnValue += tempBuffer[3];
 
     number = quarterPoints * 4;
-    for (; number < num_points; number++) {
-        returnValue += (*aPtr++);
+    if (number < num_points) {
+        float tailResult = 0.0f;
+        volk_32f_accumulator_s32f_generic(&tailResult, aPtr, num_points - number);
+        returnValue += tailResult;
     }
     *result = returnValue;
 }
@@ -363,8 +375,10 @@ static inline void volk_32f_accumulator_s32f_a_avx(float* result,
     returnValue += tempBuffer[7];
 
     number = eighthPoints * 8;
-    for (; number < num_points; number++) {
-        returnValue += (*aPtr++);
+    if (number < num_points) {
+        float tailResult = 0.0f;
+        volk_32f_accumulator_s32f_generic(&tailResult, aPtr, num_points - number);
+        returnValue += tailResult;
     }
     *result = returnValue;
 }
@@ -397,8 +411,10 @@ static inline void volk_32f_accumulator_s32f_a_avx512f(float* result,
     returnValue = _mm512_reduce_add_ps(accumulator);
 
     number = sixteenthPoints * 16;
-    for (; number < num_points; number++) {
-        returnValue += (*aPtr++);
+    if (number < num_points) {
+        float tailResult = 0.0f;
+        volk_32f_accumulator_s32f_generic(&tailResult, aPtr, num_points - number);
+        returnValue += tailResult;
     }
     *result = returnValue;
 }

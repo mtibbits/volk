@@ -139,10 +139,13 @@ volk_32f_index_max_16u_u_avx(uint16_t* target, const float* src0, uint32_t num_p
     }
 
     number = eighthPoints * 8;
-    for (; number < num_points; number++) {
-        if (src0[number] > max) {
-            index = number;
-            max = src0[number];
+    if (number < num_points) {
+        uint16_t tailIdx = 0;
+        volk_32f_index_max_16u_generic(&tailIdx, src0 + number, num_points - number);
+        float tailVal = src0[number + tailIdx];
+        if (tailVal > max) {
+            max = tailVal;
+            index = number + tailIdx;
         }
     }
     target[0] = (uint16_t)index;
@@ -203,10 +206,13 @@ volk_32f_index_max_16u_u_avx512f(uint16_t* target, const float* src0, uint32_t n
     }
 
     number = sixteenthPoints * 16;
-    for (; number < num_points; number++) {
-        if (src0[number] > max) {
-            index = number;
-            max = src0[number];
+    if (number < num_points) {
+        uint16_t tailIdx = 0;
+        volk_32f_index_max_16u_generic(&tailIdx, src0 + number, num_points - number);
+        float tailVal = src0[number + tailIdx];
+        if (tailVal > max) {
+            max = tailVal;
+            index = number + tailIdx;
         }
     }
     target[0] = (uint16_t)index;
@@ -269,10 +275,14 @@ volk_32f_index_max_16u_neon(uint16_t* target, const float* src0, uint32_t num_po
     }
 
     // Handle tail
-    for (uint32_t i = quarter_points * 4; i < num_points; i++) {
-        if (src0[i] > max_val) {
-            max_val = src0[i];
-            result_idx = i;
+    uint32_t processed = quarter_points * 4;
+    if (processed < num_points) {
+        uint16_t tailIdx = 0;
+        volk_32f_index_max_16u_generic(&tailIdx, src0 + processed, num_points - processed);
+        float tailVal = src0[processed + tailIdx];
+        if (tailVal > max_val) {
+            max_val = tailVal;
+            result_idx = processed + tailIdx;
         }
     }
 
@@ -326,10 +336,14 @@ volk_32f_index_max_16u_neonv8(uint16_t* target, const float* src0, uint32_t num_
     uint32_t result_idx = vminvq_u32(idx_masked);
 
     // Handle tail
-    for (uint32_t i = quarter_points * 4; i < num_points; i++) {
-        if (src0[i] > max_val) {
-            max_val = src0[i];
-            result_idx = i;
+    uint32_t processed = quarter_points * 4;
+    if (processed < num_points) {
+        uint16_t tailIdx = 0;
+        volk_32f_index_max_16u_generic(&tailIdx, src0 + processed, num_points - processed);
+        float tailVal = src0[processed + tailIdx];
+        if (tailVal > max_val) {
+            max_val = tailVal;
+            result_idx = processed + tailIdx;
         }
     }
 
@@ -439,10 +453,13 @@ volk_32f_index_max_16u_a_sse(uint16_t* target, const float* src0, uint32_t num_p
     }
 
     number = quarterPoints * 4;
-    for (; number < num_points; number++) {
-        if (src0[number] > max) {
-            index = number;
-            max = src0[number];
+    if (number < num_points) {
+        uint16_t tailIdx = 0;
+        volk_32f_index_max_16u_generic(&tailIdx, src0 + number, num_points - number);
+        float tailVal = src0[number + tailIdx];
+        if (tailVal > max) {
+            max = tailVal;
+            index = number + tailIdx;
         }
     }
     target[0] = (uint16_t)index;
@@ -503,10 +520,13 @@ volk_32f_index_max_16u_a_sse4_1(uint16_t* target, const float* src0, uint32_t nu
     }
 
     number = quarterPoints * 4;
-    for (; number < num_points; number++) {
-        if (src0[number] > max) {
-            index = number;
-            max = src0[number];
+    if (number < num_points) {
+        uint16_t tailIdx = 0;
+        volk_32f_index_max_16u_generic(&tailIdx, src0 + number, num_points - number);
+        float tailVal = src0[number + tailIdx];
+        if (tailVal > max) {
+            max = tailVal;
+            index = number + tailIdx;
         }
     }
     target[0] = (uint16_t)index;
@@ -567,10 +587,13 @@ volk_32f_index_max_16u_a_avx(uint16_t* target, const float* src0, uint32_t num_p
     }
 
     number = eighthPoints * 8;
-    for (; number < num_points; number++) {
-        if (src0[number] > max) {
-            index = number;
-            max = src0[number];
+    if (number < num_points) {
+        uint16_t tailIdx = 0;
+        volk_32f_index_max_16u_generic(&tailIdx, src0 + number, num_points - number);
+        float tailVal = src0[number + tailIdx];
+        if (tailVal > max) {
+            max = tailVal;
+            index = number + tailIdx;
         }
     }
     target[0] = (uint16_t)index;
@@ -631,10 +654,13 @@ volk_32f_index_max_16u_a_avx512f(uint16_t* target, const float* src0, uint32_t n
     }
 
     number = sixteenthPoints * 16;
-    for (; number < num_points; number++) {
-        if (src0[number] > max) {
-            index = number;
-            max = src0[number];
+    if (number < num_points) {
+        uint16_t tailIdx = 0;
+        volk_32f_index_max_16u_generic(&tailIdx, src0 + number, num_points - number);
+        float tailVal = src0[number + tailIdx];
+        if (tailVal > max) {
+            max = tailVal;
+            index = number + tailIdx;
         }
     }
     target[0] = (uint16_t)index;

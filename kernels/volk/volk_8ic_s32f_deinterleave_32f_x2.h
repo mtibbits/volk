@@ -163,10 +163,8 @@ static inline void volk_8ic_s32f_deinterleave_32f_x2_u_avx2(float* iBuffer,
     }
 
     number = sixteenthPoints * 16;
-    for (; number < num_points; number++) {
-        *iBufferPtr++ = (float)(*complexVectorPtr++) * iScalar;
-        *qBufferPtr++ = (float)(*complexVectorPtr++) * iScalar;
-    }
+    volk_8ic_s32f_deinterleave_32f_x2_generic(
+        iBufferPtr, qBufferPtr, (const lv_8sc_t*)complexVectorPtr, scalar, num_points - number);
 }
 #endif /* LV_HAVE_AVX2 */
 
@@ -220,10 +218,8 @@ static inline void volk_8ic_s32f_deinterleave_32f_x2_neon(float* iBuffer,
     }
 
     number = eighth_points * 8;
-    for (; number < num_points; number++) {
-        *iBufferPtr++ = (float)(*complexVectorPtr++) * invScalar;
-        *qBufferPtr++ = (float)(*complexVectorPtr++) * invScalar;
-    }
+    volk_8ic_s32f_deinterleave_32f_x2_generic(
+        iBufferPtr, qBufferPtr, (const lv_8sc_t*)complexVectorPtr, scalar, num_points - number);
 }
 #endif /* LV_HAVE_NEON */
 
@@ -314,11 +310,8 @@ static inline void volk_8ic_s32f_deinterleave_32f_x2_a_sse(float* iBuffer,
     }
 
     number = quarterPoints * 4;
-    complexVectorPtr = (const int8_t*)&complexVector[number];
-    for (; number < num_points; number++) {
-        *iBufferPtr++ = (float)(*complexVectorPtr++) / scalar;
-        *qBufferPtr++ = (float)(*complexVectorPtr++) / scalar;
-    }
+    volk_8ic_s32f_deinterleave_32f_x2_generic(
+        iBufferPtr, qBufferPtr, complexVector + number, scalar, num_points - number);
 }
 #endif /* LV_HAVE_SSE */
 
@@ -387,10 +380,8 @@ volk_8ic_s32f_deinterleave_32f_x2_a_sse4_1(float* iBuffer,
     }
 
     number = eighthPoints * 8;
-    for (; number < num_points; number++) {
-        *iBufferPtr++ = (float)(*complexVectorPtr++) * iScalar;
-        *qBufferPtr++ = (float)(*complexVectorPtr++) * iScalar;
-    }
+    volk_8ic_s32f_deinterleave_32f_x2_generic(
+        iBufferPtr, qBufferPtr, (const lv_8sc_t*)complexVectorPtr, scalar, num_points - number);
 }
 #endif /* LV_HAVE_SSE4_1 */
 
@@ -515,10 +506,8 @@ static inline void volk_8ic_s32f_deinterleave_32f_x2_a_avx2(float* iBuffer,
     }
 
     number = sixteenthPoints * 16;
-    for (; number < num_points; number++) {
-        *iBufferPtr++ = (float)(*complexVectorPtr++) * iScalar;
-        *qBufferPtr++ = (float)(*complexVectorPtr++) * iScalar;
-    }
+    volk_8ic_s32f_deinterleave_32f_x2_generic(
+        iBufferPtr, qBufferPtr, (const lv_8sc_t*)complexVectorPtr, scalar, num_points - number);
 }
 #endif /* LV_HAVE_AVX2 */
 

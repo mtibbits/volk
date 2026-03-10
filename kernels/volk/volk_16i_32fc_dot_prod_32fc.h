@@ -158,10 +158,11 @@ static inline void volk_16i_32fc_dot_prod_32fc_u_sse(lv_32fc_t* result,
     returnValue += lv_cmake(dotProductVector[2], dotProductVector[3]);
 
     number = eighthPoints * 8;
-    for (; number < num_points; number++) {
-        returnValue += lv_cmake(aPtr[0] * bPtr[0], aPtr[0] * bPtr[1]);
-        aPtr += 1;
-        bPtr += 2;
+    if (number < num_points) {
+        lv_32fc_t tailResult = lv_cmake(0, 0);
+        volk_16i_32fc_dot_prod_32fc_generic(
+            &tailResult, aPtr, (const lv_32fc_t*)bPtr, num_points - number);
+        returnValue += tailResult;
     }
 
     *result = returnValue;
@@ -245,10 +246,11 @@ static inline void volk_16i_32fc_dot_prod_32fc_u_avx2_fma(lv_32fc_t* result,
     returnValue += lv_cmake(dotProductVector[6], dotProductVector[7]);
 
     number = sixteenthPoints * 16;
-    for (; number < num_points; number++) {
-        returnValue += lv_cmake(aPtr[0] * bPtr[0], aPtr[0] * bPtr[1]);
-        aPtr += 1;
-        bPtr += 2;
+    if (number < num_points) {
+        lv_32fc_t tailResult = lv_cmake(0, 0);
+        volk_16i_32fc_dot_prod_32fc_generic(
+            &tailResult, aPtr, (const lv_32fc_t*)bPtr, num_points - number);
+        returnValue += tailResult;
     }
 
     *result = returnValue;
@@ -338,10 +340,11 @@ static inline void volk_16i_32fc_dot_prod_32fc_u_avx2(lv_32fc_t* result,
     returnValue += lv_cmake(dotProductVector[6], dotProductVector[7]);
 
     number = sixteenthPoints * 16;
-    for (; number < num_points; number++) {
-        returnValue += lv_cmake(aPtr[0] * bPtr[0], aPtr[0] * bPtr[1]);
-        aPtr += 1;
-        bPtr += 2;
+    if (number < num_points) {
+        lv_32fc_t tailResult = lv_cmake(0, 0);
+        volk_16i_32fc_dot_prod_32fc_generic(
+            &tailResult, aPtr, (const lv_32fc_t*)bPtr, num_points - number);
+        returnValue += tailResult;
     }
 
     *result = returnValue;
@@ -394,8 +397,12 @@ static inline void volk_16i_32fc_dot_prod_32fc_neon(lv_32fc_t* result,
     accumulator_vec[2] += accumulator_vec[3];
     accumulator_vec[0] += accumulator_vec[2];
 
-    for (ii = quarter_points * 4; ii < num_points; ++ii) {
-        accumulator_vec[0] += *(tapsPtr++) * (float)(*(inputPtr++));
+    ii = quarter_points * 4;
+    if (ii < num_points) {
+        lv_32fc_t tailResult = lv_cmake(0, 0);
+        volk_16i_32fc_dot_prod_32fc_generic(
+            &tailResult, inputPtr, tapsPtr, num_points - ii);
+        accumulator_vec[0] += tailResult;
     }
 
     *result = accumulator_vec[0];
@@ -454,11 +461,11 @@ static inline void volk_16i_32fc_dot_prod_32fc_neonv8(lv_32fc_t* result,
     lv_32fc_t returnValue = lv_cmake(real_sum, imag_sum);
 
     /* Handle remainder */
-    const float* bPtr = (const float*)tapsPtr;
-    for (unsigned int number = eighthPoints * 8; number < num_points; number++) {
-        returnValue += lv_cmake(inputPtr[0] * bPtr[0], inputPtr[0] * bPtr[1]);
-        inputPtr += 1;
-        bPtr += 2;
+    if (eighthPoints * 8 < num_points) {
+        lv_32fc_t tailResult = lv_cmake(0, 0);
+        volk_16i_32fc_dot_prod_32fc_generic(
+            &tailResult, inputPtr, tapsPtr, num_points - eighthPoints * 8);
+        returnValue += tailResult;
     }
 
     *result = returnValue;
@@ -607,10 +614,11 @@ static inline void volk_16i_32fc_dot_prod_32fc_a_sse(lv_32fc_t* result,
     returnValue += lv_cmake(dotProductVector[2], dotProductVector[3]);
 
     number = eighthPoints * 8;
-    for (; number < num_points; number++) {
-        returnValue += lv_cmake(aPtr[0] * bPtr[0], aPtr[0] * bPtr[1]);
-        aPtr += 1;
-        bPtr += 2;
+    if (number < num_points) {
+        lv_32fc_t tailResult = lv_cmake(0, 0);
+        volk_16i_32fc_dot_prod_32fc_generic(
+            &tailResult, aPtr, (const lv_32fc_t*)bPtr, num_points - number);
+        returnValue += tailResult;
     }
 
     *result = returnValue;
@@ -693,10 +701,11 @@ static inline void volk_16i_32fc_dot_prod_32fc_a_avx2_fma(lv_32fc_t* result,
     returnValue += lv_cmake(dotProductVector[6], dotProductVector[7]);
 
     number = sixteenthPoints * 16;
-    for (; number < num_points; number++) {
-        returnValue += lv_cmake(aPtr[0] * bPtr[0], aPtr[0] * bPtr[1]);
-        aPtr += 1;
-        bPtr += 2;
+    if (number < num_points) {
+        lv_32fc_t tailResult = lv_cmake(0, 0);
+        volk_16i_32fc_dot_prod_32fc_generic(
+            &tailResult, aPtr, (const lv_32fc_t*)bPtr, num_points - number);
+        returnValue += tailResult;
     }
 
     *result = returnValue;
@@ -786,10 +795,11 @@ static inline void volk_16i_32fc_dot_prod_32fc_a_avx2(lv_32fc_t* result,
     returnValue += lv_cmake(dotProductVector[6], dotProductVector[7]);
 
     number = sixteenthPoints * 16;
-    for (; number < num_points; number++) {
-        returnValue += lv_cmake(aPtr[0] * bPtr[0], aPtr[0] * bPtr[1]);
-        aPtr += 1;
-        bPtr += 2;
+    if (number < num_points) {
+        lv_32fc_t tailResult = lv_cmake(0, 0);
+        volk_16i_32fc_dot_prod_32fc_generic(
+            &tailResult, aPtr, (const lv_32fc_t*)bPtr, num_points - number);
+        returnValue += tailResult;
     }
 
     *result = returnValue;

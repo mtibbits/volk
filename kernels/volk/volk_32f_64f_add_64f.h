@@ -127,9 +127,7 @@ static inline void volk_32f_64f_add_64f_u_avx(double* cVector,
     }
 
     number = eighth_points * 8;
-    for (; number < num_points; number++) {
-        *cPtr++ = ((double)(*aPtr++)) + (*bPtr++);
-    }
+    volk_32f_64f_add_64f_generic(cPtr, aPtr, bPtr, num_points - number);
 }
 
 #endif /* LV_HAVE_AVX */
@@ -176,9 +174,7 @@ static inline void volk_32f_64f_add_64f_neonv8(double* cVector,
     }
 
     number = quarter_points * 4;
-    for (; number < num_points; number++) {
-        *cPtr++ = ((double)(*aPtr++)) + (*bPtr++);
-    }
+    volk_32f_64f_add_64f_generic(cPtr, aPtr, bPtr, num_points - number);
 }
 
 #endif /* LV_HAVE_NEONV8 */
@@ -251,9 +247,7 @@ static inline void volk_32f_64f_add_64f_a_avx(double* cVector,
     }
 
     number = eighth_points * 8;
-    for (; number < num_points; number++) {
-        *cPtr++ = ((double)(*aPtr++)) + (*bPtr++);
-    }
+    volk_32f_64f_add_64f_generic(cPtr, aPtr, bPtr, num_points - number);
 }
 
 #endif /* LV_HAVE_AVX */

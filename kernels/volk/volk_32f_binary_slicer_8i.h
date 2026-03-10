@@ -147,13 +147,8 @@ static inline void volk_32f_binary_slicer_8i_u_sse2(int8_t* cVector,
         aPtr += 16;
     }
 
-    for (number = n16points * 16; number < num_points; number++) {
-        if (*aPtr++ >= 0) {
-            *cPtr++ = 1;
-        } else {
-            *cPtr++ = 0;
-        }
-    }
+    number = n16points * 16;
+    volk_32f_binary_slicer_8i_generic(cPtr, aPtr, num_points - number);
 }
 #endif /* LV_HAVE_SSE2 */
 
@@ -252,13 +247,8 @@ static inline void volk_32f_binary_slicer_8i_u_avx2(int8_t* cVector,
         cPtr += 32;
     }
 
-    for (number = n32points * 32; number < num_points; number++) {
-        if (*aPtr++ >= 0) {
-            *cPtr++ = 1;
-        } else {
-            *cPtr++ = 0;
-        }
-    }
+    number = n32points * 32;
+    volk_32f_binary_slicer_8i_generic(cPtr, aPtr, num_points - number);
 }
 #endif /* LV_HAVE_AVX2 */
 
@@ -325,13 +315,8 @@ static inline void volk_32f_binary_slicer_8i_neon(int8_t* cVector,
         aPtr += 16;
     }
 
-    for (number = n16points * 16; number < num_points; number++) {
-        if (*aPtr++ >= 0) {
-            *cPtr++ = 1;
-        } else {
-            *cPtr++ = 0;
-        }
-    }
+    number = n16points * 16;
+    volk_32f_binary_slicer_8i_generic(cPtr, aPtr, num_points - number);
 }
 #endif /* LV_HAVE_NEON */
 
@@ -408,13 +393,8 @@ static inline void volk_32f_binary_slicer_8i_a_sse2(int8_t* cVector,
         aPtr += 16;
     }
 
-    for (number = n16points * 16; number < num_points; number++) {
-        if (*aPtr++ >= 0) {
-            *cPtr++ = 1;
-        } else {
-            *cPtr++ = 0;
-        }
-    }
+    number = n16points * 16;
+    volk_32f_binary_slicer_8i_generic(cPtr, aPtr, num_points - number);
 }
 #endif /* LV_HAVE_SSE2 */
 
@@ -513,13 +493,8 @@ static inline void volk_32f_binary_slicer_8i_a_avx2(int8_t* cVector,
         cPtr += 32;
     }
 
-    for (number = n32points * 32; number < num_points; number++) {
-        if (*aPtr++ >= 0) {
-            *cPtr++ = 1;
-        } else {
-            *cPtr++ = 0;
-        }
-    }
+    number = n32points * 32;
+    volk_32f_binary_slicer_8i_generic(cPtr, aPtr, num_points - number);
 }
 #endif /* LV_HAVE_AVX2 */
 

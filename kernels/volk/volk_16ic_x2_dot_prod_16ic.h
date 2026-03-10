@@ -132,10 +132,12 @@ static inline void volk_16ic_x2_dot_prod_16ic_u_sse2(lv_16sc_t* out,
         }
     }
 
-    for (number = 0; number < (num_points % 4); ++number) {
-        lv_16sc_t tmp = (*_in_a++) * (*_in_b++);
-        dotProduct = lv_cmake(sat_adds16i(lv_creal(dotProduct), lv_creal(tmp)),
-                              sat_adds16i(lv_cimag(dotProduct), lv_cimag(tmp)));
+    if (sse_iters * 4 < num_points) {
+        lv_16sc_t tailResult = lv_cmake((int16_t)0, (int16_t)0);
+        volk_16ic_x2_dot_prod_16ic_generic(
+            &tailResult, _in_a, _in_b, num_points - sse_iters * 4);
+        dotProduct = lv_cmake(sat_adds16i(lv_creal(dotProduct), lv_creal(tailResult)),
+                              sat_adds16i(lv_cimag(dotProduct), lv_cimag(tailResult)));
     }
 
     *_out = dotProduct;
@@ -274,10 +276,12 @@ static inline void volk_16ic_x2_dot_prod_16ic_u_avx2(lv_16sc_t* out,
         }
     }
 
-    for (number = 0; number < (num_points % 8); ++number) {
-        lv_16sc_t tmp = (*_in_a++) * (*_in_b++);
-        dotProduct = lv_cmake(sat_adds16i(lv_creal(dotProduct), lv_creal(tmp)),
-                              sat_adds16i(lv_cimag(dotProduct), lv_cimag(tmp)));
+    if (avx_iters * 8 < num_points) {
+        lv_16sc_t tailResult = lv_cmake((int16_t)0, (int16_t)0);
+        volk_16ic_x2_dot_prod_16ic_generic(
+            &tailResult, _in_a, _in_b, num_points - avx_iters * 8);
+        dotProduct = lv_cmake(sat_adds16i(lv_creal(dotProduct), lv_creal(tailResult)),
+                              sat_adds16i(lv_cimag(dotProduct), lv_cimag(tailResult)));
     }
 
     *_out = dotProduct;
@@ -669,10 +673,12 @@ static inline void volk_16ic_x2_dot_prod_16ic_a_sse2(lv_16sc_t* out,
         }
     }
 
-    for (number = 0; number < (num_points % 4); ++number) {
-        lv_16sc_t tmp = (*_in_a++) * (*_in_b++);
-        dotProduct = lv_cmake(sat_adds16i(lv_creal(dotProduct), lv_creal(tmp)),
-                              sat_adds16i(lv_cimag(dotProduct), lv_cimag(tmp)));
+    if (sse_iters * 4 < num_points) {
+        lv_16sc_t tailResult = lv_cmake((int16_t)0, (int16_t)0);
+        volk_16ic_x2_dot_prod_16ic_generic(
+            &tailResult, _in_a, _in_b, num_points - sse_iters * 4);
+        dotProduct = lv_cmake(sat_adds16i(lv_creal(dotProduct), lv_creal(tailResult)),
+                              sat_adds16i(lv_cimag(dotProduct), lv_cimag(tailResult)));
     }
 
     *_out = dotProduct;
@@ -812,10 +818,12 @@ static inline void volk_16ic_x2_dot_prod_16ic_a_avx2(lv_16sc_t* out,
         }
     }
 
-    for (number = 0; number < (num_points % 8); ++number) {
-        lv_16sc_t tmp = (*_in_a++) * (*_in_b++);
-        dotProduct = lv_cmake(sat_adds16i(lv_creal(dotProduct), lv_creal(tmp)),
-                              sat_adds16i(lv_cimag(dotProduct), lv_cimag(tmp)));
+    if (avx_iters * 8 < num_points) {
+        lv_16sc_t tailResult = lv_cmake((int16_t)0, (int16_t)0);
+        volk_16ic_x2_dot_prod_16ic_generic(
+            &tailResult, _in_a, _in_b, num_points - avx_iters * 8);
+        dotProduct = lv_cmake(sat_adds16i(lv_creal(dotProduct), lv_creal(tailResult)),
+                              sat_adds16i(lv_cimag(dotProduct), lv_cimag(tailResult)));
     }
 
     *_out = dotProduct;

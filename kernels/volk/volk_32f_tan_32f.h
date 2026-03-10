@@ -172,9 +172,7 @@ volk_32f_tan_32f_u_sse4_1(float* bVector, const float* aVector, unsigned int num
     }
 
     number = quarterPoints * 4;
-    for (; number < num_points; number++) {
-        *bPtr++ = tanf(*aPtr++);
-    }
+    volk_32f_tan_32f_generic(bPtr, aPtr, num_points - number);
 }
 
 #endif /* LV_HAVE_SSE4_1 for unaligned */
@@ -276,9 +274,7 @@ volk_32f_tan_32f_u_avx2_fma(float* bVector, const float* aVector, unsigned int n
     }
 
     number = eighthPoints * 8;
-    for (; number < num_points; number++) {
-        *bPtr++ = tan(*aPtr++);
-    }
+    volk_32f_tan_32f_generic(bPtr, aPtr, num_points - number);
 }
 
 #endif /* LV_HAVE_AVX2 && LV_HAVE_FMA for unaligned */
@@ -387,9 +383,7 @@ volk_32f_tan_32f_u_avx2(float* bVector, const float* aVector, unsigned int num_p
     }
 
     number = eighthPoints * 8;
-    for (; number < num_points; number++) {
-        *bPtr++ = tan(*aPtr++);
-    }
+    volk_32f_tan_32f_generic(bPtr, aPtr, num_points - number);
 }
 
 #endif /* LV_HAVE_AVX2 for unaligned */
@@ -421,9 +415,7 @@ volk_32f_tan_32f_neon(float* bVector, const float* aVector, unsigned int num_poi
     }
 
     // Deal with the rest
-    for (number = quarter_points * 4; number < num_points; number++) {
-        *bVectorPtr++ = tanf(*aVectorPtr++);
-    }
+    volk_32f_tan_32f_generic(bVectorPtr, aVectorPtr, num_points - quarter_points * 4);
 }
 #endif /* LV_HAVE_NEON */
 
@@ -449,9 +441,7 @@ volk_32f_tan_32f_neonv8(float* bVector, const float* aVector, unsigned int num_p
         aVectorPtr += 4;
     }
 
-    for (number = quarter_points * 4; number < num_points; number++) {
-        *bVectorPtr++ = tanf(*aVectorPtr++);
-    }
+    volk_32f_tan_32f_generic(bVectorPtr, aVectorPtr, num_points - quarter_points * 4);
 }
 #endif /* LV_HAVE_NEONV8 */
 
@@ -620,9 +610,7 @@ volk_32f_tan_32f_a_sse4_1(float* bVector, const float* aVector, unsigned int num
     }
 
     number = quarterPoints * 4;
-    for (; number < num_points; number++) {
-        *bPtr++ = tanf(*aPtr++);
-    }
+    volk_32f_tan_32f_generic(bPtr, aPtr, num_points - number);
 }
 
 #endif /* LV_HAVE_SSE4_1 for aligned */
@@ -724,9 +712,7 @@ volk_32f_tan_32f_a_avx2_fma(float* bVector, const float* aVector, unsigned int n
     }
 
     number = eighthPoints * 8;
-    for (; number < num_points; number++) {
-        *bPtr++ = tan(*aPtr++);
-    }
+    volk_32f_tan_32f_generic(bPtr, aPtr, num_points - number);
 }
 
 #endif /* LV_HAVE_AVX2 && LV_HAVE_FMA for aligned */
@@ -835,9 +821,7 @@ volk_32f_tan_32f_a_avx2(float* bVector, const float* aVector, unsigned int num_p
     }
 
     number = eighthPoints * 8;
-    for (; number < num_points; number++) {
-        *bPtr++ = tan(*aPtr++);
-    }
+    volk_32f_tan_32f_generic(bPtr, aPtr, num_points - number);
 }
 
 #endif /* LV_HAVE_AVX2 for aligned */

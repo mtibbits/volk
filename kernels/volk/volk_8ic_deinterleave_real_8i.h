@@ -155,10 +155,8 @@ static inline void volk_8ic_deinterleave_real_8i_u_avx2(int8_t* iBuffer,
     }
 
     number = thirtysecondPoints * 32;
-    for (; number < num_points; number++) {
-        *iBufferPtr++ = *complexVectorPtr++;
-        complexVectorPtr++;
-    }
+    volk_8ic_deinterleave_real_8i_generic(
+        iBufferPtr, (const lv_8sc_t*)complexVectorPtr, num_points - number);
 }
 #endif /* LV_HAVE_AVX2 */
 
@@ -181,12 +179,8 @@ static inline void volk_8ic_deinterleave_real_8i_neon(int8_t* iBuffer,
         complexVector += 16;
     }
 
-    const int8_t* complexVectorPtr = (const int8_t*)complexVector;
-    int8_t* iBufferPtr = iBuffer;
-    for (number = sixteenth_points * 16; number < num_points; number++) {
-        *iBufferPtr++ = *complexVectorPtr++;
-        complexVectorPtr++;
-    }
+    unsigned int number = sixteenth_points * 16;
+    volk_8ic_deinterleave_real_8i_generic(iBuffer, complexVector, num_points - number);
 }
 #endif /* LV_HAVE_NEON */
 
@@ -211,11 +205,8 @@ static inline void volk_8ic_deinterleave_real_8i_neonv8(int8_t* iBuffer,
         complexVector += 32;
     }
 
-    const int8_t* complexVectorPtr = (const int8_t*)complexVector;
-    for (unsigned int number = thirtysecondPoints * 32; number < num_points; number++) {
-        *iBuffer++ = *complexVectorPtr++;
-        complexVectorPtr++;
-    }
+    unsigned int number = thirtysecondPoints * 32;
+    volk_8ic_deinterleave_real_8i_generic(iBuffer, complexVector, num_points - number);
 }
 #endif /* LV_HAVE_NEONV8 */
 
@@ -279,10 +270,8 @@ static inline void volk_8ic_deinterleave_real_8i_a_ssse3(int8_t* iBuffer,
     }
 
     number = sixteenthPoints * 16;
-    for (; number < num_points; number++) {
-        *iBufferPtr++ = *complexVectorPtr++;
-        complexVectorPtr++;
-    }
+    volk_8ic_deinterleave_real_8i_generic(
+        iBufferPtr, (const lv_8sc_t*)complexVectorPtr, num_points - number);
 }
 #endif /* LV_HAVE_SSSE3 */
 
@@ -338,10 +327,8 @@ static inline void volk_8ic_deinterleave_real_8i_a_avx(int8_t* iBuffer,
     }
 
     number = thirtysecondPoints * 32;
-    for (; number < num_points; number++) {
-        *iBufferPtr++ = *complexVectorPtr++;
-        complexVectorPtr++;
-    }
+    volk_8ic_deinterleave_real_8i_generic(
+        iBufferPtr, (const lv_8sc_t*)complexVectorPtr, num_points - number);
 }
 #endif /* LV_HAVE_AVX */
 
@@ -441,10 +428,8 @@ static inline void volk_8ic_deinterleave_real_8i_a_avx2(int8_t* iBuffer,
     }
 
     number = thirtysecondPoints * 32;
-    for (; number < num_points; number++) {
-        *iBufferPtr++ = *complexVectorPtr++;
-        complexVectorPtr++;
-    }
+    volk_8ic_deinterleave_real_8i_generic(
+        iBufferPtr, (const lv_8sc_t*)complexVectorPtr, num_points - number);
 }
 #endif /* LV_HAVE_AVX2 */
 

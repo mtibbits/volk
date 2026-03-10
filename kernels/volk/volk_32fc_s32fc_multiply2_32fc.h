@@ -261,9 +261,8 @@ static inline void volk_32fc_s32fc_multiply2_32fc_neon(lv_32fc_t* cVector,
         cPtr += 4;
     }
 
-    for (number = quarter_points * 4; number < num_points; number++) {
-        *cPtr++ = *aPtr++ * (*scalar);
-    }
+    number = quarter_points * 4;
+    volk_32fc_s32fc_multiply2_32fc_generic(cPtr, aPtr, scalar, num_points - number);
 }
 #endif /* LV_HAVE_NEON */
 
@@ -321,9 +320,8 @@ static inline void volk_32fc_s32fc_multiply2_32fc_neonv8(lv_32fc_t* cVector,
     }
 
     /* Scalar tail */
-    while (n > 0) {
-        *c++ = (*a++) * (*scalar);
-        n--;
+    if (n > 0) {
+        volk_32fc_s32fc_multiply2_32fc_generic(c, a, scalar, n);
     }
 }
 

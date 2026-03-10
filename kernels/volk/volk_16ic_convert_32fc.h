@@ -87,10 +87,7 @@ static inline void volk_16ic_convert_32fc_u_sse2(lv_32fc_t* outputVector,
         _in += 2;
         _out += 2;
     }
-    if (num_points & 1) {
-        *_out++ = lv_cmake((float)lv_creal(*_in), (float)lv_cimag(*_in));
-        _in++;
-    }
+    volk_16ic_convert_32fc_generic(_out, _in, num_points - sse_iters * 2);
 }
 
 #endif /* LV_HAVE_SSE2 */
@@ -107,7 +104,7 @@ static inline void volk_16ic_convert_32fc_u_avx(lv_32fc_t* outputVector,
     const lv_16sc_t* _in = inputVector;
     lv_32fc_t* _out = outputVector;
     __m256 a;
-    unsigned int i, number;
+    unsigned int number;
 
     for (number = 0; number < sse_iters; number++) {
         a = _mm256_set_ps(
@@ -125,10 +122,7 @@ static inline void volk_16ic_convert_32fc_u_avx(lv_32fc_t* outputVector,
         _out += 4;
     }
 
-    for (i = 0; i < (num_points % 4); ++i) {
-        *_out++ = lv_cmake((float)lv_creal(*_in), (float)lv_cimag(*_in));
-        _in++;
-    }
+    volk_16ic_convert_32fc_generic(_out, _in, num_points - sse_iters * 4);
 }
 
 #endif /* LV_HAVE_AVX */
@@ -160,10 +154,8 @@ static inline void volk_16ic_convert_32fc_u_avx2(lv_32fc_t* outputVector,
         outputVectorPtr += 8;
     }
 
-    number = avx_iters * 8;
-    for (; number < num_points * 2; number++) {
-        *outputVectorPtr++ = (float)*complexVectorPtr++;
-    }
+    volk_16ic_convert_32fc_generic(
+        (lv_32fc_t*)outputVectorPtr, (const lv_16sc_t*)complexVectorPtr, num_points - avx_iters * 4);
 }
 
 #endif /* LV_HAVE_AVX2 */
@@ -197,10 +189,8 @@ static inline void volk_16ic_convert_32fc_u_avx512(lv_32fc_t* outputVector,
         outputVectorPtr += 16;
     }
 
-    number = avx512_iters * 16;
-    for (; number < num_points * 2; number++) {
-        *outputVectorPtr++ = (float)*complexVectorPtr++;
-    }
+    volk_16ic_convert_32fc_generic(
+        (lv_32fc_t*)outputVectorPtr, (const lv_16sc_t*)complexVectorPtr, num_points - avx512_iters * 8);
 }
 
 #endif /* LV_HAVE_AVX512F */
@@ -235,11 +225,7 @@ static inline void volk_16ic_convert_32fc_neon(lv_32fc_t* outputVector,
         n -= 8;
     }
 
-    // Handle remaining elements
-    while (n--) {
-        *_out++ = (float)*_in++;
-        *_out++ = (float)*_in++;
-    }
+    volk_16ic_convert_32fc_generic((lv_32fc_t*)_out, (const lv_16sc_t*)_in, n);
 }
 #endif /* LV_HAVE_NEON */
 
@@ -272,11 +258,7 @@ static inline void volk_16ic_convert_32fc_neonv8(lv_32fc_t* outputVector,
         n -= 8;
     }
 
-    /* Handle remaining elements */
-    while (n--) {
-        *_out++ = (float)*_in++;
-        *_out++ = (float)*_in++;
-    }
+    volk_16ic_convert_32fc_generic((lv_32fc_t*)_out, (const lv_16sc_t*)_in, n);
 }
 #endif /* LV_HAVE_NEONV8 */
 
@@ -330,10 +312,7 @@ static inline void volk_16ic_convert_32fc_a_sse2(lv_32fc_t* outputVector,
         _in += 2;
         _out += 2;
     }
-    if (num_points & 1) {
-        *_out++ = lv_cmake((float)lv_creal(*_in), (float)lv_cimag(*_in));
-        _in++;
-    }
+    volk_16ic_convert_32fc_generic(_out, _in, num_points - sse_iters * 2);
 }
 
 #endif /* LV_HAVE_SSE2 */
@@ -350,7 +329,7 @@ static inline void volk_16ic_convert_32fc_a_avx(lv_32fc_t* outputVector,
     const lv_16sc_t* _in = inputVector;
     lv_32fc_t* _out = outputVector;
     __m256 a;
-    unsigned int i, number;
+    unsigned int number;
 
     for (number = 0; number < sse_iters; number++) {
         a = _mm256_set_ps(
@@ -368,10 +347,7 @@ static inline void volk_16ic_convert_32fc_a_avx(lv_32fc_t* outputVector,
         _out += 4;
     }
 
-    for (i = 0; i < (num_points % 4); ++i) {
-        *_out++ = lv_cmake((float)lv_creal(*_in), (float)lv_cimag(*_in));
-        _in++;
-    }
+    volk_16ic_convert_32fc_generic(_out, _in, num_points - sse_iters * 4);
 }
 
 #endif /* LV_HAVE_AVX */
@@ -403,10 +379,8 @@ static inline void volk_16ic_convert_32fc_a_avx2(lv_32fc_t* outputVector,
         outputVectorPtr += 8;
     }
 
-    number = avx_iters * 8;
-    for (; number < num_points * 2; number++) {
-        *outputVectorPtr++ = (float)*complexVectorPtr++;
-    }
+    volk_16ic_convert_32fc_generic(
+        (lv_32fc_t*)outputVectorPtr, (const lv_16sc_t*)complexVectorPtr, num_points - avx_iters * 4);
 }
 
 #endif /* LV_HAVE_AVX2 */
@@ -440,10 +414,8 @@ static inline void volk_16ic_convert_32fc_a_avx512(lv_32fc_t* outputVector,
         outputVectorPtr += 16;
     }
 
-    number = avx512_iters * 16;
-    for (; number < num_points * 2; number++) {
-        *outputVectorPtr++ = (float)*complexVectorPtr++;
-    }
+    volk_16ic_convert_32fc_generic(
+        (lv_32fc_t*)outputVectorPtr, (const lv_16sc_t*)complexVectorPtr, num_points - avx512_iters * 8);
 }
 
 #endif /* LV_HAVE_AVX512F */

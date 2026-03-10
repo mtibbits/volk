@@ -88,12 +88,9 @@ static inline void volk_16u_x2_add_saturated_16u_u_sse2(uint16_t* outVector,
         _mm_storeu_si128((__m128i*)(outVector + 8 * number), result);
     }
 
-    for (number = eighthPoints * 8; number < num_points; number++) {
-        uint32_t sum = (uint32_t)inVectorA[number] + (uint32_t)inVectorB[number];
-        if (sum > 65535)
-            sum = 65535;
-        outVector[number] = (uint16_t)sum;
-    }
+    number = eighthPoints * 8;
+    volk_16u_x2_add_saturated_16u_generic(
+        outVector + number, inVectorA + number, inVectorB + number, num_points - number);
 }
 
 #endif /* LV_HAVE_SSE2 */
@@ -117,12 +114,9 @@ static inline void volk_16u_x2_add_saturated_16u_u_avx2(uint16_t* outVector,
         _mm256_storeu_si256((__m256i*)(outVector + 16 * number), result);
     }
 
-    for (number = sixteenthPoints * 16; number < num_points; number++) {
-        uint32_t sum = (uint32_t)inVectorA[number] + (uint32_t)inVectorB[number];
-        if (sum > 65535)
-            sum = 65535;
-        outVector[number] = (uint16_t)sum;
-    }
+    number = sixteenthPoints * 16;
+    volk_16u_x2_add_saturated_16u_generic(
+        outVector + number, inVectorA + number, inVectorB + number, num_points - number);
 }
 
 #endif /* LV_HAVE_AVX2 */
@@ -146,12 +140,9 @@ static inline void volk_16u_x2_add_saturated_16u_u_avx512bw(uint16_t* outVector,
         _mm512_storeu_si512((__m512i*)(outVector + 32 * number), result);
     }
 
-    for (number = thirtysecondPoints * 32; number < num_points; number++) {
-        uint32_t sum = (uint32_t)inVectorA[number] + (uint32_t)inVectorB[number];
-        if (sum > 65535)
-            sum = 65535;
-        outVector[number] = (uint16_t)sum;
-    }
+    number = thirtysecondPoints * 32;
+    volk_16u_x2_add_saturated_16u_generic(
+        outVector + number, inVectorA + number, inVectorB + number, num_points - number);
 }
 
 #endif /* LV_HAVE_AVX512BW */
@@ -174,12 +165,9 @@ static inline void volk_16u_x2_add_saturated_16u_neon(uint16_t* outVector,
         vst1q_u16(outVector + 8 * number, vqaddq_u16(a, b));
     }
 
-    for (number = eighthPoints * 8; number < num_points; number++) {
-        uint32_t sum = (uint32_t)inVectorA[number] + (uint32_t)inVectorB[number];
-        if (sum > 65535)
-            sum = 65535;
-        outVector[number] = (uint16_t)sum;
-    }
+    number = eighthPoints * 8;
+    volk_16u_x2_add_saturated_16u_generic(
+        outVector + number, inVectorA + number, inVectorB + number, num_points - number);
 }
 
 #endif /* LV_HAVE_NEON */
@@ -211,12 +199,9 @@ static inline void volk_16u_x2_add_saturated_16u_neonv8(uint16_t* outVector,
         outVector += 16;
     }
 
-    for (number = sixteenthPoints * 16; number < num_points; number++) {
-        uint32_t sum = (uint32_t)(*inVectorA++) + (uint32_t)(*inVectorB++);
-        if (sum > 65535)
-            sum = 65535;
-        *outVector++ = (uint16_t)sum;
-    }
+    number = sixteenthPoints * 16;
+    volk_16u_x2_add_saturated_16u_generic(
+        outVector, inVectorA, inVectorB, num_points - number);
 }
 
 #endif /* LV_HAVE_NEONV8 */
@@ -268,12 +253,9 @@ static inline void volk_16u_x2_add_saturated_16u_a_sse2(uint16_t* outVector,
         _mm_store_si128((__m128i*)(outVector + 8 * number), result);
     }
 
-    for (number = eighthPoints * 8; number < num_points; number++) {
-        uint32_t sum = (uint32_t)inVectorA[number] + (uint32_t)inVectorB[number];
-        if (sum > 65535)
-            sum = 65535;
-        outVector[number] = (uint16_t)sum;
-    }
+    number = eighthPoints * 8;
+    volk_16u_x2_add_saturated_16u_generic(
+        outVector + number, inVectorA + number, inVectorB + number, num_points - number);
 }
 
 #endif /* LV_HAVE_SSE2 */
@@ -297,12 +279,9 @@ static inline void volk_16u_x2_add_saturated_16u_a_avx2(uint16_t* outVector,
         _mm256_store_si256((__m256i*)(outVector + 16 * number), result);
     }
 
-    for (number = sixteenthPoints * 16; number < num_points; number++) {
-        uint32_t sum = (uint32_t)inVectorA[number] + (uint32_t)inVectorB[number];
-        if (sum > 65535)
-            sum = 65535;
-        outVector[number] = (uint16_t)sum;
-    }
+    number = sixteenthPoints * 16;
+    volk_16u_x2_add_saturated_16u_generic(
+        outVector + number, inVectorA + number, inVectorB + number, num_points - number);
 }
 
 #endif /* LV_HAVE_AVX2 */
@@ -326,12 +305,9 @@ static inline void volk_16u_x2_add_saturated_16u_a_avx512bw(uint16_t* outVector,
         _mm512_store_si512((__m512i*)(outVector + 32 * number), result);
     }
 
-    for (number = thirtysecondPoints * 32; number < num_points; number++) {
-        uint32_t sum = (uint32_t)inVectorA[number] + (uint32_t)inVectorB[number];
-        if (sum > 65535)
-            sum = 65535;
-        outVector[number] = (uint16_t)sum;
-    }
+    number = thirtysecondPoints * 32;
+    volk_16u_x2_add_saturated_16u_generic(
+        outVector + number, inVectorA + number, inVectorB + number, num_points - number);
 }
 
 #endif /* LV_HAVE_AVX512BW */

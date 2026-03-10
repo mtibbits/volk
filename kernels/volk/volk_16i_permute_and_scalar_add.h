@@ -190,11 +190,15 @@ static inline void volk_16i_permute_and_scalar_add_a_sse2(short* target,
         p_target += 1;
     }
 
-    for (i = bound * 8; i < (bound * 8) + leftovers; ++i) {
-        target[i] = src0[permute_indexes[i]] + (cntl0[i] & scalars[0]) +
-                    (cntl1[i] & scalars[1]) + (cntl2[i] & scalars[2]) +
-                    (cntl3[i] & scalars[3]);
-    }
+    volk_16i_permute_and_scalar_add_generic(target + bound * 8,
+                                            src0,
+                                            permute_indexes + bound * 8,
+                                            cntl0 + bound * 8,
+                                            cntl1 + bound * 8,
+                                            cntl2 + bound * 8,
+                                            cntl3 + bound * 8,
+                                            scalars,
+                                            leftovers);
 }
 #endif /* LV_HAVE_SSE2 */
 
