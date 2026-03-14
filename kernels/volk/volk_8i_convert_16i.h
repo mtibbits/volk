@@ -260,19 +260,6 @@ static inline void volk_8i_convert_16i_neonv8(int16_t* outputVector,
 #endif /* LV_HAVE_NEONV8 */
 
 
-#ifdef LV_HAVE_ORC
-extern void volk_8i_convert_16i_a_orc_impl(int16_t* outputVector,
-                                           const int8_t* inputVector,
-                                           int num_points);
-
-static inline void volk_8i_convert_16i_u_orc(int16_t* outputVector,
-                                             const int8_t* inputVector,
-                                             unsigned int num_points)
-{
-    volk_8i_convert_16i_a_orc_impl(outputVector, inputVector, num_points);
-}
-#endif /* LV_HAVE_ORC */
-
 #ifdef LV_HAVE_RVV
 #include <riscv_vector.h>
 
@@ -288,6 +275,19 @@ static inline void volk_8i_convert_16i_rvv(int16_t* outputVector,
     }
 }
 #endif /* LV_HAVE_RVV */
+
+#ifdef LV_HAVE_ORC
+extern void volk_8i_convert_16i_a_orc_impl(int16_t* outputVector,
+                                           const int8_t* inputVector,
+                                           int num_points);
+
+static inline void volk_8i_convert_16i_u_orc(int16_t* outputVector,
+                                             const int8_t* inputVector,
+                                             unsigned int num_points)
+{
+    volk_8i_convert_16i_a_orc_impl(outputVector, inputVector, num_points);
+}
+#endif /* LV_HAVE_ORC */
 
 #endif /* INCLUDED_volk_8i_convert_16i_u_H */
 

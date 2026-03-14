@@ -259,7 +259,7 @@ static inline void volk_32fc_x2_multiply_32fc_neon(lv_32fc_t* cVector,
 
 
 #ifdef LV_HAVE_NEONV7
-
+/* TODO: extern asm symbol uses _a_ prefix; rename requires updating .S file */
 extern void volk_32fc_x2_multiply_32fc_a_neonasm(lv_32fc_t* cVector,
                                                  const lv_32fc_t* aVector,
                                                  const lv_32fc_t* bVector,
@@ -336,23 +336,6 @@ static inline void volk_32fc_x2_multiply_32fc_neonv8(lv_32fc_t* cVector,
 #endif /* LV_HAVE_NEONV8 */
 
 
-#ifdef LV_HAVE_ORC
-
-extern void volk_32fc_x2_multiply_32fc_a_orc_impl(lv_32fc_t* cVector,
-                                                  const lv_32fc_t* aVector,
-                                                  const lv_32fc_t* bVector,
-                                                  int num_points);
-
-static inline void volk_32fc_x2_multiply_32fc_u_orc(lv_32fc_t* cVector,
-                                                    const lv_32fc_t* aVector,
-                                                    const lv_32fc_t* bVector,
-                                                    unsigned int num_points)
-{
-    volk_32fc_x2_multiply_32fc_a_orc_impl(cVector, aVector, bVector, num_points);
-}
-
-#endif /* LV_HAVE_ORC */
-
 #ifdef LV_HAVE_RVV
 #include <riscv_vector.h>
 
@@ -403,6 +386,23 @@ static inline void volk_32fc_x2_multiply_32fc_rvvseg(lv_32fc_t* cVector,
     }
 }
 #endif /* LV_HAVE_RVVSEG */
+
+#ifdef LV_HAVE_ORC
+
+extern void volk_32fc_x2_multiply_32fc_a_orc_impl(lv_32fc_t* cVector,
+                                                  const lv_32fc_t* aVector,
+                                                  const lv_32fc_t* bVector,
+                                                  int num_points);
+
+static inline void volk_32fc_x2_multiply_32fc_u_orc(lv_32fc_t* cVector,
+                                                    const lv_32fc_t* aVector,
+                                                    const lv_32fc_t* bVector,
+                                                    unsigned int num_points)
+{
+    volk_32fc_x2_multiply_32fc_a_orc_impl(cVector, aVector, bVector, num_points);
+}
+
+#endif /* LV_HAVE_ORC */
 
 #endif /* INCLUDED_volk_32fc_x2_multiply_32fc_u_H */
 #ifndef INCLUDED_volk_32fc_x2_multiply_32fc_a_H

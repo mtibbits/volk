@@ -135,7 +135,7 @@ static inline void volk_32f_s32f_multiply_32f_u_avx(float* cVector,
 #ifdef LV_HAVE_NEON
 #include <arm_neon.h>
 
-static inline void volk_32f_s32f_multiply_32f_u_neon(float* cVector,
+static inline void volk_32f_s32f_multiply_32f_neon(float* cVector,
                                                      const float* aVector,
                                                      const float scalar,
                                                      unsigned int num_points)
