@@ -83,9 +83,10 @@ static inline void volk_16ic_magnitude_16i_generic(int16_t* magnitudeVector,
     int16_t* magnitudeVectorPtr = magnitudeVector;
     unsigned int number = 0;
     const float scalar = SHRT_MAX;
+    const float invScalar = 1.0f / scalar;
     for (number = 0; number < num_points; number++) {
-        float real = ((float)(*complexVectorPtr++)) / scalar;
-        float imag = ((float)(*complexVectorPtr++)) / scalar;
+        float real = ((float)(*complexVectorPtr++)) * invScalar;
+        float imag = ((float)(*complexVectorPtr++)) * invScalar;
         *magnitudeVectorPtr++ =
             (int16_t)rintf(sqrtf((real * real) + (imag * imag)) * scalar);
     }

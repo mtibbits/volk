@@ -573,7 +573,7 @@ static inline void volk_32f_x3_sum_of_poly_32f_a_avx(float* target,
 #if LV_HAVE_AVX && LV_HAVE_FMA
 #include <immintrin.h>
 
-static inline void volk_32f_x3_sum_of_poly_32f_a_avx2_fma(float* target,
+static inline void volk_32f_x3_sum_of_poly_32f_a_avx_fma(float* target,
                                                           const float* src0,
                                                           const float* center_point_array,
                                                           const float* cutoff,

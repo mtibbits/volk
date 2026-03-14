@@ -88,9 +88,9 @@ volk_32fc_s32f_x2_power_spectral_density_32f_generic(float* logPowerOutput,
                                                      const float rbw,
                                                      unsigned int num_points)
 {
-    if (rbw != 1.0)
+    if (rbw != 1.0f)
         volk_32fc_s32f_power_spectrum_32f(
-            logPowerOutput, complexFFTInput, normalizationFactor * sqrt(rbw), num_points);
+            logPowerOutput, complexFFTInput, normalizationFactor * sqrtf(rbw), num_points);
     else
         volk_32fc_s32f_power_spectrum_32f(
             logPowerOutput, complexFFTInput, normalizationFactor, num_points);

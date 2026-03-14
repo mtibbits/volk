@@ -85,8 +85,8 @@ static inline void volk_32f_x2_pow_32f_generic(float* cVector,
 }
 #endif /* LV_HAVE_GENERIC */
 
-#ifdef LV_HAVE_SSE4_1
-#include <smmintrin.h>
+#ifdef LV_HAVE_SSE2
+#include <emmintrin.h>
 
 #define POLY0(x, c0) _mm_set1_ps(c0)
 #define POLY1(x, c0, c1) _mm_add_ps(_mm_mul_ps(POLY0(x, c1), x), _mm_set1_ps(c0))
@@ -98,7 +98,7 @@ static inline void volk_32f_x2_pow_32f_generic(float* cVector,
 #define POLY5(x, c0, c1, c2, c3, c4, c5) \
     _mm_add_ps(_mm_mul_ps(POLY4(x, c1, c2, c3, c4, c5), x), _mm_set1_ps(c0))
 
-static inline void volk_32f_x2_pow_32f_u_sse4_1(float* cVector,
+static inline void volk_32f_x2_pow_32f_u_sse2(float* cVector,
                                                 const float* bVector,
                                                 const float* aVector,
                                                 unsigned int num_points)
@@ -226,7 +226,7 @@ static inline void volk_32f_x2_pow_32f_u_sse4_1(float* cVector,
     }
 }
 
-#endif /* LV_HAVE_SSE4_1 for unaligned */
+#endif /* LV_HAVE_SSE2 for unaligned */
 
 #ifdef LV_HAVE_AVX2
 #include <immintrin.h>
@@ -892,8 +892,8 @@ static inline void volk_32f_x2_pow_32f_rvv(float* cVector,
 
 #define POW_POLY_DEGREE 3
 
-#ifdef LV_HAVE_SSE4_1
-#include <smmintrin.h>
+#ifdef LV_HAVE_SSE2
+#include <emmintrin.h>
 
 #define POLY0(x, c0) _mm_set1_ps(c0)
 #define POLY1(x, c0, c1) _mm_add_ps(_mm_mul_ps(POLY0(x, c1), x), _mm_set1_ps(c0))
@@ -905,7 +905,7 @@ static inline void volk_32f_x2_pow_32f_rvv(float* cVector,
 #define POLY5(x, c0, c1, c2, c3, c4, c5) \
     _mm_add_ps(_mm_mul_ps(POLY4(x, c1, c2, c3, c4, c5), x), _mm_set1_ps(c0))
 
-static inline void volk_32f_x2_pow_32f_a_sse4_1(float* cVector,
+static inline void volk_32f_x2_pow_32f_a_sse2(float* cVector,
                                                 const float* bVector,
                                                 const float* aVector,
                                                 unsigned int num_points)
@@ -1033,7 +1033,7 @@ static inline void volk_32f_x2_pow_32f_a_sse4_1(float* cVector,
     }
 }
 
-#endif /* LV_HAVE_SSE4_1 for aligned */
+#endif /* LV_HAVE_SSE2 for aligned */
 
 #ifdef LV_HAVE_AVX2
 #include <immintrin.h>

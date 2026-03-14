@@ -82,8 +82,8 @@
  * \endcode
  */
 
-#ifndef INCLUDED_volk_32fc_s32fc_rotator_32fc_u_H
-#define INCLUDED_volk_32fc_s32fc_rotator_32fc_u_H
+#ifndef INCLUDED_volk_32fc_s32fc_x2_rotator_32fc_u_H
+#define INCLUDED_volk_32fc_s32fc_x2_rotator_32fc_u_H
 
 
 #include <math.h>
@@ -139,10 +139,10 @@ static inline void volk_32fc_s32fc_x2_rotator_32fc_neon(lv_32fc_t* outVector,
 #endif /* LV_HAVE_NEON */
 
 
-#endif /* INCLUDED_volk_32fc_s32fc_rotator_32fc_u_H */
+#endif /* INCLUDED_volk_32fc_s32fc_x2_rotator_32fc_u_H */
 
-#ifndef INCLUDED_volk_32fc_s32fc_rotator_32fc_a_H
-#define INCLUDED_volk_32fc_s32fc_rotator_32fc_a_H
+#ifndef INCLUDED_volk_32fc_s32fc_x2_rotator_32fc_a_H
+#define INCLUDED_volk_32fc_s32fc_x2_rotator_32fc_a_H
 
 
 #ifdef LV_HAVE_AVX
@@ -160,4 +160,4 @@ static inline void volk_32fc_s32fc_x2_rotator_32fc_a_avx(lv_32fc_t* outVector,
 #endif /* LV_HAVE_AVX */
 
 
-#endif /* INCLUDED_volk_32fc_s32fc_rotator_32fc_a_H */
+#endif /* INCLUDED_volk_32fc_s32fc_x2_rotator_32fc_a_H */

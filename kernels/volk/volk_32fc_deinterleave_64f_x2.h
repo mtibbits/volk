@@ -179,7 +179,7 @@ static inline void volk_32fc_deinterleave_64f_x2_u_avx(double* iBuffer,
 #ifdef LV_HAVE_NEONV8
 #include <arm_neon.h>
 
-static inline void volk_32fc_deinterleave_64f_x2_neon(double* iBuffer,
+static inline void volk_32fc_deinterleave_64f_x2_neonv8(double* iBuffer,
                                                        double* qBuffer,
                                                        const lv_32fc_t* complexVector,
                                                        unsigned int num_points)
