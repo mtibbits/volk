@@ -21,7 +21,7 @@
  * num_points) \endcode
  *
  * \b Inputs
- * \li vecBuffer: The buffer of values to be vectorized.
+ * \li vecBuffer: The buffer of values to be normalized.
  * \li scalar: The scale value to be applied to each buffer value.
  * \li num_points: The number of data points.
  *
@@ -38,7 +38,7 @@
  *       increasing[ii] = 2.f * ((float)ii / (float)N) - 1.f;
  *   }
  *
- *   // Normalize by the smallest delta (0.2 in this example)
+ *   // Divide each element by the scale factor
  *   float scale = 5.0f;
  *
  *   volk_32f_s32f_normalize(increasing, scale, N);

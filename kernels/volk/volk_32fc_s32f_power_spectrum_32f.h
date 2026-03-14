@@ -88,25 +88,9 @@ volk_32fc_s32f_power_spectrum_32f_generic(float* logPowerOutput,
     // Calculate the Power of the complex point
     const float normFactSq = 1.0f / (normalizationFactor * normalizationFactor);
 
-    // Calculate dBm
-    // 50 ohm load assumption
-    // 10 * log10 (v^2 / (2 * 50.0 * .001)) = 10 * log10( v^2 * 10)
-    // 75 ohm load assumption
-    // 10 * log10 (v^2 / (2 * 75.0 * .001)) = 10 * log10( v^2 * 15)
-
     /*
-     * For generic reference, the code below is a volk-optimized
-     * approach that also leverages a faster log2 calculation
-     * to calculate the log10:
-     * n*log10(x) = n*log2(x)/log2(10) = (n/log2(10)) * log2(x)
-     *
-     * Generic code:
-     *
-     * const float real = *inputPtr++ * iNormalizationFactor;
-     * const float imag = *inputPtr++ * iNormalizationFactor;
-     * realFFTDataPointsPtr = 10.0*log10f(((real * real) + (imag * imag)) + 1e-20);
-     *  realFFTDataPointsPtr++;
-     *
+     * Computes 10*log10(mag_sq * normFactSq) using a fast log2 approach:
+     * 10*log10(x) = 10*log2(x)/log2(10) = (10/log2(10)) * log2(x)
      */
 
     // Calc mag^2

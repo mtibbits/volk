@@ -12,7 +12,7 @@
  *
  * \b Overview
  *
- * Byteswaps (in-place) an aligned vector of uint32_t's.
+ * Byteswaps (in-place) a vector of uint32_t's.
  *
  * <b>Dispatcher Prototype</b>
  * \code

@@ -12,7 +12,7 @@
  *
  * \b Overview
  *
- * Slices input floats and and returns 1 when the input >= 0 and 0
+ * Slices input floats and returns 1 when the input >= 0 and 0
  * when < 0. Results are returned as 32-bit ints.
  *
  * <b>Dispatcher Prototype</b>

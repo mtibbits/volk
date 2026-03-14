@@ -47,7 +47,7 @@
  *   }
  *
  *   volk_32fc_x2_multiply_32fc(out, sig_1, sig_2, N);
- * *
+ *
  *   volk_free(sig_1);
  *   volk_free(sig_2);
  *   volk_free(out);

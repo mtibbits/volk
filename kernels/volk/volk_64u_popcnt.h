@@ -12,7 +12,7 @@
  *
  * \b Overview
  *
- * Computes the population count (popcnt), or Hamming distance of a
+ * Computes the population count (popcnt), or Hamming weight of a
  * binary string. This kernel takes in a single unsigned 64-bit value
  * and returns the count of 1's that the value contains.
  *
@@ -34,12 +34,14 @@
  *   uint64_t bitstring[] = {0x0, 0x1, 0xf, 0xffffffffffffffff,
  *       0x5555555555555555, 0xaaaaaaaaaaaaaaaa, 0x2a2a2a2a2a2a2a2a,
  *       0xffffffff, 0x32, 0x64};
- *   uint64_t hamming_distance = 0;
+ *   uint64_t* hamming_weight = (uint64_t*)volk_malloc(sizeof(uint64_t), volk_get_alignment());
  *
  *   for(unsigned int ii=0; ii<N; ++ii){
- *       volk_64u_popcnt(&hamming_distance, bitstring[ii]);
- *       printf("hamming distance of %lx = %li\n", bitstring[ii], hamming_distance);
+ *       volk_64u_popcnt(hamming_weight, bitstring[ii]);
+ *       printf("hamming weight of %" PRIx64 " = %" PRIu64 "\n", bitstring[ii], *hamming_weight);
  *   }
+ *
+ *   volk_free(hamming_weight);
  * \endcode
  */
 

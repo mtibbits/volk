@@ -30,7 +30,7 @@
  * \li cVector: The output vector.
  *
  * \b Example
- * Subtract and increasing vector from a decreasing vector.
+ * Subtract a decreasing vector from an increasing vector.
  * \code
  *   int N = 10;
  *   unsigned int alignment = volk_get_alignment();

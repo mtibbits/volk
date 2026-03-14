@@ -25,7 +25,7 @@
  * \li num_points: The number of data points.
  *
  * \b Outputs
- * \li stddev: The output vector.
+ * \li stddev: The output standard deviation value.
  *
  * \b Example
  * Calculate the standard deviation from numbers generated with c++11's normal generator

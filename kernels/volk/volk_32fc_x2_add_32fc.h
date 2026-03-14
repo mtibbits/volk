@@ -184,12 +184,12 @@ static inline void volk_32fc_x2_add_32fc_neon(lv_32fc_t* cVector,
         // Store the results back into the C container
         vst1q_f32((float*)(cPtr), cVal);
 
-        aPtr += 2; // q uses quadwords, 4 lv_32fc_ts per vadd
+        aPtr += 2;
         bPtr += 2;
         cPtr += 2;
     }
 
-    number = halfPoints * 2; // should be = num_points
+    number = halfPoints * 2;
     for (; number < num_points; number++) {
         *cPtr++ = (*aPtr++) + (*bPtr++);
     }

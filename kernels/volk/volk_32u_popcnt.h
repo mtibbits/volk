@@ -12,8 +12,8 @@
  *
  * \b Overview
  *
- * Computes the population count (popcnt), or Hamming distance of a
- * binary string. This kernel takes in a single unsigned 32-bit value
+ * Computes the population count (popcnt), or Hamming weight, of a
+ * binary value. This kernel takes in a single unsigned 32-bit value
  * and returns the count of 1's that the value contains.
  *
  * <b>Dispatcher Prototype</b>

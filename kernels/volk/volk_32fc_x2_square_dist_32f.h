@@ -26,7 +26,7 @@
  * \li num_points: The number of data points.
  *
  * \b Outputs
- * \li target: A vector of distances between src0 and the vector of points.
+ * \li target: A vector of squared distances between src0 and the vector of points.
  *
  * \b Example
  * Calculate the distance between an input and reference points in a square

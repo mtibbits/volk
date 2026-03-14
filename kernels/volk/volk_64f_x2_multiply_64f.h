@@ -39,8 +39,8 @@
  *   double* out = (double*)volk_malloc(sizeof(double)*N, alignment);
  *
  *   for(unsigned int ii = 0; ii < N; ++ii){
- *       increasing[ii] = (float)ii;
- *       decreasing[ii] = 10.f - (float)ii;
+ *       increasing[ii] = (double)ii;
+ *       decreasing[ii] = 10.0 - (double)ii;
  *   }
  *
  *   volk_64f_x2_multiply_64f(out, increasing, decreasing, N);

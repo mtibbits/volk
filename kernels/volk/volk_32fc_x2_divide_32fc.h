@@ -77,7 +77,7 @@
  * and armv7, and b) under aarch64.
  *
  * To avoid obtaining inf or nan in some architectures, care should be taken
- * that c*c + d*d is not too small. In particular, if c*c + d*d < FLT_MAX, then
+ * that c*c + d*d is not too small. In particular, if c*c + d*d < FLT_MIN, then
  * the calculation of 1.0/(c*c + d*d) will yield inf.
  *
  * For more information about numerical accuracy of complex division, see the

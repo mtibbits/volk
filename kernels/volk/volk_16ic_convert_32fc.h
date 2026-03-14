@@ -87,7 +87,7 @@ static inline void volk_16ic_convert_32fc_u_sse2(lv_32fc_t* outputVector,
             (float)(lv_creal(_in[1])),
             (float)(lv_cimag(_in[0])),
             (float)(lv_creal(
-                _in[0]))); // //load (2 byte imag, 2 byte real) x 2 into 128 bits reg
+                _in[0]))); // load (2 byte imag, 2 byte real) x 2 into 128 bits reg
         _mm_storeu_ps((float*)_out, a);
         _in += 2;
         _out += 2;
@@ -124,7 +124,7 @@ static inline void volk_16ic_convert_32fc_u_avx(lv_32fc_t* outputVector,
             (float)(lv_creal(_in[1])),
             (float)(lv_cimag(_in[0])),
             (float)(lv_creal(
-                _in[0]))); // //load (2 byte imag, 2 byte real) x 2 into 128 bits reg
+                _in[0]))); // load (2 byte imag, 2 byte real) x 4 into 256 bits reg
         _mm256_storeu_ps((float*)_out, a);
         _in += 4;
         _out += 4;
@@ -330,7 +330,7 @@ static inline void volk_16ic_convert_32fc_a_sse2(lv_32fc_t* outputVector,
             (float)(lv_creal(_in[1])),
             (float)(lv_cimag(_in[0])),
             (float)(lv_creal(
-                _in[0]))); // //load (2 byte imag, 2 byte real) x 2 into 128 bits reg
+                _in[0]))); // load (2 byte imag, 2 byte real) x 2 into 128 bits reg
         _mm_store_ps((float*)_out, a);
         _in += 2;
         _out += 2;
@@ -367,7 +367,7 @@ static inline void volk_16ic_convert_32fc_a_avx(lv_32fc_t* outputVector,
             (float)(lv_creal(_in[1])),
             (float)(lv_cimag(_in[0])),
             (float)(lv_creal(
-                _in[0]))); // //load (2 byte imag, 2 byte real) x 2 into 128 bits reg
+                _in[0]))); // load (2 byte imag, 2 byte real) x 4 into 256 bits reg
         _mm256_store_ps((float*)_out, a);
         _in += 4;
         _out += 4;

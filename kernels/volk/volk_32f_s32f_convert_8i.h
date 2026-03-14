@@ -44,7 +44,7 @@
  *
  *   // Normalize by the smallest delta (0.2 in this example)
  *   // With float -> 8 bit ints be careful of scaling
-
+ *
  *   float scale = 5.1f;
  *
  *   volk_32f_s32f_convert_8i(out, increasing, scale, N);
