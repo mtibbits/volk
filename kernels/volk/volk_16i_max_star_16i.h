@@ -23,7 +23,7 @@
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_16i_max_star_16i(short* target, short* src0, unsigned int num_points);
+ * void volk_16i_max_star_16i(short* target, const short* src0, unsigned int num_points);
  * \endcode
  *
  * \b Inputs
@@ -72,7 +72,7 @@
 #ifdef LV_HAVE_GENERIC
 
 static inline void
-volk_16i_max_star_16i_generic(short* target, short* src0, unsigned int num_points)
+volk_16i_max_star_16i_generic(short* target, const short* src0, unsigned int num_points)
 {
     const unsigned int num_bytes = num_points * 2;
 
@@ -104,7 +104,7 @@ volk_16i_max_star_16i_generic(short* target, short* src0, unsigned int num_point
 #include <xmmintrin.h>
 
 static inline void
-volk_16i_max_star_16i_a_ssse3(short* target, short* src0, unsigned int num_points)
+volk_16i_max_star_16i_a_ssse3(short* target, const short* src0, unsigned int num_points)
 {
     const unsigned int num_bytes = num_points * 2;
 

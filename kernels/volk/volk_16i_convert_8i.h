@@ -103,7 +103,7 @@ static inline void volk_16i_convert_8i_u_sse2(int8_t* outputVector,
     const unsigned int sixteenthPoints = num_points / 16;
 
     int8_t* outputVectorPtr = outputVector;
-    int16_t* inputPtr = (int16_t*)inputVector;
+    const int16_t* inputPtr = inputVector;
     __m128i inputVal1;
     __m128i inputVal2;
     __m128i ret;
@@ -111,9 +111,9 @@ static inline void volk_16i_convert_8i_u_sse2(int8_t* outputVector,
     for (; number < sixteenthPoints; number++) {
 
         // Load the 16 values
-        inputVal1 = _mm_loadu_si128((__m128i*)inputPtr);
+        inputVal1 = _mm_loadu_si128((const __m128i*)inputPtr);
         inputPtr += 8;
-        inputVal2 = _mm_loadu_si128((__m128i*)inputPtr);
+        inputVal2 = _mm_loadu_si128((const __m128i*)inputPtr);
         inputPtr += 8;
 
         inputVal1 = _mm_srai_epi16(inputVal1, 8);
@@ -145,7 +145,7 @@ static inline void volk_16i_convert_8i_u_avx2(int8_t* outputVector,
     const unsigned int thirtysecondPoints = num_points / 32;
 
     int8_t* outputVectorPtr = outputVector;
-    int16_t* inputPtr = (int16_t*)inputVector;
+    const int16_t* inputPtr = inputVector;
     __m256i inputVal1;
     __m256i inputVal2;
     __m256i ret;
@@ -153,9 +153,9 @@ static inline void volk_16i_convert_8i_u_avx2(int8_t* outputVector,
     for (; number < thirtysecondPoints; number++) {
 
         // Load the 16 values
-        inputVal1 = _mm256_loadu_si256((__m256i*)inputPtr);
+        inputVal1 = _mm256_loadu_si256((const __m256i*)inputPtr);
         inputPtr += 16;
-        inputVal2 = _mm256_loadu_si256((__m256i*)inputPtr);
+        inputVal2 = _mm256_loadu_si256((const __m256i*)inputPtr);
         inputPtr += 16;
 
         inputVal1 = _mm256_srai_epi16(inputVal1, 8);
@@ -187,7 +187,7 @@ static inline void volk_16i_convert_8i_u_avx512bw(int8_t* outputVector,
     const unsigned int sixtyfourthPoints = num_points / 64;
 
     int8_t* outputVectorPtr = outputVector;
-    int16_t* inputPtr = (int16_t*)inputVector;
+    const int16_t* inputPtr = inputVector;
     __m512i inputVal1;
     __m512i inputVal2;
     __m512i shifted1, shifted2;
@@ -196,9 +196,9 @@ static inline void volk_16i_convert_8i_u_avx512bw(int8_t* outputVector,
     for (; number < sixtyfourthPoints; number++) {
 
         // Load 64 int16 values
-        inputVal1 = _mm512_loadu_si512((__m512i*)inputPtr);
+        inputVal1 = _mm512_loadu_si512((const __m512i*)inputPtr);
         inputPtr += 32;
-        inputVal2 = _mm512_loadu_si512((__m512i*)inputPtr);
+        inputVal2 = _mm512_loadu_si512((const __m512i*)inputPtr);
         inputPtr += 32;
 
         shifted1 = _mm512_srai_epi16(inputVal1, 8);
@@ -329,7 +329,7 @@ static inline void volk_16i_convert_8i_a_sse2(int8_t* outputVector,
     const unsigned int sixteenthPoints = num_points / 16;
 
     int8_t* outputVectorPtr = outputVector;
-    int16_t* inputPtr = (int16_t*)inputVector;
+    const int16_t* inputPtr = inputVector;
     __m128i inputVal1;
     __m128i inputVal2;
     __m128i ret;
@@ -337,9 +337,9 @@ static inline void volk_16i_convert_8i_a_sse2(int8_t* outputVector,
     for (; number < sixteenthPoints; number++) {
 
         // Load the 16 values
-        inputVal1 = _mm_load_si128((__m128i*)inputPtr);
+        inputVal1 = _mm_load_si128((const __m128i*)inputPtr);
         inputPtr += 8;
-        inputVal2 = _mm_load_si128((__m128i*)inputPtr);
+        inputVal2 = _mm_load_si128((const __m128i*)inputPtr);
         inputPtr += 8;
 
         inputVal1 = _mm_srai_epi16(inputVal1, 8);
@@ -371,7 +371,7 @@ static inline void volk_16i_convert_8i_a_avx2(int8_t* outputVector,
     const unsigned int thirtysecondPoints = num_points / 32;
 
     int8_t* outputVectorPtr = outputVector;
-    int16_t* inputPtr = (int16_t*)inputVector;
+    const int16_t* inputPtr = inputVector;
     __m256i inputVal1;
     __m256i inputVal2;
     __m256i ret;
@@ -379,9 +379,9 @@ static inline void volk_16i_convert_8i_a_avx2(int8_t* outputVector,
     for (; number < thirtysecondPoints; number++) {
 
         // Load the 16 values
-        inputVal1 = _mm256_load_si256((__m256i*)inputPtr);
+        inputVal1 = _mm256_load_si256((const __m256i*)inputPtr);
         inputPtr += 16;
-        inputVal2 = _mm256_load_si256((__m256i*)inputPtr);
+        inputVal2 = _mm256_load_si256((const __m256i*)inputPtr);
         inputPtr += 16;
 
         inputVal1 = _mm256_srai_epi16(inputVal1, 8);
@@ -413,7 +413,7 @@ static inline void volk_16i_convert_8i_a_avx512bw(int8_t* outputVector,
     const unsigned int sixtyfourthPoints = num_points / 64;
 
     int8_t* outputVectorPtr = outputVector;
-    int16_t* inputPtr = (int16_t*)inputVector;
+    const int16_t* inputPtr = inputVector;
     __m512i inputVal1;
     __m512i inputVal2;
     __m512i shifted1, shifted2;
@@ -422,9 +422,9 @@ static inline void volk_16i_convert_8i_a_avx512bw(int8_t* outputVector,
     for (; number < sixtyfourthPoints; number++) {
 
         // Load 64 int16 values
-        inputVal1 = _mm512_load_si512((__m512i*)inputPtr);
+        inputVal1 = _mm512_load_si512((const __m512i*)inputPtr);
         inputPtr += 32;
-        inputVal2 = _mm512_load_si512((__m512i*)inputPtr);
+        inputVal2 = _mm512_load_si512((const __m512i*)inputPtr);
         inputPtr += 32;
 
         shifted1 = _mm512_srai_epi16(inputVal1, 8);

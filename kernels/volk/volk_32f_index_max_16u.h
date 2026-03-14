@@ -97,7 +97,7 @@ volk_32f_index_max_16u_u_avx(uint16_t* target, const float* src0, uint32_t num_p
     uint32_t number = 0;
     const uint32_t eighthPoints = num_points / 8;
 
-    float* inputPtr = (float*)src0;
+    const float* inputPtr = src0;
 
     __m256 indexIncrementValues = _mm256_set1_ps(8);
     __m256 currentIndexes = _mm256_set_ps(-1, -2, -3, -4, -5, -6, -7, -8);
@@ -395,7 +395,7 @@ volk_32f_index_max_16u_a_sse(uint16_t* target, const float* src0, uint32_t num_p
     uint32_t number = 0;
     const uint32_t quarterPoints = num_points / 4;
 
-    float* inputPtr = (float*)src0;
+    const float* inputPtr = src0;
 
     __m128 indexIncrementValues = _mm_set1_ps(4);
     __m128 currentIndexes = _mm_set_ps(-1, -2, -3, -4);
@@ -461,7 +461,7 @@ volk_32f_index_max_16u_a_sse4_1(uint16_t* target, const float* src0, uint32_t nu
     uint32_t number = 0;
     const uint32_t quarterPoints = num_points / 4;
 
-    float* inputPtr = (float*)src0;
+    const float* inputPtr = src0;
 
     __m128 indexIncrementValues = _mm_set1_ps(4);
     __m128 currentIndexes = _mm_set_ps(-1, -2, -3, -4);
@@ -525,7 +525,7 @@ volk_32f_index_max_16u_a_avx(uint16_t* target, const float* src0, uint32_t num_p
     uint32_t number = 0;
     const uint32_t eighthPoints = num_points / 8;
 
-    float* inputPtr = (float*)src0;
+    const float* inputPtr = src0;
 
     __m256 indexIncrementValues = _mm256_set1_ps(8);
     __m256 currentIndexes = _mm256_set_ps(-1, -2, -3, -4, -5, -6, -7, -8);

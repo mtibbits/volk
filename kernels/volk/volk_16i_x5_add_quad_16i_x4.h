@@ -24,8 +24,8 @@
  * <b>Dispatcher Prototype</b>
  * \code
  * void volk_16i_x5_add_quad_16i_x4(short* target0, short* target1, short* target2,
- * short* target3, short* src0, short* src1, short* src2, short* src3, short* src4,
- * unsigned int num_points)
+ * short* target3, const short* src0, const short* src1, const short* src2, const short*
+ * src3, const short* src4, unsigned int num_points)
  * \endcode
  *
  * \b Inputs
@@ -103,11 +103,11 @@ static inline void volk_16i_x5_add_quad_16i_x4_generic(short* target0,
                                                        short* target1,
                                                        short* target2,
                                                        short* target3,
-                                                       short* src0,
-                                                       short* src1,
-                                                       short* src2,
-                                                       short* src3,
-                                                       short* src4,
+                                                       const short* src0,
+                                                       const short* src1,
+                                                       const short* src2,
+                                                       const short* src3,
+                                                       const short* src4,
                                                        unsigned int num_points)
 {
     const unsigned int num_bytes = num_points * 2;
@@ -133,11 +133,11 @@ static inline void volk_16i_x5_add_quad_16i_x4_neon(short* target0,
                                                     short* target1,
                                                     short* target2,
                                                     short* target3,
-                                                    short* src0,
-                                                    short* src1,
-                                                    short* src2,
-                                                    short* src3,
-                                                    short* src4,
+                                                    const short* src0,
+                                                    const short* src1,
+                                                    const short* src2,
+                                                    const short* src3,
+                                                    const short* src4,
                                                     unsigned int num_points)
 {
     const unsigned int eighth_points = num_points / 8;
@@ -198,28 +198,28 @@ static inline void volk_16i_x5_add_quad_16i_x4_a_sse2(short* target0,
                                                       short* target1,
                                                       short* target2,
                                                       short* target3,
-                                                      short* src0,
-                                                      short* src1,
-                                                      short* src2,
-                                                      short* src3,
-                                                      short* src4,
+                                                      const short* src0,
+                                                      const short* src1,
+                                                      const short* src2,
+                                                      const short* src3,
+                                                      const short* src4,
                                                       unsigned int num_points)
 {
     const unsigned int num_bytes = num_points * 2;
 
     __m128i xmm0, xmm1, xmm2, xmm3, xmm4;
-    __m128i *p_target0, *p_target1, *p_target2, *p_target3, *p_src0, *p_src1, *p_src2,
-        *p_src3, *p_src4;
+    __m128i *p_target0, *p_target1, *p_target2, *p_target3;
+    const __m128i *p_src0, *p_src1, *p_src2, *p_src3, *p_src4;
     p_target0 = (__m128i*)target0;
     p_target1 = (__m128i*)target1;
     p_target2 = (__m128i*)target2;
     p_target3 = (__m128i*)target3;
 
-    p_src0 = (__m128i*)src0;
-    p_src1 = (__m128i*)src1;
-    p_src2 = (__m128i*)src2;
-    p_src3 = (__m128i*)src3;
-    p_src4 = (__m128i*)src4;
+    p_src0 = (const __m128i*)src0;
+    p_src1 = (const __m128i*)src1;
+    p_src2 = (const __m128i*)src2;
+    p_src3 = (const __m128i*)src3;
+    p_src4 = (const __m128i*)src4;
 
     int i = 0;
 

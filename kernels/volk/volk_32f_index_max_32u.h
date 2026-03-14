@@ -90,7 +90,7 @@ volk_32f_index_max_32u_u_sse(uint32_t* target, const float* src0, uint32_t num_p
         uint32_t number = 0;
         const uint32_t quarterPoints = num_points / 4;
 
-        float* inputPtr = (float*)src0;
+        const float* inputPtr = src0;
 
         __m128 indexIncrementValues = _mm_set1_ps(4);
         __m128 currentIndexes = _mm_set_ps(-1, -2, -3, -4);
@@ -154,7 +154,7 @@ volk_32f_index_max_32u_u_sse4_1(uint32_t* target, const float* src0, uint32_t nu
         uint32_t number = 0;
         const uint32_t quarterPoints = num_points / 4;
 
-        float* inputPtr = (float*)src0;
+        const float* inputPtr = src0;
 
         __m128 indexIncrementValues = _mm_set1_ps(4);
         __m128 currentIndexes = _mm_set_ps(-1, -2, -3, -4);
@@ -217,7 +217,7 @@ volk_32f_index_max_32u_u_avx(uint32_t* target, const float* src0, uint32_t num_p
         uint32_t number = 0;
         const uint32_t quarterPoints = num_points / 8;
 
-        float* inputPtr = (float*)src0;
+        const float* inputPtr = src0;
 
         __m256 indexIncrementValues = _mm256_set1_ps(8);
         __m256 currentIndexes = _mm256_set_ps(-1, -2, -3, -4, -5, -6, -7, -8);
@@ -344,7 +344,7 @@ volk_32f_index_max_32u_neon(uint32_t* target, const float* src0, uint32_t num_po
         uint32_t number = 0;
         const uint32_t quarterPoints = num_points / 4;
 
-        float* inputPtr = (float*)src0;
+        const float* inputPtr = src0;
         float32x4_t indexIncrementValues = vdupq_n_f32(4);
         __VOLK_ATTR_ALIGNED(16)
         float currentIndexes_float[4] = { -4.0f, -3.0f, -2.0f, -1.0f };
@@ -509,7 +509,7 @@ volk_32f_index_max_32u_a_sse(uint32_t* target, const float* src0, uint32_t num_p
         uint32_t number = 0;
         const uint32_t quarterPoints = num_points / 4;
 
-        float* inputPtr = (float*)src0;
+        const float* inputPtr = src0;
 
         __m128 indexIncrementValues = _mm_set1_ps(4);
         __m128 currentIndexes = _mm_set_ps(-1, -2, -3, -4);
@@ -577,7 +577,7 @@ volk_32f_index_max_32u_a_sse4_1(uint32_t* target, const float* src0, uint32_t nu
         uint32_t number = 0;
         const uint32_t quarterPoints = num_points / 4;
 
-        float* inputPtr = (float*)src0;
+        const float* inputPtr = src0;
 
         __m128 indexIncrementValues = _mm_set1_ps(4);
         __m128 currentIndexes = _mm_set_ps(-1, -2, -3, -4);
@@ -643,7 +643,7 @@ volk_32f_index_max_32u_a_avx(uint32_t* target, const float* src0, uint32_t num_p
         uint32_t number = 0;
         const uint32_t quarterPoints = num_points / 8;
 
-        float* inputPtr = (float*)src0;
+        const float* inputPtr = src0;
 
         __m256 indexIncrementValues = _mm256_set1_ps(8);
         __m256 currentIndexes = _mm256_set_ps(-1, -2, -3, -4, -5, -6, -7, -8);
