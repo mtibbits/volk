@@ -259,11 +259,10 @@ static inline void volk_32fc_x2_multiply_32fc_neon(lv_32fc_t* cVector,
 
 
 #ifdef LV_HAVE_NEONV7
-/* TODO: extern asm symbol uses _a_ prefix; rename requires updating .S file */
-extern void volk_32fc_x2_multiply_32fc_a_neonasm(lv_32fc_t* cVector,
-                                                 const lv_32fc_t* aVector,
-                                                 const lv_32fc_t* bVector,
-                                                 unsigned int num_points);
+extern void volk_32fc_x2_multiply_32fc_neonasm(lv_32fc_t* cVector,
+                                               const lv_32fc_t* aVector,
+                                               const lv_32fc_t* bVector,
+                                               unsigned int num_points);
 #endif /* LV_HAVE_NEONV7 */
 
 

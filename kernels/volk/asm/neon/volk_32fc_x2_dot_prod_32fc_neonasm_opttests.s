@@ -1,6 +1,6 @@
-@ static inline void volk_32fc_x2_dot_prod_32fc_a_neonasm_opttests(float* cVector, const float* aVector, const float* bVector, unsigned int num_points)@
-.global	volk_32fc_x2_dot_prod_32fc_a_neonasm_opttests
-volk_32fc_x2_dot_prod_32fc_a_neonasm_opttests:
+@ static inline void volk_32fc_x2_dot_prod_32fc_neonasm_opttests(float* cVector, const float* aVector, const float* bVector, unsigned int num_points)@
+.global	volk_32fc_x2_dot_prod_32fc_neonasm_opttests
+volk_32fc_x2_dot_prod_32fc_neonasm_opttests:
     push    {r4, r5, r6, r7, r8, r9, sl, fp, lr}
     vpush   {d8-d15}
     lsrs    fp, r3, #3

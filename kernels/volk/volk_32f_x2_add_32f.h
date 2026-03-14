@@ -290,19 +290,17 @@ static inline void volk_32f_x2_add_32f_neonv8(float* cVector,
 
 
 #ifdef LV_HAVE_NEONV7
-/* TODO: extern asm symbol uses _a_ prefix; rename requires updating .S file */
-extern void volk_32f_x2_add_32f_a_neonasm(float* cVector,
-                                          const float* aVector,
-                                          const float* bVector,
-                                          unsigned int num_points);
+extern void volk_32f_x2_add_32f_neonasm(float* cVector,
+                                        const float* aVector,
+                                        const float* bVector,
+                                        unsigned int num_points);
 #endif /* LV_HAVE_NEONV7 */
 
 #ifdef LV_HAVE_NEONV7
-/* TODO: extern asm symbol uses _a_ prefix; rename requires updating .S file */
-extern void volk_32f_x2_add_32f_a_neonpipeline(float* cVector,
-                                               const float* aVector,
-                                               const float* bVector,
-                                               unsigned int num_points);
+extern void volk_32f_x2_add_32f_neonpipeline(float* cVector,
+                                             const float* aVector,
+                                             const float* bVector,
+                                             unsigned int num_points);
 #endif /* LV_HAVE_NEONV7 */
 
 #ifdef LV_HAVE_RVV

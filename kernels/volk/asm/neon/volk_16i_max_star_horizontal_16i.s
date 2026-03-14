@@ -1,6 +1,6 @@
-@ static inline void volk_16i_max_star_horizontal_16i_a_neonasm(float* cVector, const float* aVector, const float* bVector, unsigned int num_points);
-	.global	volk_16i_max_star_horizontal_16i_a_neonasm
-volk_16i_max_star_horizontal_16i_a_neonasm:
+@ static inline void volk_16i_max_star_horizontal_16i_neonasm(float* cVector, const float* aVector, const float* bVector, unsigned int num_points);
+	.global	volk_16i_max_star_horizontal_16i_neonasm
+volk_16i_max_star_horizontal_16i_neonasm:
 	@ r0 - cVector: pointer to output array
 	@ r1 - aVector: pointer to input array 1
 	@ r2 - num_points: number of items to process

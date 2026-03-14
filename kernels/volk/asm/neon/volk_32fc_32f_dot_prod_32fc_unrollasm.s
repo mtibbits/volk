@@ -1,6 +1,6 @@
-@ static inline void volk_32fc_32f_dot_prod_32fc_a_unrollasm ( lv_32fc_t* result, const  lv_32fc_t* input, const  float* taps, unsigned int num_points)
-.global	volk_32fc_32f_dot_prod_32fc_a_unrollasm
-volk_32fc_32f_dot_prod_32fc_a_unrollasm:
+@ static inline void volk_32fc_32f_dot_prod_32fc_unrollasm ( lv_32fc_t* result, const  lv_32fc_t* input, const  float* taps, unsigned int num_points)
+.global	volk_32fc_32f_dot_prod_32fc_unrollasm
+volk_32fc_32f_dot_prod_32fc_unrollasm:
 	@ r0 - result: pointer to output array (32fc)
 	@ r1 - input: pointer to input array 1 (32fc)
 	@ r2 - taps: pointer to input array 2 (32f)
