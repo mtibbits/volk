@@ -201,7 +201,7 @@ static inline void volk_32f_x2_add_32f_u_avx512f(float* cVector,
 #ifdef LV_HAVE_NEON
 #include <arm_neon.h>
 
-static inline void volk_32f_x2_add_32f_u_neon(float* cVector,
+static inline void volk_32f_x2_add_32f_neon(float* cVector,
                                               const float* aVector,
                                               const float* bVector,
                                               unsigned int num_points)
@@ -289,22 +289,21 @@ static inline void volk_32f_x2_add_32f_neonv8(float* cVector,
 #endif /* LV_HAVE_NEONV8 */
 
 
-#ifdef LV_HAVE_ORC
+#ifdef LV_HAVE_NEONV7
+/* TODO: extern asm symbol uses _a_ prefix; rename requires updating .S file */
+extern void volk_32f_x2_add_32f_a_neonasm(float* cVector,
+                                          const float* aVector,
+                                          const float* bVector,
+                                          unsigned int num_points);
+#endif /* LV_HAVE_NEONV7 */
 
-extern void volk_32f_x2_add_32f_a_orc_impl(float* cVector,
-                                           const float* aVector,
-                                           const float* bVector,
-                                           int num_points);
-
-static inline void volk_32f_x2_add_32f_u_orc(float* cVector,
-                                             const float* aVector,
-                                             const float* bVector,
-                                             unsigned int num_points)
-{
-    volk_32f_x2_add_32f_a_orc_impl(cVector, aVector, bVector, num_points);
-}
-
-#endif /* LV_HAVE_ORC */
+#ifdef LV_HAVE_NEONV7
+/* TODO: extern asm symbol uses _a_ prefix; rename requires updating .S file */
+extern void volk_32f_x2_add_32f_a_neonpipeline(float* cVector,
+                                               const float* aVector,
+                                               const float* bVector,
+                                               unsigned int num_points);
+#endif /* LV_HAVE_NEONV7 */
 
 #ifdef LV_HAVE_RVV
 #include <riscv_vector.h>
@@ -323,6 +322,23 @@ static inline void volk_32f_x2_add_32f_rvv(float* cVector,
     }
 }
 #endif /* LV_HAVE_RVV */
+
+#ifdef LV_HAVE_ORC
+
+extern void volk_32f_x2_add_32f_a_orc_impl(float* cVector,
+                                           const float* aVector,
+                                           const float* bVector,
+                                           int num_points);
+
+static inline void volk_32f_x2_add_32f_u_orc(float* cVector,
+                                             const float* aVector,
+                                             const float* bVector,
+                                             unsigned int num_points)
+{
+    volk_32f_x2_add_32f_a_orc_impl(cVector, aVector, bVector, num_points);
+}
+
+#endif /* LV_HAVE_ORC */
 
 #endif /* INCLUDED_volk_32f_x2_add_32f_u_H */
 #ifndef INCLUDED_volk_32f_x2_add_32f_a_H
@@ -444,20 +460,5 @@ static inline void volk_32f_x2_add_32f_a_avx512f(float* cVector,
 }
 
 #endif /* LV_HAVE_AVX512F */
-
-
-#ifdef LV_HAVE_NEONV7
-extern void volk_32f_x2_add_32f_a_neonasm(float* cVector,
-                                          const float* aVector,
-                                          const float* bVector,
-                                          unsigned int num_points);
-#endif /* LV_HAVE_NEONV7 */
-
-#ifdef LV_HAVE_NEONV7
-extern void volk_32f_x2_add_32f_a_neonpipeline(float* cVector,
-                                               const float* aVector,
-                                               const float* bVector,
-                                               unsigned int num_points);
-#endif /* LV_HAVE_NEONV7 */
 
 #endif /* INCLUDED_volk_32f_x2_add_32f_a_H */

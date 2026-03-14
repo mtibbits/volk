@@ -160,7 +160,7 @@ static inline void volk_32fc_x2_add_32fc_u_avx(lv_32fc_t* cVector,
 #ifdef LV_HAVE_NEON
 #include <arm_neon.h>
 
-static inline void volk_32fc_x2_add_32fc_u_neon(lv_32fc_t* cVector,
+static inline void volk_32fc_x2_add_32fc_neon(lv_32fc_t* cVector,
                                                 const lv_32fc_t* aVector,
                                                 const lv_32fc_t* bVector,
                                                 unsigned int num_points)

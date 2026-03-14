@@ -125,6 +125,13 @@ static inline void volk_16i_max_star_horizontal_16i_neon(int16_t* target,
 }
 #endif /* LV_HAVE_NEON */
 
+#ifdef LV_HAVE_NEONV7
+/* TODO: extern asm symbol uses _a_ prefix; rename requires updating .S file */
+extern void volk_16i_max_star_horizontal_16i_a_neonasm(int16_t* target,
+                                                       int16_t* src0,
+                                                       unsigned int num_points);
+#endif /* LV_HAVE_NEONV7 */
+
 #endif /* INCLUDED_volk_16i_max_star_horizontal_16i_u_H */
 
 #ifndef INCLUDED_volk_16i_max_star_horizontal_16i_a_H
@@ -215,11 +222,5 @@ static inline void volk_16i_max_star_horizontal_16i_a_ssse3(int16_t* target,
 }
 
 #endif /* LV_HAVE_SSSE3 */
-
-#ifdef LV_HAVE_NEONV7
-extern void volk_16i_max_star_horizontal_16i_a_neonasm(int16_t* target,
-                                                       int16_t* src0,
-                                                       unsigned int num_points);
-#endif /* LV_HAVE_NEONV7 */
 
 #endif /* INCLUDED_volk_16i_max_star_horizontal_16i_a_H */

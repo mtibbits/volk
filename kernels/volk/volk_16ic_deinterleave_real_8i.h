@@ -275,20 +275,6 @@ static inline void volk_16ic_deinterleave_real_8i_neonv8(int8_t* iBuffer,
 }
 #endif /* LV_HAVE_NEONV8 */
 
-#ifdef LV_HAVE_ORC
-
-extern void volk_16ic_deinterleave_real_8i_a_orc_impl(int8_t* iBuffer,
-                                                      const lv_16sc_t* complexVector,
-                                                      int num_points);
-
-static inline void volk_16ic_deinterleave_real_8i_u_orc(int8_t* iBuffer,
-                                                        const lv_16sc_t* complexVector,
-                                                        unsigned int num_points)
-{
-    volk_16ic_deinterleave_real_8i_a_orc_impl(iBuffer, complexVector, num_points);
-}
-#endif /* LV_HAVE_ORC */
-
 #ifdef LV_HAVE_RVV
 #include <riscv_vector.h>
 
@@ -306,6 +292,20 @@ static inline void volk_16ic_deinterleave_real_8i_rvv(int8_t* iBuffer,
     }
 }
 #endif /* LV_HAVE_RVV */
+
+#ifdef LV_HAVE_ORC
+
+extern void volk_16ic_deinterleave_real_8i_a_orc_impl(int8_t* iBuffer,
+                                                      const lv_16sc_t* complexVector,
+                                                      int num_points);
+
+static inline void volk_16ic_deinterleave_real_8i_u_orc(int8_t* iBuffer,
+                                                        const lv_16sc_t* complexVector,
+                                                        unsigned int num_points)
+{
+    volk_16ic_deinterleave_real_8i_a_orc_impl(iBuffer, complexVector, num_points);
+}
+#endif /* LV_HAVE_ORC */
 
 #endif /* INCLUDED_volk_16ic_deinterleave_real_8i_u_H */
 

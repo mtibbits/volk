@@ -102,113 +102,6 @@ static inline void volk_32fc_s32f_atan2_32f_polynomial(float* outputVector,
 }
 #endif /* LV_HAVE_GENERIC */
 
-#if LV_HAVE_AVX2 && LV_HAVE_FMA
-#include <immintrin.h>
-#include <volk/volk_avx2_fma_intrinsics.h>
-static inline void volk_32fc_s32f_atan2_32f_u_avx2_fma(float* outputVector,
-                                                       const lv_32fc_t* complexVector,
-                                                       const float normalizeFactor,
-                                                       unsigned int num_points)
-{
-    const float* in = (const float*)complexVector;
-    float* out = (float*)outputVector;
-
-    const float invNormalizeFactor = 1.f / normalizeFactor;
-    const __m256 vinvNormalizeFactor = _mm256_set1_ps(invNormalizeFactor);
-    const __m256 pi = _mm256_set1_ps(0x1.921fb6p1f);
-    const __m256 pi_2 = _mm256_set1_ps(0x1.921fb6p0f);
-    const __m256 abs_mask = _mm256_castsi256_ps(_mm256_set1_epi32(0x7FFFFFFF));
-    const __m256 sign_mask = _mm256_castsi256_ps(_mm256_set1_epi32(0x80000000));
-
-    unsigned int number = 0;
-    const unsigned int eighth_points = num_points / 8;
-    for (; number < eighth_points; number++) {
-        __m256 z1 = _mm256_loadu_ps(in);
-        in += 8;
-        __m256 z2 = _mm256_loadu_ps(in);
-        in += 8;
-
-        __m256 x = _mm256_real(z1, z2);
-        __m256 y = _mm256_imag(z1, z2);
-
-        // Detect NaN in original inputs before division
-        __m256 input_nan_mask = _mm256_or_ps(_mm256_cmp_ps(x, x, _CMP_UNORD_Q),
-                                             _mm256_cmp_ps(y, y, _CMP_UNORD_Q));
-
-        // Handle infinity cases per IEEE 754
-        const __m256 zero = _mm256_setzero_ps();
-        const __m256 inf = _mm256_set1_ps(HUGE_VALF);
-        const __m256 pi_4 = _mm256_set1_ps(0x1.921fb6p-1f);      // π/4
-        const __m256 three_pi_4 = _mm256_set1_ps(0x1.2d97c8p1f); // 3π/4
-
-        __m256 y_abs = _mm256_and_ps(y, abs_mask);
-        __m256 x_abs = _mm256_and_ps(x, abs_mask);
-        __m256 y_inf_mask = _mm256_cmp_ps(y_abs, inf, _CMP_EQ_OQ); // |y| == inf
-        __m256 x_inf_mask = _mm256_cmp_ps(x_abs, inf, _CMP_EQ_OQ); // |x| == inf
-        __m256 x_pos_mask = _mm256_cmp_ps(x, zero, _CMP_GT_OS);
-
-        // Build infinity result
-        __m256 inf_result = zero;
-        // Both infinite: ±π/4 or ±3π/4
-        __m256 both_inf = _mm256_and_ps(y_inf_mask, x_inf_mask);
-        __m256 both_inf_result = _mm256_blendv_ps(three_pi_4, pi_4, x_pos_mask);
-        both_inf_result = _mm256_or_ps(both_inf_result, _mm256_and_ps(y, sign_mask));
-        inf_result = _mm256_blendv_ps(inf_result, both_inf_result, both_inf);
-
-        // y infinite, x finite: ±π/2
-        __m256 y_inf_only = _mm256_andnot_ps(x_inf_mask, y_inf_mask);
-        __m256 y_inf_result = _mm256_or_ps(pi_2, _mm256_and_ps(y, sign_mask));
-        inf_result = _mm256_blendv_ps(inf_result, y_inf_result, y_inf_only);
-
-        // x infinite, y finite: 0 or ±π
-        __m256 x_inf_only = _mm256_andnot_ps(y_inf_mask, x_inf_mask);
-        __m256 x_inf_result =
-            _mm256_blendv_ps(_mm256_or_ps(pi, _mm256_and_ps(y, sign_mask)),
-                             _mm256_or_ps(zero, _mm256_and_ps(y, sign_mask)),
-                             x_pos_mask);
-        inf_result = _mm256_blendv_ps(inf_result, x_inf_result, x_inf_only);
-
-        __m256 any_inf_mask = _mm256_or_ps(y_inf_mask, x_inf_mask);
-
-        __m256 swap_mask = _mm256_cmp_ps(
-            _mm256_and_ps(y, abs_mask), _mm256_and_ps(x, abs_mask), _CMP_GT_OS);
-        __m256 numerator = _mm256_blendv_ps(y, x, swap_mask);
-        __m256 denominator = _mm256_blendv_ps(x, y, swap_mask);
-        __m256 input = _mm256_div_ps(numerator, denominator);
-
-        // Only handle NaN from division (0/0, inf/inf), not from NaN inputs
-        // Replace with numerator to preserve sign (e.g., atan2(-0, 0) = -0)
-        __m256 div_nan_mask =
-            _mm256_andnot_ps(input_nan_mask, _mm256_cmp_ps(input, input, _CMP_UNORD_Q));
-        input = _mm256_blendv_ps(input, numerator, div_nan_mask);
-        __m256 result = _mm256_arctan_poly_avx2_fma(input);
-
-        input =
-            _mm256_sub_ps(_mm256_or_ps(pi_2, _mm256_and_ps(input, sign_mask)), result);
-        result = _mm256_blendv_ps(result, input, swap_mask);
-
-        __m256 x_sign_mask =
-            _mm256_castsi256_ps(_mm256_srai_epi32(_mm256_castps_si256(x), 31));
-
-        result = _mm256_add_ps(
-            _mm256_and_ps(_mm256_xor_ps(pi, _mm256_and_ps(sign_mask, y)), x_sign_mask),
-            result);
-
-        // Select infinity result or normal result
-        result = _mm256_blendv_ps(result, inf_result, any_inf_mask);
-
-        result = _mm256_mul_ps(result, vinvNormalizeFactor);
-
-        _mm256_storeu_ps(out, result);
-        out += 8;
-    }
-
-    number = eighth_points * 8;
-    volk_32fc_s32f_atan2_32f_polynomial(
-        out, (const lv_32fc_t*)in, normalizeFactor, num_points - number);
-}
-#endif /* LV_HAVE_AVX2 && LV_HAVE_FMA */
-
 #if LV_HAVE_AVX2
 #include <immintrin.h>
 #include <volk/volk_avx_intrinsics.h>
@@ -315,6 +208,113 @@ static inline void volk_32fc_s32f_atan2_32f_u_avx2(float* outputVector,
         out, (const lv_32fc_t*)in, normalizeFactor, num_points - number);
 }
 #endif /* LV_HAVE_AVX2 */
+
+#if LV_HAVE_AVX2 && LV_HAVE_FMA
+#include <immintrin.h>
+#include <volk/volk_avx2_fma_intrinsics.h>
+static inline void volk_32fc_s32f_atan2_32f_u_avx2_fma(float* outputVector,
+                                                       const lv_32fc_t* complexVector,
+                                                       const float normalizeFactor,
+                                                       unsigned int num_points)
+{
+    const float* in = (const float*)complexVector;
+    float* out = (float*)outputVector;
+
+    const float invNormalizeFactor = 1.f / normalizeFactor;
+    const __m256 vinvNormalizeFactor = _mm256_set1_ps(invNormalizeFactor);
+    const __m256 pi = _mm256_set1_ps(0x1.921fb6p1f);
+    const __m256 pi_2 = _mm256_set1_ps(0x1.921fb6p0f);
+    const __m256 abs_mask = _mm256_castsi256_ps(_mm256_set1_epi32(0x7FFFFFFF));
+    const __m256 sign_mask = _mm256_castsi256_ps(_mm256_set1_epi32(0x80000000));
+
+    unsigned int number = 0;
+    const unsigned int eighth_points = num_points / 8;
+    for (; number < eighth_points; number++) {
+        __m256 z1 = _mm256_loadu_ps(in);
+        in += 8;
+        __m256 z2 = _mm256_loadu_ps(in);
+        in += 8;
+
+        __m256 x = _mm256_real(z1, z2);
+        __m256 y = _mm256_imag(z1, z2);
+
+        // Detect NaN in original inputs before division
+        __m256 input_nan_mask = _mm256_or_ps(_mm256_cmp_ps(x, x, _CMP_UNORD_Q),
+                                             _mm256_cmp_ps(y, y, _CMP_UNORD_Q));
+
+        // Handle infinity cases per IEEE 754
+        const __m256 zero = _mm256_setzero_ps();
+        const __m256 inf = _mm256_set1_ps(HUGE_VALF);
+        const __m256 pi_4 = _mm256_set1_ps(0x1.921fb6p-1f);      // π/4
+        const __m256 three_pi_4 = _mm256_set1_ps(0x1.2d97c8p1f); // 3π/4
+
+        __m256 y_abs = _mm256_and_ps(y, abs_mask);
+        __m256 x_abs = _mm256_and_ps(x, abs_mask);
+        __m256 y_inf_mask = _mm256_cmp_ps(y_abs, inf, _CMP_EQ_OQ); // |y| == inf
+        __m256 x_inf_mask = _mm256_cmp_ps(x_abs, inf, _CMP_EQ_OQ); // |x| == inf
+        __m256 x_pos_mask = _mm256_cmp_ps(x, zero, _CMP_GT_OS);
+
+        // Build infinity result
+        __m256 inf_result = zero;
+        // Both infinite: ±π/4 or ±3π/4
+        __m256 both_inf = _mm256_and_ps(y_inf_mask, x_inf_mask);
+        __m256 both_inf_result = _mm256_blendv_ps(three_pi_4, pi_4, x_pos_mask);
+        both_inf_result = _mm256_or_ps(both_inf_result, _mm256_and_ps(y, sign_mask));
+        inf_result = _mm256_blendv_ps(inf_result, both_inf_result, both_inf);
+
+        // y infinite, x finite: ±π/2
+        __m256 y_inf_only = _mm256_andnot_ps(x_inf_mask, y_inf_mask);
+        __m256 y_inf_result = _mm256_or_ps(pi_2, _mm256_and_ps(y, sign_mask));
+        inf_result = _mm256_blendv_ps(inf_result, y_inf_result, y_inf_only);
+
+        // x infinite, y finite: 0 or ±π
+        __m256 x_inf_only = _mm256_andnot_ps(y_inf_mask, x_inf_mask);
+        __m256 x_inf_result =
+            _mm256_blendv_ps(_mm256_or_ps(pi, _mm256_and_ps(y, sign_mask)),
+                             _mm256_or_ps(zero, _mm256_and_ps(y, sign_mask)),
+                             x_pos_mask);
+        inf_result = _mm256_blendv_ps(inf_result, x_inf_result, x_inf_only);
+
+        __m256 any_inf_mask = _mm256_or_ps(y_inf_mask, x_inf_mask);
+
+        __m256 swap_mask = _mm256_cmp_ps(
+            _mm256_and_ps(y, abs_mask), _mm256_and_ps(x, abs_mask), _CMP_GT_OS);
+        __m256 numerator = _mm256_blendv_ps(y, x, swap_mask);
+        __m256 denominator = _mm256_blendv_ps(x, y, swap_mask);
+        __m256 input = _mm256_div_ps(numerator, denominator);
+
+        // Only handle NaN from division (0/0, inf/inf), not from NaN inputs
+        // Replace with numerator to preserve sign (e.g., atan2(-0, 0) = -0)
+        __m256 div_nan_mask =
+            _mm256_andnot_ps(input_nan_mask, _mm256_cmp_ps(input, input, _CMP_UNORD_Q));
+        input = _mm256_blendv_ps(input, numerator, div_nan_mask);
+        __m256 result = _mm256_arctan_poly_avx2_fma(input);
+
+        input =
+            _mm256_sub_ps(_mm256_or_ps(pi_2, _mm256_and_ps(input, sign_mask)), result);
+        result = _mm256_blendv_ps(result, input, swap_mask);
+
+        __m256 x_sign_mask =
+            _mm256_castsi256_ps(_mm256_srai_epi32(_mm256_castps_si256(x), 31));
+
+        result = _mm256_add_ps(
+            _mm256_and_ps(_mm256_xor_ps(pi, _mm256_and_ps(sign_mask, y)), x_sign_mask),
+            result);
+
+        // Select infinity result or normal result
+        result = _mm256_blendv_ps(result, inf_result, any_inf_mask);
+
+        result = _mm256_mul_ps(result, vinvNormalizeFactor);
+
+        _mm256_storeu_ps(out, result);
+        out += 8;
+    }
+
+    number = eighth_points * 8;
+    volk_32fc_s32f_atan2_32f_polynomial(
+        out, (const lv_32fc_t*)in, normalizeFactor, num_points - number);
+}
+#endif /* LV_HAVE_AVX2 && LV_HAVE_FMA */
 
 #if LV_HAVE_AVX512F && LV_HAVE_AVX512DQ
 #include <immintrin.h>
@@ -896,113 +896,6 @@ static inline void volk_32fc_s32f_atan2_32f_rvvseg(float* outputVector,
 #ifndef INCLUDED_volk_32fc_s32f_atan2_32f_a_H
 #define INCLUDED_volk_32fc_s32f_atan2_32f_a_H
 
-#if LV_HAVE_AVX2 && LV_HAVE_FMA
-#include <immintrin.h>
-#include <volk/volk_avx2_fma_intrinsics.h>
-static inline void volk_32fc_s32f_atan2_32f_a_avx2_fma(float* outputVector,
-                                                       const lv_32fc_t* complexVector,
-                                                       const float normalizeFactor,
-                                                       unsigned int num_points)
-{
-    const float* in = (const float*)complexVector;
-    float* out = (float*)outputVector;
-
-    const float invNormalizeFactor = 1.f / normalizeFactor;
-    const __m256 vinvNormalizeFactor = _mm256_set1_ps(invNormalizeFactor);
-    const __m256 pi = _mm256_set1_ps(0x1.921fb6p1f);
-    const __m256 pi_2 = _mm256_set1_ps(0x1.921fb6p0f);
-    const __m256 abs_mask = _mm256_castsi256_ps(_mm256_set1_epi32(0x7FFFFFFF));
-    const __m256 sign_mask = _mm256_castsi256_ps(_mm256_set1_epi32(0x80000000));
-
-    unsigned int number = 0;
-    const unsigned int eighth_points = num_points / 8;
-    for (; number < eighth_points; number++) {
-        __m256 z1 = _mm256_load_ps(in);
-        in += 8;
-        __m256 z2 = _mm256_load_ps(in);
-        in += 8;
-
-        __m256 x = _mm256_real(z1, z2);
-        __m256 y = _mm256_imag(z1, z2);
-
-        // Detect NaN in original inputs before division
-        __m256 input_nan_mask = _mm256_or_ps(_mm256_cmp_ps(x, x, _CMP_UNORD_Q),
-                                             _mm256_cmp_ps(y, y, _CMP_UNORD_Q));
-
-        // Handle infinity cases per IEEE 754
-        const __m256 zero = _mm256_setzero_ps();
-        const __m256 inf = _mm256_set1_ps(HUGE_VALF);
-        const __m256 pi_4 = _mm256_set1_ps(0x1.921fb6p-1f);      // π/4
-        const __m256 three_pi_4 = _mm256_set1_ps(0x1.2d97c8p1f); // 3π/4
-
-        __m256 y_abs = _mm256_and_ps(y, abs_mask);
-        __m256 x_abs = _mm256_and_ps(x, abs_mask);
-        __m256 y_inf_mask = _mm256_cmp_ps(y_abs, inf, _CMP_EQ_OQ); // |y| == inf
-        __m256 x_inf_mask = _mm256_cmp_ps(x_abs, inf, _CMP_EQ_OQ); // |x| == inf
-        __m256 x_pos_mask = _mm256_cmp_ps(x, zero, _CMP_GT_OS);
-
-        // Build infinity result
-        __m256 inf_result = zero;
-        // Both infinite: ±π/4 or ±3π/4
-        __m256 both_inf = _mm256_and_ps(y_inf_mask, x_inf_mask);
-        __m256 both_inf_result = _mm256_blendv_ps(three_pi_4, pi_4, x_pos_mask);
-        both_inf_result = _mm256_or_ps(both_inf_result, _mm256_and_ps(y, sign_mask));
-        inf_result = _mm256_blendv_ps(inf_result, both_inf_result, both_inf);
-
-        // y infinite, x finite: ±π/2
-        __m256 y_inf_only = _mm256_andnot_ps(x_inf_mask, y_inf_mask);
-        __m256 y_inf_result = _mm256_or_ps(pi_2, _mm256_and_ps(y, sign_mask));
-        inf_result = _mm256_blendv_ps(inf_result, y_inf_result, y_inf_only);
-
-        // x infinite, y finite: 0 or ±π
-        __m256 x_inf_only = _mm256_andnot_ps(y_inf_mask, x_inf_mask);
-        __m256 x_inf_result =
-            _mm256_blendv_ps(_mm256_or_ps(pi, _mm256_and_ps(y, sign_mask)),
-                             _mm256_or_ps(zero, _mm256_and_ps(y, sign_mask)),
-                             x_pos_mask);
-        inf_result = _mm256_blendv_ps(inf_result, x_inf_result, x_inf_only);
-
-        __m256 any_inf_mask = _mm256_or_ps(y_inf_mask, x_inf_mask);
-
-        __m256 swap_mask = _mm256_cmp_ps(
-            _mm256_and_ps(y, abs_mask), _mm256_and_ps(x, abs_mask), _CMP_GT_OS);
-        __m256 numerator = _mm256_blendv_ps(y, x, swap_mask);
-        __m256 denominator = _mm256_blendv_ps(x, y, swap_mask);
-        __m256 input = _mm256_div_ps(numerator, denominator);
-
-        // Only handle NaN from division (0/0, inf/inf), not from NaN inputs
-        // Replace with numerator to preserve sign (e.g., atan2(-0, 0) = -0)
-        __m256 div_nan_mask =
-            _mm256_andnot_ps(input_nan_mask, _mm256_cmp_ps(input, input, _CMP_UNORD_Q));
-        input = _mm256_blendv_ps(input, numerator, div_nan_mask);
-        __m256 result = _mm256_arctan_poly_avx2_fma(input);
-
-        input =
-            _mm256_sub_ps(_mm256_or_ps(pi_2, _mm256_and_ps(input, sign_mask)), result);
-        result = _mm256_blendv_ps(result, input, swap_mask);
-
-        __m256 x_sign_mask =
-            _mm256_castsi256_ps(_mm256_srai_epi32(_mm256_castps_si256(x), 31));
-
-        result = _mm256_add_ps(
-            _mm256_and_ps(_mm256_xor_ps(pi, _mm256_and_ps(sign_mask, y)), x_sign_mask),
-            result);
-
-        // Select infinity result or normal result
-        result = _mm256_blendv_ps(result, inf_result, any_inf_mask);
-
-        result = _mm256_mul_ps(result, vinvNormalizeFactor);
-
-        _mm256_store_ps(out, result);
-        out += 8;
-    }
-
-    number = eighth_points * 8;
-    volk_32fc_s32f_atan2_32f_polynomial(
-        out, (const lv_32fc_t*)in, normalizeFactor, num_points - number);
-}
-#endif /* LV_HAVE_AVX2 && LV_HAVE_FMA */
-
 #if LV_HAVE_AVX2
 #include <immintrin.h>
 #include <volk/volk_avx_intrinsics.h>
@@ -1109,6 +1002,113 @@ static inline void volk_32fc_s32f_atan2_32f_a_avx2(float* outputVector,
         out, (const lv_32fc_t*)in, normalizeFactor, num_points - number);
 }
 #endif /* LV_HAVE_AVX2 */
+
+#if LV_HAVE_AVX2 && LV_HAVE_FMA
+#include <immintrin.h>
+#include <volk/volk_avx2_fma_intrinsics.h>
+static inline void volk_32fc_s32f_atan2_32f_a_avx2_fma(float* outputVector,
+                                                       const lv_32fc_t* complexVector,
+                                                       const float normalizeFactor,
+                                                       unsigned int num_points)
+{
+    const float* in = (const float*)complexVector;
+    float* out = (float*)outputVector;
+
+    const float invNormalizeFactor = 1.f / normalizeFactor;
+    const __m256 vinvNormalizeFactor = _mm256_set1_ps(invNormalizeFactor);
+    const __m256 pi = _mm256_set1_ps(0x1.921fb6p1f);
+    const __m256 pi_2 = _mm256_set1_ps(0x1.921fb6p0f);
+    const __m256 abs_mask = _mm256_castsi256_ps(_mm256_set1_epi32(0x7FFFFFFF));
+    const __m256 sign_mask = _mm256_castsi256_ps(_mm256_set1_epi32(0x80000000));
+
+    unsigned int number = 0;
+    const unsigned int eighth_points = num_points / 8;
+    for (; number < eighth_points; number++) {
+        __m256 z1 = _mm256_load_ps(in);
+        in += 8;
+        __m256 z2 = _mm256_load_ps(in);
+        in += 8;
+
+        __m256 x = _mm256_real(z1, z2);
+        __m256 y = _mm256_imag(z1, z2);
+
+        // Detect NaN in original inputs before division
+        __m256 input_nan_mask = _mm256_or_ps(_mm256_cmp_ps(x, x, _CMP_UNORD_Q),
+                                             _mm256_cmp_ps(y, y, _CMP_UNORD_Q));
+
+        // Handle infinity cases per IEEE 754
+        const __m256 zero = _mm256_setzero_ps();
+        const __m256 inf = _mm256_set1_ps(HUGE_VALF);
+        const __m256 pi_4 = _mm256_set1_ps(0x1.921fb6p-1f);      // π/4
+        const __m256 three_pi_4 = _mm256_set1_ps(0x1.2d97c8p1f); // 3π/4
+
+        __m256 y_abs = _mm256_and_ps(y, abs_mask);
+        __m256 x_abs = _mm256_and_ps(x, abs_mask);
+        __m256 y_inf_mask = _mm256_cmp_ps(y_abs, inf, _CMP_EQ_OQ); // |y| == inf
+        __m256 x_inf_mask = _mm256_cmp_ps(x_abs, inf, _CMP_EQ_OQ); // |x| == inf
+        __m256 x_pos_mask = _mm256_cmp_ps(x, zero, _CMP_GT_OS);
+
+        // Build infinity result
+        __m256 inf_result = zero;
+        // Both infinite: ±π/4 or ±3π/4
+        __m256 both_inf = _mm256_and_ps(y_inf_mask, x_inf_mask);
+        __m256 both_inf_result = _mm256_blendv_ps(three_pi_4, pi_4, x_pos_mask);
+        both_inf_result = _mm256_or_ps(both_inf_result, _mm256_and_ps(y, sign_mask));
+        inf_result = _mm256_blendv_ps(inf_result, both_inf_result, both_inf);
+
+        // y infinite, x finite: ±π/2
+        __m256 y_inf_only = _mm256_andnot_ps(x_inf_mask, y_inf_mask);
+        __m256 y_inf_result = _mm256_or_ps(pi_2, _mm256_and_ps(y, sign_mask));
+        inf_result = _mm256_blendv_ps(inf_result, y_inf_result, y_inf_only);
+
+        // x infinite, y finite: 0 or ±π
+        __m256 x_inf_only = _mm256_andnot_ps(y_inf_mask, x_inf_mask);
+        __m256 x_inf_result =
+            _mm256_blendv_ps(_mm256_or_ps(pi, _mm256_and_ps(y, sign_mask)),
+                             _mm256_or_ps(zero, _mm256_and_ps(y, sign_mask)),
+                             x_pos_mask);
+        inf_result = _mm256_blendv_ps(inf_result, x_inf_result, x_inf_only);
+
+        __m256 any_inf_mask = _mm256_or_ps(y_inf_mask, x_inf_mask);
+
+        __m256 swap_mask = _mm256_cmp_ps(
+            _mm256_and_ps(y, abs_mask), _mm256_and_ps(x, abs_mask), _CMP_GT_OS);
+        __m256 numerator = _mm256_blendv_ps(y, x, swap_mask);
+        __m256 denominator = _mm256_blendv_ps(x, y, swap_mask);
+        __m256 input = _mm256_div_ps(numerator, denominator);
+
+        // Only handle NaN from division (0/0, inf/inf), not from NaN inputs
+        // Replace with numerator to preserve sign (e.g., atan2(-0, 0) = -0)
+        __m256 div_nan_mask =
+            _mm256_andnot_ps(input_nan_mask, _mm256_cmp_ps(input, input, _CMP_UNORD_Q));
+        input = _mm256_blendv_ps(input, numerator, div_nan_mask);
+        __m256 result = _mm256_arctan_poly_avx2_fma(input);
+
+        input =
+            _mm256_sub_ps(_mm256_or_ps(pi_2, _mm256_and_ps(input, sign_mask)), result);
+        result = _mm256_blendv_ps(result, input, swap_mask);
+
+        __m256 x_sign_mask =
+            _mm256_castsi256_ps(_mm256_srai_epi32(_mm256_castps_si256(x), 31));
+
+        result = _mm256_add_ps(
+            _mm256_and_ps(_mm256_xor_ps(pi, _mm256_and_ps(sign_mask, y)), x_sign_mask),
+            result);
+
+        // Select infinity result or normal result
+        result = _mm256_blendv_ps(result, inf_result, any_inf_mask);
+
+        result = _mm256_mul_ps(result, vinvNormalizeFactor);
+
+        _mm256_store_ps(out, result);
+        out += 8;
+    }
+
+    number = eighth_points * 8;
+    volk_32fc_s32f_atan2_32f_polynomial(
+        out, (const lv_32fc_t*)in, normalizeFactor, num_points - number);
+}
+#endif /* LV_HAVE_AVX2 && LV_HAVE_FMA */
 
 #if LV_HAVE_AVX512F && LV_HAVE_AVX512DQ
 #include <immintrin.h>
