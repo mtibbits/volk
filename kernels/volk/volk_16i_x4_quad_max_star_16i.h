@@ -20,8 +20,8 @@
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_16i_x4_quad_max_star_16i(short* target, short* src0, short* src1, short*
- * src2, short* src3, unsigned int num_points) \endcode
+ * void volk_16i_x4_quad_max_star_16i(short* target, const const short* src0, const const short* src1,
+ * const const short* src2, const const short* src3, unsigned int num_points) \endcode
  *
  * \b Inputs
  * \li src0: The input vector 0.
@@ -53,10 +53,10 @@
 #include <emmintrin.h>
 
 static inline void volk_16i_x4_quad_max_star_16i_a_sse2(short* target,
-                                                        short* src0,
-                                                        short* src1,
-                                                        short* src2,
-                                                        short* src3,
+                                                        const short* src0,
+                                                        const short* src1,
+                                                        const short* src2,
+                                                        const short* src3,
                                                         unsigned int num_points)
 {
     const unsigned int num_bytes = num_points * 2;
@@ -140,10 +140,10 @@ static inline void volk_16i_x4_quad_max_star_16i_a_sse2(short* target,
 #include <arm_neon.h>
 
 static inline void volk_16i_x4_quad_max_star_16i_neon(short* target,
-                                                      short* src0,
-                                                      short* src1,
-                                                      short* src2,
-                                                      short* src3,
+                                                      const short* src0,
+                                                      const short* src1,
+                                                      const short* src2,
+                                                      const short* src3,
                                                       unsigned int num_points)
 {
     const unsigned int eighth_points = num_points / 8;
@@ -205,10 +205,10 @@ static inline void volk_16i_x4_quad_max_star_16i_neon(short* target,
 
 #ifdef LV_HAVE_GENERIC
 static inline void volk_16i_x4_quad_max_star_16i_generic(short* target,
-                                                         short* src0,
-                                                         short* src1,
-                                                         short* src2,
-                                                         short* src3,
+                                                         const short* src0,
+                                                         const short* src1,
+                                                         const short* src2,
+                                                         const short* src3,
                                                          unsigned int num_points)
 {
     const unsigned int num_bytes = num_points * 2;

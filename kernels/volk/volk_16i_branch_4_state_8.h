@@ -57,20 +57,21 @@
 #include <xmmintrin.h>
 
 static inline void volk_16i_branch_4_state_8_a_ssse3(short* target,
-                                                     short* src0,
-                                                     char** permuters,
-                                                     short* cntl2,
-                                                     short* cntl3,
-                                                     short* scalars)
+                                                     const short* src0,
+                                                     const char* const* permuters,
+                                                     const short* cntl2,
+                                                     const short* cntl3,
+                                                     const short* scalars)
 {
     __m128i xmm0, xmm1, xmm2, xmm3, xmm4, xmm5, xmm6, xmm7, xmm8, xmm9, xmm10, xmm11;
-    __m128i *p_target, *p_src0, *p_cntl2, *p_cntl3, *p_scalars;
+    __m128i* p_target;
+    const __m128i *p_src0, *p_cntl2, *p_cntl3, *p_scalars;
 
     p_target = (__m128i*)target;
-    p_src0 = (__m128i*)src0;
-    p_cntl2 = (__m128i*)cntl2;
-    p_cntl3 = (__m128i*)cntl3;
-    p_scalars = (__m128i*)scalars;
+    p_src0 = (const __m128i*)src0;
+    p_cntl2 = (const __m128i*)cntl2;
+    p_cntl3 = (const __m128i*)cntl3;
+    p_scalars = (const __m128i*)scalars;
 
     xmm0 = _mm_load_si128(p_scalars);
 
@@ -84,10 +85,10 @@ static inline void volk_16i_branch_4_state_8_a_ssse3(short* target,
     xmm3 = _mm_shuffle_epi32(xmm3, 0x00);
     xmm4 = _mm_shuffle_epi32(xmm4, 0x00);
 
-    xmm0 = _mm_load_si128((__m128i*)permuters[0]);
-    xmm6 = _mm_load_si128((__m128i*)permuters[1]);
-    xmm8 = _mm_load_si128((__m128i*)permuters[2]);
-    xmm10 = _mm_load_si128((__m128i*)permuters[3]);
+    xmm0 = _mm_load_si128((const __m128i*)permuters[0]);
+    xmm6 = _mm_load_si128((const __m128i*)permuters[1]);
+    xmm8 = _mm_load_si128((const __m128i*)permuters[2]);
+    xmm10 = _mm_load_si128((const __m128i*)permuters[3]);
 
     xmm5 = _mm_load_si128(p_src0);
     xmm0 = _mm_shuffle_epi8(xmm5, xmm0);
@@ -157,11 +158,11 @@ static inline void volk_16i_branch_4_state_8_a_ssse3(short* target,
 
 #ifdef LV_HAVE_GENERIC
 static inline void volk_16i_branch_4_state_8_generic(short* target,
-                                                     short* src0,
-                                                     char** permuters,
-                                                     short* cntl2,
-                                                     short* cntl3,
-                                                     short* scalars)
+                                                     const short* src0,
+                                                     const char* const* permuters,
+                                                     const short* cntl2,
+                                                     const short* cntl3,
+                                                     const short* scalars)
 {
     int i = 0;
 

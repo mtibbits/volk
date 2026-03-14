@@ -59,13 +59,13 @@
 #include <xmmintrin.h>
 
 static inline void volk_16i_permute_and_scalar_add_a_sse2(short* target,
-                                                          short* src0,
-                                                          short* permute_indexes,
-                                                          short* cntl0,
-                                                          short* cntl1,
-                                                          short* cntl2,
-                                                          short* cntl3,
-                                                          short* scalars,
+                                                          const short* src0,
+                                                          const short* permute_indexes,
+                                                          const short* cntl0,
+                                                          const short* cntl1,
+                                                          const short* cntl2,
+                                                          const short* cntl3,
+                                                          const short* scalars,
                                                           unsigned int num_points)
 {
 
@@ -73,16 +73,17 @@ static inline void volk_16i_permute_and_scalar_add_a_sse2(short* target,
 
     __m128i xmm0, xmm1, xmm2, xmm3, xmm4, xmm5, xmm6, xmm7;
 
-    __m128i *p_target, *p_cntl0, *p_cntl1, *p_cntl2, *p_cntl3, *p_scalars;
+    __m128i* p_target;
+    const __m128i *p_cntl0, *p_cntl1, *p_cntl2, *p_cntl3, *p_scalars;
 
-    short* p_permute_indexes = permute_indexes;
+    const short* p_permute_indexes = permute_indexes;
 
     p_target = (__m128i*)target;
-    p_cntl0 = (__m128i*)cntl0;
-    p_cntl1 = (__m128i*)cntl1;
-    p_cntl2 = (__m128i*)cntl2;
-    p_cntl3 = (__m128i*)cntl3;
-    p_scalars = (__m128i*)scalars;
+    p_cntl0 = (const __m128i*)cntl0;
+    p_cntl1 = (const __m128i*)cntl1;
+    p_cntl2 = (const __m128i*)cntl2;
+    p_cntl3 = (const __m128i*)cntl3;
+    p_scalars = (const __m128i*)scalars;
 
     int i = 0;
 
@@ -167,13 +168,13 @@ static inline void volk_16i_permute_and_scalar_add_a_sse2(short* target,
 
 #ifdef LV_HAVE_GENERIC
 static inline void volk_16i_permute_and_scalar_add_generic(short* target,
-                                                           short* src0,
-                                                           short* permute_indexes,
-                                                           short* cntl0,
-                                                           short* cntl1,
-                                                           short* cntl2,
-                                                           short* cntl3,
-                                                           short* scalars,
+                                                           const short* src0,
+                                                           const short* permute_indexes,
+                                                           const short* cntl0,
+                                                           const short* cntl1,
+                                                           const short* cntl2,
+                                                           const short* cntl3,
+                                                           const short* scalars,
                                                            unsigned int num_points)
 {
     const unsigned int num_bytes = num_points * 2;

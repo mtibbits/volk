@@ -21,7 +21,7 @@
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_16i_max_star_horizontal_16i(short* target, short* src0, unsigned int
+ * void volk_16i_max_star_horizontal_16i(short* target, const short* src0, unsigned int
  * num_points); \endcode
  *
  * \b Inputs
@@ -58,7 +58,7 @@
 #include <xmmintrin.h>
 
 static inline void volk_16i_max_star_horizontal_16i_a_ssse3(int16_t* target,
-                                                            int16_t* src0,
+                                                            const int16_t* src0,
                                                             unsigned int num_points)
 {
     const unsigned int num_bytes = num_points * 2;
@@ -162,7 +162,7 @@ static inline void volk_16i_max_star_horizontal_16i_a_ssse3(int16_t* target,
 
 #include <arm_neon.h>
 static inline void volk_16i_max_star_horizontal_16i_neon(int16_t* target,
-                                                         int16_t* src0,
+                                                         const int16_t* src0,
                                                          unsigned int num_points)
 {
     const unsigned int eighth_points = num_points / 16;
@@ -196,13 +196,13 @@ static inline void volk_16i_max_star_horizontal_16i_neon(int16_t* target,
 
 #ifdef LV_HAVE_NEONV7
 extern void volk_16i_max_star_horizontal_16i_a_neonasm(int16_t* target,
-                                                       int16_t* src0,
+                                                       const int16_t* src0,
                                                        unsigned int num_points);
 #endif /* LV_HAVE_NEONV7 */
 
 #ifdef LV_HAVE_GENERIC
 static inline void volk_16i_max_star_horizontal_16i_generic(int16_t* target,
-                                                            int16_t* src0,
+                                                            const int16_t* src0,
                                                             unsigned int num_points)
 {
     const unsigned int num_bytes = num_points * 2;

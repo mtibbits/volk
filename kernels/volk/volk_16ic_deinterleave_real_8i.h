@@ -53,7 +53,7 @@ static inline void volk_16ic_deinterleave_real_8i_a_avx2(int8_t* iBuffer,
                                                          unsigned int num_points)
 {
     unsigned int number = 0;
-    const int8_t* complexVectorPtr = (int8_t*)complexVector;
+    const int8_t* complexVectorPtr = (const int8_t*)complexVector;
     int8_t* iBufferPtr = iBuffer;
     __m256i iMoveMask1 = _mm256_set_epi8(0x80,
                                          0x80,
@@ -124,14 +124,14 @@ static inline void volk_16ic_deinterleave_real_8i_a_avx2(int8_t* iBuffer,
     unsigned int thirtysecondPoints = num_points / 32;
 
     for (number = 0; number < thirtysecondPoints; number++) {
-        complexVal1 = _mm256_load_si256((__m256i*)complexVectorPtr);
+        complexVal1 = _mm256_load_si256((const __m256i*)complexVectorPtr);
         complexVectorPtr += 32;
-        complexVal2 = _mm256_load_si256((__m256i*)complexVectorPtr);
+        complexVal2 = _mm256_load_si256((const __m256i*)complexVectorPtr);
         complexVectorPtr += 32;
 
-        complexVal3 = _mm256_load_si256((__m256i*)complexVectorPtr);
+        complexVal3 = _mm256_load_si256((const __m256i*)complexVectorPtr);
         complexVectorPtr += 32;
-        complexVal4 = _mm256_load_si256((__m256i*)complexVectorPtr);
+        complexVal4 = _mm256_load_si256((const __m256i*)complexVectorPtr);
         complexVectorPtr += 32;
 
         complexVal1 = _mm256_shuffle_epi8(complexVal1, iMoveMask1);
@@ -158,7 +158,7 @@ static inline void volk_16ic_deinterleave_real_8i_a_avx2(int8_t* iBuffer,
     }
 
     number = thirtysecondPoints * 32;
-    int16_t* int16ComplexVectorPtr = (int16_t*)complexVectorPtr;
+    const int16_t* int16ComplexVectorPtr = (const int16_t*)complexVectorPtr;
     for (; number < num_points; number++) {
         *iBufferPtr++ = ((int8_t)(*int16ComplexVectorPtr++ >> 8));
         int16ComplexVectorPtr++;
@@ -175,7 +175,7 @@ static inline void volk_16ic_deinterleave_real_8i_a_ssse3(int8_t* iBuffer,
                                                           unsigned int num_points)
 {
     unsigned int number = 0;
-    const int8_t* complexVectorPtr = (int8_t*)complexVector;
+    const int8_t* complexVectorPtr = (const int8_t*)complexVector;
     int8_t* iBufferPtr = iBuffer;
     __m128i iMoveMask1 = _mm_set_epi8(
         0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 13, 12, 9, 8, 5, 4, 1, 0);
@@ -186,14 +186,14 @@ static inline void volk_16ic_deinterleave_real_8i_a_ssse3(int8_t* iBuffer,
     unsigned int sixteenthPoints = num_points / 16;
 
     for (number = 0; number < sixteenthPoints; number++) {
-        complexVal1 = _mm_load_si128((__m128i*)complexVectorPtr);
+        complexVal1 = _mm_load_si128((const __m128i*)complexVectorPtr);
         complexVectorPtr += 16;
-        complexVal2 = _mm_load_si128((__m128i*)complexVectorPtr);
+        complexVal2 = _mm_load_si128((const __m128i*)complexVectorPtr);
         complexVectorPtr += 16;
 
-        complexVal3 = _mm_load_si128((__m128i*)complexVectorPtr);
+        complexVal3 = _mm_load_si128((const __m128i*)complexVectorPtr);
         complexVectorPtr += 16;
-        complexVal4 = _mm_load_si128((__m128i*)complexVectorPtr);
+        complexVal4 = _mm_load_si128((const __m128i*)complexVectorPtr);
         complexVectorPtr += 16;
 
         complexVal1 = _mm_shuffle_epi8(complexVal1, iMoveMask1);
@@ -218,7 +218,7 @@ static inline void volk_16ic_deinterleave_real_8i_a_ssse3(int8_t* iBuffer,
     }
 
     number = sixteenthPoints * 16;
-    int16_t* int16ComplexVectorPtr = (int16_t*)complexVectorPtr;
+    const int16_t* int16ComplexVectorPtr = (const int16_t*)complexVectorPtr;
     for (; number < num_points; number++) {
         *iBufferPtr++ = ((int8_t)(*int16ComplexVectorPtr++ >> 8));
         int16ComplexVectorPtr++;
@@ -233,7 +233,7 @@ static inline void volk_16ic_deinterleave_real_8i_generic(int8_t* iBuffer,
                                                           unsigned int num_points)
 {
     unsigned int number = 0;
-    int16_t* complexVectorPtr = (int16_t*)complexVector;
+    const int16_t* complexVectorPtr = (const int16_t*)complexVector;
     int8_t* iBufferPtr = iBuffer;
     for (number = 0; number < num_points; number++) {
         *iBufferPtr++ = ((int8_t)(*complexVectorPtr++ >> 8));
@@ -336,7 +336,7 @@ static inline void volk_16ic_deinterleave_real_8i_u_avx2(int8_t* iBuffer,
                                                          unsigned int num_points)
 {
     unsigned int number = 0;
-    const int8_t* complexVectorPtr = (int8_t*)complexVector;
+    const int8_t* complexVectorPtr = (const int8_t*)complexVector;
     int8_t* iBufferPtr = iBuffer;
     __m256i iMoveMask1 = _mm256_set_epi8(0x80,
                                          0x80,
@@ -407,14 +407,14 @@ static inline void volk_16ic_deinterleave_real_8i_u_avx2(int8_t* iBuffer,
     unsigned int thirtysecondPoints = num_points / 32;
 
     for (number = 0; number < thirtysecondPoints; number++) {
-        complexVal1 = _mm256_loadu_si256((__m256i*)complexVectorPtr);
+        complexVal1 = _mm256_loadu_si256((const __m256i*)complexVectorPtr);
         complexVectorPtr += 32;
-        complexVal2 = _mm256_loadu_si256((__m256i*)complexVectorPtr);
+        complexVal2 = _mm256_loadu_si256((const __m256i*)complexVectorPtr);
         complexVectorPtr += 32;
 
-        complexVal3 = _mm256_loadu_si256((__m256i*)complexVectorPtr);
+        complexVal3 = _mm256_loadu_si256((const __m256i*)complexVectorPtr);
         complexVectorPtr += 32;
-        complexVal4 = _mm256_loadu_si256((__m256i*)complexVectorPtr);
+        complexVal4 = _mm256_loadu_si256((const __m256i*)complexVectorPtr);
         complexVectorPtr += 32;
 
         complexVal1 = _mm256_shuffle_epi8(complexVal1, iMoveMask1);
@@ -441,7 +441,7 @@ static inline void volk_16ic_deinterleave_real_8i_u_avx2(int8_t* iBuffer,
     }
 
     number = thirtysecondPoints * 32;
-    int16_t* int16ComplexVectorPtr = (int16_t*)complexVectorPtr;
+    const int16_t* int16ComplexVectorPtr = (const int16_t*)complexVectorPtr;
     for (; number < num_points; number++) {
         *iBufferPtr++ = ((int8_t)(*int16ComplexVectorPtr++ >> 8));
         int16ComplexVectorPtr++;
