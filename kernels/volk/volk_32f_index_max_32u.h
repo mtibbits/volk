@@ -80,11 +80,11 @@ volk_32f_index_max_32u_generic(uint32_t* target, const float* src0, uint32_t num
 #endif /*LV_HAVE_GENERIC*/
 
 
-#ifdef LV_HAVE_SSE
-#include <xmmintrin.h>
+#ifdef LV_HAVE_SSE2
+#include <emmintrin.h>
 
 static inline void
-volk_32f_index_max_32u_u_sse(uint32_t* target, const float* src0, uint32_t num_points)
+volk_32f_index_max_32u_u_sse2(uint32_t* target, const float* src0, uint32_t num_points)
 {
     if (num_points > 0) {
         uint32_t number = 0;
@@ -92,33 +92,34 @@ volk_32f_index_max_32u_u_sse(uint32_t* target, const float* src0, uint32_t num_p
 
         const float* inputPtr = src0;
 
-        __m128 indexIncrementValues = _mm_set1_ps(4);
-        __m128 currentIndexes = _mm_set_ps(-1, -2, -3, -4);
+        __m128i indexIncrementValues = _mm_set1_epi32(4);
+        __m128i currentIndexes = _mm_set_epi32(-1, -2, -3, -4);
 
         float max = src0[0];
-        float index = 0;
+        uint32_t index = 0;
         __m128 maxValues = _mm_set1_ps(max);
-        __m128 maxValuesIndex = _mm_setzero_ps();
+        __m128i maxValuesIndex = _mm_setzero_si128();
         __m128 compareResults;
         __m128 currentValues;
 
         __VOLK_ATTR_ALIGNED(16) float maxValuesBuffer[4];
-        __VOLK_ATTR_ALIGNED(16) float maxIndexesBuffer[4];
+        __VOLK_ATTR_ALIGNED(16) uint32_t maxIndexesBuffer[4];
 
         for (; number < quarterPoints; number++) {
             currentValues = _mm_loadu_ps(inputPtr);
             inputPtr += 4;
-            currentIndexes = _mm_add_ps(currentIndexes, indexIncrementValues);
+            currentIndexes = _mm_add_epi32(currentIndexes, indexIncrementValues);
             compareResults = _mm_cmpgt_ps(currentValues, maxValues);
-            maxValuesIndex = _mm_or_ps(_mm_and_ps(compareResults, currentIndexes),
-                                       _mm_andnot_ps(compareResults, maxValuesIndex));
+            __m128i cmpMask = _mm_castps_si128(compareResults);
+            maxValuesIndex = _mm_or_si128(_mm_and_si128(cmpMask, currentIndexes),
+                                          _mm_andnot_si128(cmpMask, maxValuesIndex));
             maxValues = _mm_or_ps(_mm_and_ps(compareResults, currentValues),
                                   _mm_andnot_ps(compareResults, maxValues));
         }
 
         // Calculate the largest value from the remaining 4 points
         _mm_store_ps(maxValuesBuffer, maxValues);
-        _mm_store_ps(maxIndexesBuffer, maxValuesIndex);
+        _mm_store_si128((__m128i*)maxIndexesBuffer, maxValuesIndex);
 
         for (number = 0; number < 4; number++) {
             if (maxValuesBuffer[number] > max) {
@@ -137,11 +138,11 @@ volk_32f_index_max_32u_u_sse(uint32_t* target, const float* src0, uint32_t num_p
                 max = src0[number];
             }
         }
-        target[0] = (uint32_t)index;
+        target[0] = index;
     }
 }
 
-#endif /*LV_HAVE_SSE*/
+#endif /*LV_HAVE_SSE2*/
 
 
 #ifdef LV_HAVE_SSE4_1
@@ -156,32 +157,33 @@ volk_32f_index_max_32u_u_sse4_1(uint32_t* target, const float* src0, uint32_t nu
 
         const float* inputPtr = src0;
 
-        __m128 indexIncrementValues = _mm_set1_ps(4);
-        __m128 currentIndexes = _mm_set_ps(-1, -2, -3, -4);
+        __m128i indexIncrementValues = _mm_set1_epi32(4);
+        __m128i currentIndexes = _mm_set_epi32(-1, -2, -3, -4);
 
         float max = src0[0];
-        float index = 0;
+        uint32_t index = 0;
         __m128 maxValues = _mm_set1_ps(max);
-        __m128 maxValuesIndex = _mm_setzero_ps();
+        __m128i maxValuesIndex = _mm_setzero_si128();
         __m128 compareResults;
         __m128 currentValues;
 
         __VOLK_ATTR_ALIGNED(16) float maxValuesBuffer[4];
-        __VOLK_ATTR_ALIGNED(16) float maxIndexesBuffer[4];
+        __VOLK_ATTR_ALIGNED(16) uint32_t maxIndexesBuffer[4];
 
         for (; number < quarterPoints; number++) {
             currentValues = _mm_loadu_ps(inputPtr);
             inputPtr += 4;
-            currentIndexes = _mm_add_ps(currentIndexes, indexIncrementValues);
+            currentIndexes = _mm_add_epi32(currentIndexes, indexIncrementValues);
             compareResults = _mm_cmpgt_ps(currentValues, maxValues);
+            __m128i cmpMask = _mm_castps_si128(compareResults);
             maxValuesIndex =
-                _mm_blendv_ps(maxValuesIndex, currentIndexes, compareResults);
+                _mm_blendv_epi8(maxValuesIndex, currentIndexes, cmpMask);
             maxValues = _mm_blendv_ps(maxValues, currentValues, compareResults);
         }
 
         // Calculate the largest value from the remaining 4 points
         _mm_store_ps(maxValuesBuffer, maxValues);
-        _mm_store_ps(maxIndexesBuffer, maxValuesIndex);
+        _mm_store_si128((__m128i*)maxIndexesBuffer, maxValuesIndex);
 
         for (number = 0; number < 4; number++) {
             if (maxValuesBuffer[number] > max) {
@@ -200,18 +202,18 @@ volk_32f_index_max_32u_u_sse4_1(uint32_t* target, const float* src0, uint32_t nu
                 max = src0[number];
             }
         }
-        target[0] = (uint32_t)index;
+        target[0] = index;
     }
 }
 
 #endif /*LV_HAVE_SSE4_1*/
 
 
-#ifdef LV_HAVE_AVX
+#ifdef LV_HAVE_AVX2
 #include <immintrin.h>
 
 static inline void
-volk_32f_index_max_32u_u_avx(uint32_t* target, const float* src0, uint32_t num_points)
+volk_32f_index_max_32u_u_avx2(uint32_t* target, const float* src0, uint32_t num_points)
 {
     if (num_points > 0) {
         uint32_t number = 0;
@@ -219,32 +221,33 @@ volk_32f_index_max_32u_u_avx(uint32_t* target, const float* src0, uint32_t num_p
 
         const float* inputPtr = src0;
 
-        __m256 indexIncrementValues = _mm256_set1_ps(8);
-        __m256 currentIndexes = _mm256_set_ps(-1, -2, -3, -4, -5, -6, -7, -8);
+        __m256i indexIncrementValues = _mm256_set1_epi32(8);
+        __m256i currentIndexes = _mm256_set_epi32(-1, -2, -3, -4, -5, -6, -7, -8);
 
         float max = src0[0];
-        float index = 0;
+        uint32_t index = 0;
         __m256 maxValues = _mm256_set1_ps(max);
-        __m256 maxValuesIndex = _mm256_setzero_ps();
+        __m256i maxValuesIndex = _mm256_setzero_si256();
         __m256 compareResults;
         __m256 currentValues;
 
         __VOLK_ATTR_ALIGNED(32) float maxValuesBuffer[8];
-        __VOLK_ATTR_ALIGNED(32) float maxIndexesBuffer[8];
+        __VOLK_ATTR_ALIGNED(32) uint32_t maxIndexesBuffer[8];
 
         for (; number < quarterPoints; number++) {
             currentValues = _mm256_loadu_ps(inputPtr);
             inputPtr += 8;
-            currentIndexes = _mm256_add_ps(currentIndexes, indexIncrementValues);
+            currentIndexes = _mm256_add_epi32(currentIndexes, indexIncrementValues);
             compareResults = _mm256_cmp_ps(currentValues, maxValues, _CMP_GT_OS);
+            __m256i cmpMask = _mm256_castps_si256(compareResults);
             maxValuesIndex =
-                _mm256_blendv_ps(maxValuesIndex, currentIndexes, compareResults);
+                _mm256_blendv_epi8(maxValuesIndex, currentIndexes, cmpMask);
             maxValues = _mm256_blendv_ps(maxValues, currentValues, compareResults);
         }
 
         // Calculate the largest value from the remaining 8 points
         _mm256_store_ps(maxValuesBuffer, maxValues);
-        _mm256_store_ps(maxIndexesBuffer, maxValuesIndex);
+        _mm256_store_si256((__m256i*)maxIndexesBuffer, maxValuesIndex);
 
         for (number = 0; number < 8; number++) {
             if (maxValuesBuffer[number] > max) {
@@ -263,11 +266,11 @@ volk_32f_index_max_32u_u_avx(uint32_t* target, const float* src0, uint32_t num_p
                 max = src0[number];
             }
         }
-        target[0] = (uint32_t)index;
+        target[0] = index;
     }
 }
 
-#endif /*LV_HAVE_AVX*/
+#endif /*LV_HAVE_AVX2*/
 
 
 #ifdef LV_HAVE_AVX512F
@@ -282,33 +285,33 @@ volk_32f_index_max_32u_u_avx512f(uint32_t* target, const float* src0, uint32_t n
 
         const float* inputPtr = src0;
 
-        __m512 indexIncrementValues = _mm512_set1_ps(16);
-        __m512 currentIndexes = _mm512_set_ps(
+        __m512i indexIncrementValues = _mm512_set1_epi32(16);
+        __m512i currentIndexes = _mm512_set_epi32(
             -1, -2, -3, -4, -5, -6, -7, -8, -9, -10, -11, -12, -13, -14, -15, -16);
 
         float max = src0[0];
-        float index = 0;
+        uint32_t index = 0;
         __m512 maxValues = _mm512_set1_ps(max);
-        __m512 maxValuesIndex = _mm512_setzero_ps();
+        __m512i maxValuesIndex = _mm512_setzero_si512();
         __mmask16 compareResults;
         __m512 currentValues;
 
         __VOLK_ATTR_ALIGNED(64) float maxValuesBuffer[16];
-        __VOLK_ATTR_ALIGNED(64) float maxIndexesBuffer[16];
+        __VOLK_ATTR_ALIGNED(64) uint32_t maxIndexesBuffer[16];
 
         for (; number < sixteenthPoints; number++) {
             currentValues = _mm512_loadu_ps(inputPtr);
             inputPtr += 16;
-            currentIndexes = _mm512_add_ps(currentIndexes, indexIncrementValues);
+            currentIndexes = _mm512_add_epi32(currentIndexes, indexIncrementValues);
             compareResults = _mm512_cmp_ps_mask(currentValues, maxValues, _CMP_GT_OS);
             maxValuesIndex =
-                _mm512_mask_blend_ps(compareResults, maxValuesIndex, currentIndexes);
+                _mm512_mask_blend_epi32(compareResults, maxValuesIndex, currentIndexes);
             maxValues = _mm512_mask_blend_ps(compareResults, maxValues, currentValues);
         }
 
         // Calculate the largest value from the remaining 16 points
         _mm512_store_ps(maxValuesBuffer, maxValues);
-        _mm512_store_ps(maxIndexesBuffer, maxValuesIndex);
+        _mm512_store_si512(maxIndexesBuffer, maxValuesIndex);
 
         for (number = 0; number < 16; number++) {
             if (maxValuesBuffer[number] > max) {
@@ -327,7 +330,7 @@ volk_32f_index_max_32u_u_avx512f(uint32_t* target, const float* src0, uint32_t n
                 max = src0[number];
             }
         }
-        target[0] = (uint32_t)index;
+        target[0] = index;
     }
 }
 
@@ -351,7 +354,7 @@ volk_32f_index_max_32u_neon(uint32_t* target, const float* src0, uint32_t num_po
         float32x4_t currentIndexes = vld1q_f32(currentIndexes_float);
 
         float max = src0[0];
-        float index = 0;
+        uint32_t index = 0;
         float32x4_t maxValues = vdupq_n_f32(max);
         uint32x4_t maxValuesIndex = vmovq_n_u32(0);
         uint32x4_t compareResults;
@@ -359,7 +362,7 @@ volk_32f_index_max_32u_neon(uint32_t* target, const float* src0, uint32_t num_po
         float32x4_t currentValues;
 
         __VOLK_ATTR_ALIGNED(16) float maxValuesBuffer[4];
-        __VOLK_ATTR_ALIGNED(16) float maxIndexesBuffer[4];
+        __VOLK_ATTR_ALIGNED(16) uint32_t maxIndexesBuffer[4];
 
         for (; number < quarterPoints; number++) {
             currentValues = vld1q_f32(inputPtr);
@@ -374,7 +377,7 @@ volk_32f_index_max_32u_neon(uint32_t* target, const float* src0, uint32_t num_po
 
         // Calculate the largest value from the remaining 4 points
         vst1q_f32(maxValuesBuffer, maxValues);
-        vst1q_f32(maxIndexesBuffer, vcvtq_f32_u32(maxValuesIndex));
+        vst1q_u32(maxIndexesBuffer, maxValuesIndex);
         for (number = 0; number < 4; number++) {
             if (maxValuesBuffer[number] > max) {
                 index = maxIndexesBuffer[number];
@@ -392,7 +395,7 @@ volk_32f_index_max_32u_neon(uint32_t* target, const float* src0, uint32_t num_po
                 max = src0[number];
             }
         }
-        target[0] = (uint32_t)index;
+        target[0] = index;
     }
 }
 
@@ -499,11 +502,11 @@ volk_32f_index_max_32u_rvv(uint32_t* target, const float* src0, uint32_t num_poi
 #include <stdio.h>
 #include <volk/volk_common.h>
 
-#ifdef LV_HAVE_SSE
-#include <xmmintrin.h>
+#ifdef LV_HAVE_SSE2
+#include <emmintrin.h>
 
 static inline void
-volk_32f_index_max_32u_a_sse(uint32_t* target, const float* src0, uint32_t num_points)
+volk_32f_index_max_32u_a_sse2(uint32_t* target, const float* src0, uint32_t num_points)
 {
     if (num_points > 0) {
         uint32_t number = 0;
@@ -511,29 +514,30 @@ volk_32f_index_max_32u_a_sse(uint32_t* target, const float* src0, uint32_t num_p
 
         const float* inputPtr = src0;
 
-        __m128 indexIncrementValues = _mm_set1_ps(4);
-        __m128 currentIndexes = _mm_set_ps(-1, -2, -3, -4);
+        __m128i indexIncrementValues = _mm_set1_epi32(4);
+        __m128i currentIndexes = _mm_set_epi32(-1, -2, -3, -4);
 
         float max = src0[0];
-        float index = 0;
+        uint32_t index = 0;
         __m128 maxValues = _mm_set1_ps(max);
-        __m128 maxValuesIndex = _mm_setzero_ps();
+        __m128i maxValuesIndex = _mm_setzero_si128();
         __m128 compareResults;
         __m128 currentValues;
 
         __VOLK_ATTR_ALIGNED(16) float maxValuesBuffer[4];
-        __VOLK_ATTR_ALIGNED(16) float maxIndexesBuffer[4];
+        __VOLK_ATTR_ALIGNED(16) uint32_t maxIndexesBuffer[4];
 
         for (; number < quarterPoints; number++) {
 
             currentValues = _mm_load_ps(inputPtr);
             inputPtr += 4;
-            currentIndexes = _mm_add_ps(currentIndexes, indexIncrementValues);
+            currentIndexes = _mm_add_epi32(currentIndexes, indexIncrementValues);
 
             compareResults = _mm_cmpgt_ps(currentValues, maxValues);
 
-            maxValuesIndex = _mm_or_ps(_mm_and_ps(compareResults, currentIndexes),
-                                       _mm_andnot_ps(compareResults, maxValuesIndex));
+            __m128i cmpMask = _mm_castps_si128(compareResults);
+            maxValuesIndex = _mm_or_si128(_mm_and_si128(cmpMask, currentIndexes),
+                                          _mm_andnot_si128(cmpMask, maxValuesIndex));
 
             maxValues = _mm_or_ps(_mm_and_ps(compareResults, currentValues),
                                   _mm_andnot_ps(compareResults, maxValues));
@@ -541,7 +545,7 @@ volk_32f_index_max_32u_a_sse(uint32_t* target, const float* src0, uint32_t num_p
 
         // Calculate the largest value from the remaining 4 points
         _mm_store_ps(maxValuesBuffer, maxValues);
-        _mm_store_ps(maxIndexesBuffer, maxValuesIndex);
+        _mm_store_si128((__m128i*)maxIndexesBuffer, maxValuesIndex);
 
         for (number = 0; number < 4; number++) {
             if (maxValuesBuffer[number] > max) {
@@ -560,11 +564,11 @@ volk_32f_index_max_32u_a_sse(uint32_t* target, const float* src0, uint32_t num_p
                 max = src0[number];
             }
         }
-        target[0] = (uint32_t)index;
+        target[0] = index;
     }
 }
 
-#endif /*LV_HAVE_SSE*/
+#endif /*LV_HAVE_SSE2*/
 
 
 #ifdef LV_HAVE_SSE4_1
@@ -579,35 +583,36 @@ volk_32f_index_max_32u_a_sse4_1(uint32_t* target, const float* src0, uint32_t nu
 
         const float* inputPtr = src0;
 
-        __m128 indexIncrementValues = _mm_set1_ps(4);
-        __m128 currentIndexes = _mm_set_ps(-1, -2, -3, -4);
+        __m128i indexIncrementValues = _mm_set1_epi32(4);
+        __m128i currentIndexes = _mm_set_epi32(-1, -2, -3, -4);
 
         float max = src0[0];
-        float index = 0;
+        uint32_t index = 0;
         __m128 maxValues = _mm_set1_ps(max);
-        __m128 maxValuesIndex = _mm_setzero_ps();
+        __m128i maxValuesIndex = _mm_setzero_si128();
         __m128 compareResults;
         __m128 currentValues;
 
         __VOLK_ATTR_ALIGNED(16) float maxValuesBuffer[4];
-        __VOLK_ATTR_ALIGNED(16) float maxIndexesBuffer[4];
+        __VOLK_ATTR_ALIGNED(16) uint32_t maxIndexesBuffer[4];
 
         for (; number < quarterPoints; number++) {
 
             currentValues = _mm_load_ps(inputPtr);
             inputPtr += 4;
-            currentIndexes = _mm_add_ps(currentIndexes, indexIncrementValues);
+            currentIndexes = _mm_add_epi32(currentIndexes, indexIncrementValues);
 
             compareResults = _mm_cmpgt_ps(currentValues, maxValues);
 
+            __m128i cmpMask = _mm_castps_si128(compareResults);
             maxValuesIndex =
-                _mm_blendv_ps(maxValuesIndex, currentIndexes, compareResults);
+                _mm_blendv_epi8(maxValuesIndex, currentIndexes, cmpMask);
             maxValues = _mm_blendv_ps(maxValues, currentValues, compareResults);
         }
 
         // Calculate the largest value from the remaining 4 points
         _mm_store_ps(maxValuesBuffer, maxValues);
-        _mm_store_ps(maxIndexesBuffer, maxValuesIndex);
+        _mm_store_si128((__m128i*)maxIndexesBuffer, maxValuesIndex);
 
         for (number = 0; number < 4; number++) {
             if (maxValuesBuffer[number] > max) {
@@ -626,18 +631,18 @@ volk_32f_index_max_32u_a_sse4_1(uint32_t* target, const float* src0, uint32_t nu
                 max = src0[number];
             }
         }
-        target[0] = (uint32_t)index;
+        target[0] = index;
     }
 }
 
 #endif /*LV_HAVE_SSE4_1*/
 
 
-#ifdef LV_HAVE_AVX
+#ifdef LV_HAVE_AVX2
 #include <immintrin.h>
 
 static inline void
-volk_32f_index_max_32u_a_avx(uint32_t* target, const float* src0, uint32_t num_points)
+volk_32f_index_max_32u_a_avx2(uint32_t* target, const float* src0, uint32_t num_points)
 {
     if (num_points > 0) {
         uint32_t number = 0;
@@ -645,32 +650,33 @@ volk_32f_index_max_32u_a_avx(uint32_t* target, const float* src0, uint32_t num_p
 
         const float* inputPtr = src0;
 
-        __m256 indexIncrementValues = _mm256_set1_ps(8);
-        __m256 currentIndexes = _mm256_set_ps(-1, -2, -3, -4, -5, -6, -7, -8);
+        __m256i indexIncrementValues = _mm256_set1_epi32(8);
+        __m256i currentIndexes = _mm256_set_epi32(-1, -2, -3, -4, -5, -6, -7, -8);
 
         float max = src0[0];
-        float index = 0;
+        uint32_t index = 0;
         __m256 maxValues = _mm256_set1_ps(max);
-        __m256 maxValuesIndex = _mm256_setzero_ps();
+        __m256i maxValuesIndex = _mm256_setzero_si256();
         __m256 compareResults;
         __m256 currentValues;
 
         __VOLK_ATTR_ALIGNED(32) float maxValuesBuffer[8];
-        __VOLK_ATTR_ALIGNED(32) float maxIndexesBuffer[8];
+        __VOLK_ATTR_ALIGNED(32) uint32_t maxIndexesBuffer[8];
 
         for (; number < quarterPoints; number++) {
             currentValues = _mm256_load_ps(inputPtr);
             inputPtr += 8;
-            currentIndexes = _mm256_add_ps(currentIndexes, indexIncrementValues);
+            currentIndexes = _mm256_add_epi32(currentIndexes, indexIncrementValues);
             compareResults = _mm256_cmp_ps(currentValues, maxValues, _CMP_GT_OS);
+            __m256i cmpMask = _mm256_castps_si256(compareResults);
             maxValuesIndex =
-                _mm256_blendv_ps(maxValuesIndex, currentIndexes, compareResults);
+                _mm256_blendv_epi8(maxValuesIndex, currentIndexes, cmpMask);
             maxValues = _mm256_blendv_ps(maxValues, currentValues, compareResults);
         }
 
         // Calculate the largest value from the remaining 8 points
         _mm256_store_ps(maxValuesBuffer, maxValues);
-        _mm256_store_ps(maxIndexesBuffer, maxValuesIndex);
+        _mm256_store_si256((__m256i*)maxIndexesBuffer, maxValuesIndex);
 
         for (number = 0; number < 8; number++) {
             if (maxValuesBuffer[number] > max) {
@@ -689,11 +695,11 @@ volk_32f_index_max_32u_a_avx(uint32_t* target, const float* src0, uint32_t num_p
                 max = src0[number];
             }
         }
-        target[0] = (uint32_t)index;
+        target[0] = index;
     }
 }
 
-#endif /*LV_HAVE_AVX*/
+#endif /*LV_HAVE_AVX2*/
 
 
 #ifdef LV_HAVE_AVX512F
@@ -708,33 +714,33 @@ volk_32f_index_max_32u_a_avx512f(uint32_t* target, const float* src0, uint32_t n
 
         const float* inputPtr = src0;
 
-        __m512 indexIncrementValues = _mm512_set1_ps(16);
-        __m512 currentIndexes = _mm512_set_ps(
+        __m512i indexIncrementValues = _mm512_set1_epi32(16);
+        __m512i currentIndexes = _mm512_set_epi32(
             -1, -2, -3, -4, -5, -6, -7, -8, -9, -10, -11, -12, -13, -14, -15, -16);
 
         float max = src0[0];
-        float index = 0;
+        uint32_t index = 0;
         __m512 maxValues = _mm512_set1_ps(max);
-        __m512 maxValuesIndex = _mm512_setzero_ps();
+        __m512i maxValuesIndex = _mm512_setzero_si512();
         __mmask16 compareResults;
         __m512 currentValues;
 
         __VOLK_ATTR_ALIGNED(64) float maxValuesBuffer[16];
-        __VOLK_ATTR_ALIGNED(64) float maxIndexesBuffer[16];
+        __VOLK_ATTR_ALIGNED(64) uint32_t maxIndexesBuffer[16];
 
         for (; number < sixteenthPoints; number++) {
             currentValues = _mm512_load_ps(inputPtr);
             inputPtr += 16;
-            currentIndexes = _mm512_add_ps(currentIndexes, indexIncrementValues);
+            currentIndexes = _mm512_add_epi32(currentIndexes, indexIncrementValues);
             compareResults = _mm512_cmp_ps_mask(currentValues, maxValues, _CMP_GT_OS);
             maxValuesIndex =
-                _mm512_mask_blend_ps(compareResults, maxValuesIndex, currentIndexes);
+                _mm512_mask_blend_epi32(compareResults, maxValuesIndex, currentIndexes);
             maxValues = _mm512_mask_blend_ps(compareResults, maxValues, currentValues);
         }
 
         // Calculate the largest value from the remaining 16 points
         _mm512_store_ps(maxValuesBuffer, maxValues);
-        _mm512_store_ps(maxIndexesBuffer, maxValuesIndex);
+        _mm512_store_si512(maxIndexesBuffer, maxValuesIndex);
 
         for (number = 0; number < 16; number++) {
             if (maxValuesBuffer[number] > max) {
@@ -753,7 +759,7 @@ volk_32f_index_max_32u_a_avx512f(uint32_t* target, const float* src0, uint32_t n
                 max = src0[number];
             }
         }
-        target[0] = (uint32_t)index;
+        target[0] = index;
     }
 }
 

@@ -577,15 +577,13 @@ static inline void volk_32fc_index_min_16u_a_sse3(uint16_t* target,
 
         xmm1 = _mm_hadd_ps(xmm1, xmm2);
 
+        xmm5.float_vec = _mm_cmplt_ps(xmm1, xmm3);
         xmm3 = _mm_min_ps(xmm1, xmm3);
 
-        xmm4.float_vec = _mm_cmpgt_ps(xmm1, xmm3);
-        xmm5.float_vec = _mm_cmpeq_ps(xmm1, xmm3);
-
         xmm11 = _mm_and_si128(xmm8, xmm5.int_vec);
-        xmm12 = _mm_and_si128(xmm9, xmm4.int_vec);
+        xmm12 = _mm_andnot_si128(xmm5.int_vec, xmm9);
 
-        xmm9 = _mm_add_epi32(xmm11, xmm12);
+        xmm9 = _mm_or_si128(xmm11, xmm12);
 
         xmm8 = _mm_add_epi32(xmm8, xmm10);
     }
@@ -602,17 +600,15 @@ static inline void volk_32fc_index_min_16u_a_sse3(uint16_t* target,
 
         xmm1 = _mm_hadd_ps(xmm2, xmm2);
 
+        xmm5.float_vec = _mm_cmplt_ps(xmm1, xmm3);
         xmm3 = _mm_min_ps(xmm1, xmm3);
 
         xmm10 = _mm_setr_epi32(2, 2, 2, 2);
 
-        xmm4.float_vec = _mm_cmpgt_ps(xmm1, xmm3);
-        xmm5.float_vec = _mm_cmpeq_ps(xmm1, xmm3);
-
         xmm11 = _mm_and_si128(xmm8, xmm5.int_vec);
-        xmm12 = _mm_and_si128(xmm9, xmm4.int_vec);
+        xmm12 = _mm_andnot_si128(xmm5.int_vec, xmm9);
 
-        xmm9 = _mm_add_epi32(xmm11, xmm12);
+        xmm9 = _mm_or_si128(xmm11, xmm12);
 
         xmm8 = _mm_add_epi32(xmm8, xmm10);
     }

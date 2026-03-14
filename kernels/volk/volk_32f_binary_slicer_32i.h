@@ -253,9 +253,11 @@ static inline void volk_32f_binary_slicer_32i_rvv(int* cVector,
     size_t n = num_points;
     for (size_t vl; n > 0; n -= vl, aVector += vl, cVector += vl) {
         vl = __riscv_vsetvl_e32m8(n);
-        vuint32m8_t v = __riscv_vle32_v_u32m8((const uint32_t*)aVector, vl);
-        v = __riscv_vsrl(__riscv_vnot(v, vl), 31, vl);
-        __riscv_vse32((uint32_t*)cVector, v, vl);
+        vfloat32m8_t v = __riscv_vle32_v_f32m8(aVector, vl);
+        vbool4_t mask = __riscv_vmfge_vf_f32m8(v, 0.0f, vl);
+        vuint32m8_t result = __riscv_vmv_v_x_u32m8(0, vl);
+        result = __riscv_vmerge_vxm_u32m8(result, 1, mask, vl);
+        __riscv_vse32((uint32_t*)cVector, result, vl);
     }
 }
 #endif /* LV_HAVE_RVV */

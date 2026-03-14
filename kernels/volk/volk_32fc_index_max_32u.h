@@ -66,15 +66,13 @@ static inline void volk_32fc_index_max_32u_generic(uint32_t* target,
                                                    const lv_32fc_t* src0,
                                                    uint32_t num_points)
 {
-    const uint32_t num_bytes = num_points * 8;
-
     float sq_dist = 0.0;
     float max = 0.0;
     uint32_t index = 0;
 
     uint32_t i = 0;
 
-    for (; i < (num_bytes >> 3); ++i) {
+    for (; i < num_points; ++i) {
         sq_dist =
             lv_creal(src0[i]) * lv_creal(src0[i]) + lv_cimag(src0[i]) * lv_cimag(src0[i]);
 
@@ -302,10 +300,10 @@ volk_32fc_index_max_32u_neon(uint32_t* target, const lv_32fc_t* src0, uint32_t n
     uint32x4_t vec_max_indices = vec_indices;
 
     if (num_points) {
-        float max = FLT_MIN;
+        float max = 0.0f;
         uint32_t index = 0;
 
-        float32x4_t vec_max = vdupq_n_f32(FLT_MIN);
+        float32x4_t vec_max = vdupq_n_f32(0.0f);
 
         for (; number < quarter_points; number++) {
             // Load complex and compute magnitude squared
@@ -506,8 +504,6 @@ static inline void volk_32fc_index_max_32u_a_sse3(uint32_t* target,
                                                   const lv_32fc_t* src0,
                                                   uint32_t num_points)
 {
-    const uint32_t num_bytes = num_points * 8;
-
     union bit128 holderf;
     union bit128 holderi;
     float sq_dist = 0.0;
@@ -521,8 +517,8 @@ static inline void volk_32fc_index_max_32u_a_sse3(uint32_t* target,
     holderf.int_vec = _mm_setzero_si128();
     holderi.int_vec = _mm_setzero_si128();
 
-    int bound = num_bytes >> 5;
-    int i = 0;
+    uint32_t bound = num_points / 4;
+    uint32_t i = 0;
 
     xmm8 = _mm_setr_epi32(0, 1, 2, 3);
     xmm9 = _mm_setzero_si128();
@@ -553,7 +549,7 @@ static inline void volk_32fc_index_max_32u_a_sse3(uint32_t* target,
         xmm8 = _mm_add_epi32(xmm8, xmm10);
     }
 
-    if (num_bytes >> 4 & 1) {
+    if (num_points >> 1 & 1) {
         xmm2 = _mm_load_ps((const float*)src0);
 
         xmm1 = _mm_movelh_ps(bit128_p(&xmm8)->float_vec, bit128_p(&xmm8)->float_vec);
@@ -580,7 +576,7 @@ static inline void volk_32fc_index_max_32u_a_sse3(uint32_t* target,
         xmm8 = _mm_add_epi32(xmm8, xmm10);
     }
 
-    if (num_bytes >> 3 & 1) {
+    if (num_points & 1) {
         sq_dist =
             lv_creal(src0[0]) * lv_creal(src0[0]) + lv_cimag(src0[0]) * lv_cimag(src0[0]);
 

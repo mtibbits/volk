@@ -105,60 +105,7 @@ static inline void volk_32f_s32f_s32f_mod_range_32f_generic(float* outputVector,
 
 
 #ifdef LV_HAVE_SSE2
-#include <xmmintrin.h>
-
-static inline void volk_32f_s32f_s32f_mod_range_32f_u_sse(float* outputVector,
-                                                          const float* inputVector,
-                                                          const float lower_bound,
-                                                          const float upper_bound,
-                                                          unsigned int num_points)
-{
-    const __m128 lower = _mm_set_ps1(lower_bound);
-    const __m128 upper = _mm_set_ps1(upper_bound);
-    const __m128 distance = _mm_sub_ps(upper, lower);
-    __m128 input, output;
-    __m128 is_smaller, is_bigger;
-    __m128 excess, adj;
-    __m128i rounddown;
-
-    const float* inPtr = inputVector;
-    float* outPtr = outputVector;
-    const size_t quarter_points = num_points / 4;
-    for (size_t counter = 0; counter < quarter_points; counter++) {
-        input = _mm_loadu_ps(inPtr);
-        // calculate mask: input < lower, input > upper
-        is_smaller = _mm_cmplt_ps(input, lower);
-        is_bigger = _mm_cmpgt_ps(input, upper);
-        // find out how far we are out-of-bound – positive values!
-        excess = _mm_and_ps(_mm_sub_ps(lower, input), is_smaller);
-        excess = _mm_or_ps(_mm_and_ps(_mm_sub_ps(input, upper), is_bigger), excess);
-        // how many do we have to add? (int(excess/distance+1)*distance)
-        excess = _mm_div_ps(excess, distance);
-        // round down – for some reason
-        rounddown = _mm_cvttps_epi32(excess);
-        excess = _mm_cvtepi32_ps(rounddown);
-        // plus 1
-        adj = _mm_set_ps1(1.0f);
-        excess = _mm_add_ps(excess, adj);
-        // get the sign right, adj is still {1.0f,1.0f,1.0f,1.0f}
-        adj = _mm_and_ps(adj, is_smaller);
-        adj = _mm_or_ps(_mm_and_ps(_mm_set_ps1(-1.0f), is_bigger), adj);
-        // scale by distance, sign
-        excess = _mm_mul_ps(_mm_mul_ps(excess, adj), distance);
-        output = _mm_add_ps(input, excess);
-        _mm_storeu_ps(outPtr, output);
-        inPtr += 4;
-        outPtr += 4;
-    }
-
-    volk_32f_s32f_s32f_mod_range_32f_generic(
-        outPtr, inPtr, lower_bound, upper_bound, num_points - quarter_points * 4);
-}
-#endif /* LV_HAVE_SSE2 */
-
-
-#ifdef LV_HAVE_SSE2
-#include <xmmintrin.h>
+#include <emmintrin.h>
 
 static inline void volk_32f_s32f_s32f_mod_range_32f_u_sse2(float* outputVector,
                                                            const float* inputVector,
@@ -209,7 +156,7 @@ static inline void volk_32f_s32f_s32f_mod_range_32f_u_sse2(float* outputVector,
 
 
 #ifdef LV_HAVE_AVX
-#include <xmmintrin.h>
+#include <immintrin.h>
 
 static inline void volk_32f_s32f_s32f_mod_range_32f_u_avx(float* outputVector,
                                                           const float* inputVector,
@@ -443,60 +390,7 @@ static inline void volk_32f_s32f_s32f_mod_range_32f_rvv(float* outputVector,
 #define INCLUDED_volk_32f_s32f_s32f_mod_range_32f_a_H
 
 #ifdef LV_HAVE_SSE2
-#include <xmmintrin.h>
-
-static inline void volk_32f_s32f_s32f_mod_range_32f_a_sse(float* outputVector,
-                                                          const float* inputVector,
-                                                          const float lower_bound,
-                                                          const float upper_bound,
-                                                          unsigned int num_points)
-{
-    const __m128 lower = _mm_set_ps1(lower_bound);
-    const __m128 upper = _mm_set_ps1(upper_bound);
-    const __m128 distance = _mm_sub_ps(upper, lower);
-    __m128 input, output;
-    __m128 is_smaller, is_bigger;
-    __m128 excess, adj;
-    __m128i rounddown;
-
-    const float* inPtr = inputVector;
-    float* outPtr = outputVector;
-    const size_t quarter_points = num_points / 4;
-    for (size_t counter = 0; counter < quarter_points; counter++) {
-        input = _mm_load_ps(inPtr);
-        // calculate mask: input < lower, input > upper
-        is_smaller = _mm_cmplt_ps(input, lower);
-        is_bigger = _mm_cmpgt_ps(input, upper);
-        // find out how far we are out-of-bound – positive values!
-        excess = _mm_and_ps(_mm_sub_ps(lower, input), is_smaller);
-        excess = _mm_or_ps(_mm_and_ps(_mm_sub_ps(input, upper), is_bigger), excess);
-        // how many do we have to add? (int(excess/distance+1)*distance)
-        excess = _mm_div_ps(excess, distance);
-        // round down
-        rounddown = _mm_cvttps_epi32(excess);
-        excess = _mm_cvtepi32_ps(rounddown);
-        // plus 1
-        adj = _mm_set_ps1(1.0f);
-        excess = _mm_add_ps(excess, adj);
-        // get the sign right, adj is still {1.0f,1.0f,1.0f,1.0f}
-        adj = _mm_and_ps(adj, is_smaller);
-        adj = _mm_or_ps(_mm_and_ps(_mm_set_ps1(-1.0f), is_bigger), adj);
-        // scale by distance, sign
-        excess = _mm_mul_ps(_mm_mul_ps(excess, adj), distance);
-        output = _mm_add_ps(input, excess);
-        _mm_store_ps(outPtr, output);
-        inPtr += 4;
-        outPtr += 4;
-    }
-
-    volk_32f_s32f_s32f_mod_range_32f_generic(
-        outPtr, inPtr, lower_bound, upper_bound, num_points - quarter_points * 4);
-}
-#endif /* LV_HAVE_SSE2 */
-
-
-#ifdef LV_HAVE_SSE2
-#include <xmmintrin.h>
+#include <emmintrin.h>
 
 static inline void volk_32f_s32f_s32f_mod_range_32f_a_sse2(float* outputVector,
                                                            const float* inputVector,
@@ -548,7 +442,7 @@ static inline void volk_32f_s32f_s32f_mod_range_32f_a_sse2(float* outputVector,
 
 
 #ifdef LV_HAVE_AVX
-#include <xmmintrin.h>
+#include <immintrin.h>
 
 static inline void volk_32f_s32f_s32f_mod_range_32f_a_avx(float* outputVector,
                                                           const float* inputVector,

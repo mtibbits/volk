@@ -124,6 +124,9 @@ static inline void volk_32fc_index_min_32u_u_avx2_variant_0(uint32_t* target,
         if (min_values_buffer[i] < min) {
             min = min_values_buffer[i];
             index = min_indices_buffer[i];
+        } else if (min_values_buffer[i] == min) {
+            if (min_indices_buffer[i] < index)
+                index = min_indices_buffer[i];
         }
     }
 
@@ -182,6 +185,9 @@ static inline void volk_32fc_index_min_32u_u_avx2_variant_1(uint32_t* target,
         if (min_values_buffer[i] < min) {
             min = min_values_buffer[i];
             index = min_indices_buffer[i];
+        } else if (min_values_buffer[i] == min) {
+            if (min_indices_buffer[i] < index)
+                index = min_indices_buffer[i];
         }
     }
 
@@ -652,6 +658,9 @@ static inline void volk_32fc_index_min_32u_a_avx2_variant_0(uint32_t* target,
         if (min_values_buffer[i] < min) {
             min = min_values_buffer[i];
             index = min_indices_buffer[i];
+        } else if (min_values_buffer[i] == min) {
+            if (min_indices_buffer[i] < index)
+                index = min_indices_buffer[i];
         }
     }
 
@@ -710,6 +719,9 @@ static inline void volk_32fc_index_min_32u_a_avx2_variant_1(uint32_t* target,
         if (min_values_buffer[i] < min) {
             min = min_values_buffer[i];
             index = min_indices_buffer[i];
+        } else if (min_values_buffer[i] == min) {
+            if (min_indices_buffer[i] < index)
+                index = min_indices_buffer[i];
         }
     }
 

@@ -124,9 +124,12 @@ volk_32f_tanh_32f_u_sse(float* cVector, const float* aVector, unsigned int num_p
     const4 = _mm_set_ps1(62370.0f);
     const5 = _mm_set_ps1(3150.0f);
     const6 = _mm_set_ps1(28.0f);
+    __m128 clamp_hi = _mm_set_ps1(4.97f);
+    __m128 clamp_lo = _mm_set_ps1(-4.97f);
     for (; number < quarterPoints; number++) {
 
         aVal = _mm_loadu_ps(aPtr);
+        aVal = _mm_min_ps(_mm_max_ps(aVal, clamp_lo), clamp_hi);
         x2 = _mm_mul_ps(aVal, aVal);
         a = _mm_mul_ps(
             aVal,
@@ -175,9 +178,12 @@ volk_32f_tanh_32f_u_avx(float* cVector, const float* aVector, unsigned int num_p
     const4 = _mm256_set1_ps(62370.0f);
     const5 = _mm256_set1_ps(3150.0f);
     const6 = _mm256_set1_ps(28.0f);
+    __m256 clamp_hi = _mm256_set1_ps(4.97f);
+    __m256 clamp_lo = _mm256_set1_ps(-4.97f);
     for (; number < eighthPoints; number++) {
 
         aVal = _mm256_loadu_ps(aPtr);
+        aVal = _mm256_min_ps(_mm256_max_ps(aVal, clamp_lo), clamp_hi);
         x2 = _mm256_mul_ps(aVal, aVal);
         a = _mm256_mul_ps(
             aVal,
@@ -229,9 +235,12 @@ volk_32f_tanh_32f_u_avx_fma(float* cVector, const float* aVector, unsigned int n
     const4 = _mm256_set1_ps(62370.0f);
     const5 = _mm256_set1_ps(3150.0f);
     const6 = _mm256_set1_ps(28.0f);
+    __m256 clamp_hi = _mm256_set1_ps(4.97f);
+    __m256 clamp_lo = _mm256_set1_ps(-4.97f);
     for (; number < eighthPoints; number++) {
 
         aVal = _mm256_loadu_ps(aPtr);
+        aVal = _mm256_min_ps(_mm256_max_ps(aVal, clamp_lo), clamp_hi);
         x2 = _mm256_mul_ps(aVal, aVal);
         a = _mm256_mul_ps(
             aVal,
@@ -272,9 +281,12 @@ volk_32f_tanh_32f_neon(float* cVector, const float* aVector, unsigned int num_po
     const float32x4_t const4 = vdupq_n_f32(62370.0f);
     const float32x4_t const5 = vdupq_n_f32(3150.0f);
     const float32x4_t const6 = vdupq_n_f32(28.0f);
+    const float32x4_t clamp_hi = vdupq_n_f32(4.97f);
+    const float32x4_t clamp_lo = vdupq_n_f32(-4.97f);
 
     for (; number < quarterPoints; number++) {
         float32x4_t aVal = vld1q_f32(aPtr);
+        aVal = vminq_f32(vmaxq_f32(aVal, clamp_lo), clamp_hi);
         float32x4_t x2 = vmulq_f32(aVal, aVal);
 
         // a = x * (135135 + x2 * (17325 + x2 * (378 + x2)))
@@ -325,11 +337,16 @@ volk_32f_tanh_32f_neonv8(float* cVector, const float* aVector, unsigned int num_
     const float32x4_t const5 = vdupq_n_f32(3150.0f);
     const float32x4_t const6 = vdupq_n_f32(28.0f);
 
+    const float32x4_t clamp_hi = vdupq_n_f32(4.97f);
+    const float32x4_t clamp_lo = vdupq_n_f32(-4.97f);
+
     for (; number < eighthPoints; number++) {
         __VOLK_PREFETCH(aPtr + 16);
 
         float32x4_t aVal0 = vld1q_f32(aPtr);
         float32x4_t aVal1 = vld1q_f32(aPtr + 4);
+        aVal0 = vminq_f32(vmaxq_f32(aVal0, clamp_lo), clamp_hi);
+        aVal1 = vminq_f32(vmaxq_f32(aVal1, clamp_lo), clamp_hi);
         float32x4_t x2_0 = vmulq_f32(aVal0, aVal0);
         float32x4_t x2_1 = vmulq_f32(aVal1, aVal1);
 
@@ -386,6 +403,7 @@ volk_32f_tanh_32f_rvv(float* bVector, const float* aVector, unsigned int num_poi
     for (size_t vl; n > 0; n -= vl, aVector += vl, bVector += vl) {
         vl = __riscv_vsetvl_e32m2(n);
         vfloat32m2_t x = __riscv_vle32_v_f32m2(aVector, vl);
+        x = __riscv_vfmin(__riscv_vfmax(x, -4.97f, vl), 4.97f, vl);
         vfloat32m2_t xx = __riscv_vfmul(x, x, vl);
         vfloat32m2_t a, b;
         a = __riscv_vfadd(xx, c3, vl);
@@ -433,9 +451,12 @@ volk_32f_tanh_32f_a_sse(float* cVector, const float* aVector, unsigned int num_p
     const4 = _mm_set_ps1(62370.0f);
     const5 = _mm_set_ps1(3150.0f);
     const6 = _mm_set_ps1(28.0f);
+    __m128 clamp_hi = _mm_set_ps1(4.97f);
+    __m128 clamp_lo = _mm_set_ps1(-4.97f);
     for (; number < quarterPoints; number++) {
 
         aVal = _mm_load_ps(aPtr);
+        aVal = _mm_min_ps(_mm_max_ps(aVal, clamp_lo), clamp_hi);
         x2 = _mm_mul_ps(aVal, aVal);
         a = _mm_mul_ps(
             aVal,
@@ -484,9 +505,12 @@ volk_32f_tanh_32f_a_avx(float* cVector, const float* aVector, unsigned int num_p
     const4 = _mm256_set1_ps(62370.0f);
     const5 = _mm256_set1_ps(3150.0f);
     const6 = _mm256_set1_ps(28.0f);
+    __m256 clamp_hi = _mm256_set1_ps(4.97f);
+    __m256 clamp_lo = _mm256_set1_ps(-4.97f);
     for (; number < eighthPoints; number++) {
 
         aVal = _mm256_load_ps(aPtr);
+        aVal = _mm256_min_ps(_mm256_max_ps(aVal, clamp_lo), clamp_hi);
         x2 = _mm256_mul_ps(aVal, aVal);
         a = _mm256_mul_ps(
             aVal,
@@ -538,9 +562,12 @@ volk_32f_tanh_32f_a_avx_fma(float* cVector, const float* aVector, unsigned int n
     const4 = _mm256_set1_ps(62370.0f);
     const5 = _mm256_set1_ps(3150.0f);
     const6 = _mm256_set1_ps(28.0f);
+    __m256 clamp_hi = _mm256_set1_ps(4.97f);
+    __m256 clamp_lo = _mm256_set1_ps(-4.97f);
     for (; number < eighthPoints; number++) {
 
         aVal = _mm256_load_ps(aPtr);
+        aVal = _mm256_min_ps(_mm256_max_ps(aVal, clamp_lo), clamp_hi);
         x2 = _mm256_mul_ps(aVal, aVal);
         a = _mm256_mul_ps(
             aVal,

@@ -97,20 +97,18 @@ volk_16i_max_star_16i_generic(short* target, const short* src0, unsigned int num
 #include <inttypes.h>
 #include <stdio.h>
 
-#ifdef LV_HAVE_SSSE3
+#ifdef LV_HAVE_SSE2
 
 #include <emmintrin.h>
-#include <tmmintrin.h>
-#include <xmmintrin.h>
 
 static inline void
-volk_16i_max_star_16i_a_ssse3(short* target, const short* src0, unsigned int num_points)
+volk_16i_max_star_16i_a_sse2(short* target, const short* src0, unsigned int num_points)
 {
     const unsigned int num_bytes = num_points * 2;
 
     short candidate = src0[0];
     short cands[8];
-    __m128i xmm0, xmm1, xmm3, xmm4, xmm5, xmm6;
+    __m128i xmm0, xmm1;
 
     const __m128i* p_src0;
 
@@ -126,18 +124,8 @@ volk_16i_max_star_16i_a_ssse3(short* target, const short* src0, unsigned int num
     for (i = 0; i < bound; ++i) {
         xmm1 = _mm_load_si128(p_src0);
         p_src0 += 1;
-        // xmm2 = _mm_sub_epi16(xmm1, xmm0);
 
-        xmm3 = _mm_cmpgt_epi16(xmm0, xmm1);
-        xmm4 = _mm_cmpeq_epi16(xmm0, xmm1);
-        xmm5 = _mm_cmpgt_epi16(xmm1, xmm0);
-
-        xmm6 = _mm_xor_si128(xmm4, xmm5);
-
-        xmm3 = _mm_and_si128(xmm3, xmm0);
-        xmm4 = _mm_and_si128(xmm6, xmm1);
-
-        xmm0 = _mm_add_epi16(xmm3, xmm4);
+        xmm0 = _mm_max_epi16(xmm0, xmm1);
     }
 
     _mm_store_si128((__m128i*)cands, xmm0);
@@ -155,6 +143,6 @@ volk_16i_max_star_16i_a_ssse3(short* target, const short* src0, unsigned int num
     target[0] = candidate;
 }
 
-#endif /*LV_HAVE_SSSE3*/
+#endif /*LV_HAVE_SSE2*/
 
 #endif /* INCLUDED_volk_16i_max_star_16i_a_H */

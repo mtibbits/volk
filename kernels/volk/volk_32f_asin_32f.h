@@ -237,7 +237,7 @@ volk_32f_asin_32f_u_avx512(float* bVector, const float* aVector, unsigned int nu
     const __m512 half = _mm512_set1_ps(0.5f);
     const __m512 one = _mm512_set1_ps(1.0f);
     const __m512 two = _mm512_set1_ps(2.0f);
-    const __m512i sign_mask = _mm512_set1_epi32(0x80000000);
+    const __m512 sign_mask = _mm512_set1_ps(-0.0f);
 
     unsigned int number = 0;
     const unsigned int sixteenthPoints = num_points / 16;
@@ -245,9 +245,8 @@ volk_32f_asin_32f_u_avx512(float* bVector, const float* aVector, unsigned int nu
     for (; number < sixteenthPoints; number++) {
         __m512 aVal = _mm512_loadu_ps(aVector);
 
-        __m512i aVal_i = _mm512_castps_si512(aVal);
-        __m512i sign = _mm512_and_epi32(aVal_i, sign_mask);
-        __m512 ax = _mm512_castsi512_ps(_mm512_andnot_epi32(sign_mask, aVal_i));
+        __m512i sign = _mm512_and_epi32(_mm512_castps_si512(aVal), _mm512_castps_si512(sign_mask));
+        __m512 ax = _mm512_castsi512_ps(_mm512_andnot_epi32(_mm512_castps_si512(sign_mask), _mm512_castps_si512(aVal)));
 
         __m512 t = _mm512_mul_ps(_mm512_sub_ps(one, ax), half);
         __m512 s = _mm512_sqrt_ps(t);
@@ -567,7 +566,7 @@ volk_32f_asin_32f_a_avx512(float* bVector, const float* aVector, unsigned int nu
     const __m512 half = _mm512_set1_ps(0.5f);
     const __m512 one = _mm512_set1_ps(1.0f);
     const __m512 two = _mm512_set1_ps(2.0f);
-    const __m512i sign_mask = _mm512_set1_epi32(0x80000000);
+    const __m512 sign_mask = _mm512_set1_ps(-0.0f);
 
     unsigned int number = 0;
     const unsigned int sixteenthPoints = num_points / 16;
@@ -576,9 +575,8 @@ volk_32f_asin_32f_a_avx512(float* bVector, const float* aVector, unsigned int nu
         __m512 aVal = _mm512_load_ps(aVector);
 
         // Get absolute value and sign using integer ops (AVX512F compatible)
-        __m512i aVal_i = _mm512_castps_si512(aVal);
-        __m512i sign = _mm512_and_epi32(aVal_i, sign_mask);
-        __m512 ax = _mm512_castsi512_ps(_mm512_andnot_epi32(sign_mask, aVal_i));
+        __m512i sign = _mm512_and_epi32(_mm512_castps_si512(aVal), _mm512_castps_si512(sign_mask));
+        __m512 ax = _mm512_castsi512_ps(_mm512_andnot_epi32(_mm512_castps_si512(sign_mask), _mm512_castps_si512(aVal)));
 
         // Two-range computation
         __m512 t = _mm512_mul_ps(_mm512_sub_ps(one, ax), half);

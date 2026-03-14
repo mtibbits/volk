@@ -104,9 +104,9 @@ static inline void volk_32f_s32f_x2_clamp_32f_u_sse4_1(float* out,
 }
 #endif /* LV_HAVE_SSE4_1 */
 
-#if LV_HAVE_AVX2
+#if LV_HAVE_AVX
 #include <immintrin.h>
-static inline void volk_32f_s32f_x2_clamp_32f_u_avx2(float* out,
+static inline void volk_32f_s32f_x2_clamp_32f_u_avx(float* out,
                                                      const float* in,
                                                      const float min,
                                                      const float max,
@@ -131,7 +131,7 @@ static inline void volk_32f_s32f_x2_clamp_32f_u_avx2(float* out,
     number = eighth_points * 8;
     volk_32f_s32f_x2_clamp_32f_generic(out, in, min, max, num_points - number);
 }
-#endif /* LV_HAVE_AVX2 */
+#endif /* LV_HAVE_AVX */
 
 #ifdef LV_HAVE_NEON
 #include <arm_neon.h>
@@ -267,9 +267,9 @@ static inline void volk_32f_s32f_x2_clamp_32f_a_sse4_1(float* out,
 }
 #endif /* LV_HAVE_SSE4_1 */
 
-#if LV_HAVE_AVX2
+#if LV_HAVE_AVX
 #include <immintrin.h>
-static inline void volk_32f_s32f_x2_clamp_32f_a_avx2(float* out,
+static inline void volk_32f_s32f_x2_clamp_32f_a_avx(float* out,
                                                      const float* in,
                                                      const float min,
                                                      const float max,
@@ -294,6 +294,6 @@ static inline void volk_32f_s32f_x2_clamp_32f_a_avx2(float* out,
     number = eighth_points * 8;
     volk_32f_s32f_x2_clamp_32f_generic(out, in, min, max, num_points - number);
 }
-#endif /* LV_HAVE_AVX2 */
+#endif /* LV_HAVE_AVX */
 
 #endif /* INCLUDED_volk_32f_s32f_x2_clamp_32f_a_H */

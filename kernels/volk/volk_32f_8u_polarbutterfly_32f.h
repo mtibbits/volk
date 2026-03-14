@@ -435,7 +435,7 @@ static inline void volk_32f_8u_polarbutterfly_32f_rvv(float* llrs,
             vuint64m2_t llr = __riscv_vle64_v_u64m2((const uint64_t*)src_llr_ptr, vl);
             vfloat32m1_t llr0 = __riscv_vreinterpret_f32m1(__riscv_vnsrl(llr, 0, vl));
             vfloat32m1_t llr1 = __riscv_vreinterpret_f32m1(__riscv_vnsrl(llr, 32, vl));
-            llr0 = __riscv_vfneg_mu(__riscv_vmslt(v, 0, vl), llr0, llr0, vl);
+            llr0 = __riscv_vfneg_mu(__riscv_vmsne(v, 0, vl), llr0, llr0, vl);
             llr0 = __riscv_vfadd(llr0, llr1, vl);
             __riscv_vse32(dst_llr_ptr, llr0, vl);
         }
@@ -520,7 +520,7 @@ static inline void volk_32f_8u_polarbutterfly_32f_rvvseg(float* llrs,
             vfloat32m1x2_t llr = __riscv_vlseg2e32_v_f32m1x2(src_llr_ptr, vl);
             vfloat32m1_t llr0 = __riscv_vget_f32m1(llr, 0);
             vfloat32m1_t llr1 = __riscv_vget_f32m1(llr, 1);
-            llr0 = __riscv_vfneg_mu(__riscv_vmslt(v, 0, vl), llr0, llr0, vl);
+            llr0 = __riscv_vfneg_mu(__riscv_vmsne(v, 0, vl), llr0, llr0, vl);
             llr0 = __riscv_vfadd(llr0, llr1, vl);
             __riscv_vse32(dst_llr_ptr, llr0, vl);
         }

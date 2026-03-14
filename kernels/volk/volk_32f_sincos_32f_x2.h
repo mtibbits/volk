@@ -359,7 +359,7 @@ static inline void volk_32f_sincos_32f_x2_u_avx512f(float* sinVector,
 
     const __m512i ones = _mm512_set1_epi32(1);
     const __m512i twos = _mm512_set1_epi32(2);
-    const __m512i sign_bit = _mm512_set1_epi32(0x80000000);
+    const __m512i sign_bit = _mm512_castps_si512(_mm512_set1_ps(-0.0f));
 
     for (; number < sixteenPoints; number++) {
         __m512 x = _mm512_loadu_ps(inPtr);
@@ -816,7 +816,7 @@ static inline void volk_32f_sincos_32f_x2_a_avx512f(float* sinVector,
 
     const __m512i ones = _mm512_set1_epi32(1);
     const __m512i twos = _mm512_set1_epi32(2);
-    const __m512i sign_bit = _mm512_set1_epi32(0x80000000);
+    const __m512i sign_bit = _mm512_castps_si512(_mm512_set1_ps(-0.0f));
 
     for (; number < sixteenPoints; number++) {
         __m512 x = _mm512_load_ps(inPtr);

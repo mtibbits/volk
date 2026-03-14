@@ -488,10 +488,10 @@ static inline void volk_16ic_x2_dot_prod_16ic_neon_optvma(lv_16sc_t* out,
         __VOLK_PREFETCH(b_ptr + 8);
 
         // use 2 accumulators to remove inter-instruction data dependencies
-        accumulator1.val[0] = vmla_s16(accumulator1.val[0], a_val.val[0], b_val.val[0]);
-        accumulator2.val[0] = vmls_s16(accumulator2.val[0], a_val.val[1], b_val.val[1]);
-        accumulator1.val[1] = vmla_s16(accumulator1.val[1], a_val.val[0], b_val.val[1]);
-        accumulator2.val[1] = vmla_s16(accumulator2.val[1], a_val.val[1], b_val.val[0]);
+        accumulator1.val[0] = vqadd_s16(accumulator1.val[0], vmul_s16(a_val.val[0], b_val.val[0]));
+        accumulator2.val[0] = vqsub_s16(accumulator2.val[0], vmul_s16(a_val.val[1], b_val.val[1]));
+        accumulator1.val[1] = vqadd_s16(accumulator1.val[1], vmul_s16(a_val.val[0], b_val.val[1]));
+        accumulator2.val[1] = vqadd_s16(accumulator2.val[1], vmul_s16(a_val.val[1], b_val.val[0]));
 
         a_ptr += 4;
         b_ptr += 4;
@@ -548,12 +548,12 @@ static inline void volk_16ic_x2_dot_prod_16ic_neonv8(lv_16sc_t* out,
         __VOLK_PREFETCH(b_ptr + 16);
 
         /* real = ar*br - ai*bi, use two accumulators to avoid dependency */
-        acc_real1 = vmlaq_s16(acc_real1, a_val.val[0], b_val.val[0]);
-        acc_real2 = vmlsq_s16(acc_real2, a_val.val[1], b_val.val[1]);
+        acc_real1 = vqaddq_s16(acc_real1, vmulq_s16(a_val.val[0], b_val.val[0]));
+        acc_real2 = vqsubq_s16(acc_real2, vmulq_s16(a_val.val[1], b_val.val[1]));
 
         /* imag = ar*bi + ai*br, use two accumulators */
-        acc_imag1 = vmlaq_s16(acc_imag1, a_val.val[0], b_val.val[1]);
-        acc_imag2 = vmlaq_s16(acc_imag2, a_val.val[1], b_val.val[0]);
+        acc_imag1 = vqaddq_s16(acc_imag1, vmulq_s16(a_val.val[0], b_val.val[1]));
+        acc_imag2 = vqaddq_s16(acc_imag2, vmulq_s16(a_val.val[1], b_val.val[0]));
 
         a_ptr += 8;
         b_ptr += 8;
