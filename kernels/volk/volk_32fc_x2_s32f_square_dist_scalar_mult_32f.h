@@ -229,11 +229,11 @@ volk_32fc_x2_s32f_square_dist_scalar_mult_32f_u_avx(float* target,
 
 #endif /* LV_HAVE_AVX */
 
-#ifdef LV_HAVE_FMA
+#if LV_HAVE_AVX && LV_HAVE_FMA
 #include <immintrin.h>
 
 static inline void
-volk_32fc_x2_s32f_square_dist_scalar_mult_32f_u_fma(float* target,
+volk_32fc_x2_s32f_square_dist_scalar_mult_32f_u_avx_fma(float* target,
                                                      const lv_32fc_t* src0,
                                                      const lv_32fc_t* points,
                                                      float scalar,
@@ -278,7 +278,7 @@ volk_32fc_x2_s32f_square_dist_scalar_mult_32f_u_fma(float* target,
         target, src0, points, scalar, num_points - eighthPoints * 8);
 }
 
-#endif /*LV_HAVE_FMA*/
+#endif /*LV_HAVE_AVX && LV_HAVE_FMA*/
 
 #ifdef LV_HAVE_AVX2
 #include <immintrin.h>
@@ -707,11 +707,11 @@ volk_32fc_x2_s32f_square_dist_scalar_mult_32f_a_avx(float* target,
 
 #endif /* LV_HAVE_AVX */
 
-#ifdef LV_HAVE_FMA
+#if LV_HAVE_AVX && LV_HAVE_FMA
 #include <immintrin.h>
 
 static inline void
-volk_32fc_x2_s32f_square_dist_scalar_mult_32f_a_fma(float* target,
+volk_32fc_x2_s32f_square_dist_scalar_mult_32f_a_avx_fma(float* target,
                                                      const lv_32fc_t* src0,
                                                      const lv_32fc_t* points,
                                                      float scalar,
@@ -756,7 +756,7 @@ volk_32fc_x2_s32f_square_dist_scalar_mult_32f_a_fma(float* target,
         target, src0, points, scalar, num_points - eighthPoints * 8);
 }
 
-#endif /*LV_HAVE_FMA*/
+#endif /*LV_HAVE_AVX && LV_HAVE_FMA*/
 
 #ifdef LV_HAVE_AVX2
 #include <immintrin.h>
