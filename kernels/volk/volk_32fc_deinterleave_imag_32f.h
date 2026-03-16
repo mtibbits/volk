@@ -76,6 +76,41 @@ static inline void volk_32fc_deinterleave_imag_32f_generic(float* qBuffer,
 }
 #endif /* LV_HAVE_GENERIC */
 
+#ifdef LV_HAVE_SSE
+#include <xmmintrin.h>
+
+static inline void volk_32fc_deinterleave_imag_32f_u_sse(float* qBuffer,
+                                                          const lv_32fc_t* complexVector,
+                                                          unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int quarterPoints = num_points / 4;
+
+    const float* complexVectorPtr = (const float*)complexVector;
+    float* qBufferPtr = qBuffer;
+
+    __m128 cplxValue1, cplxValue2, iValue;
+    for (; number < quarterPoints; number++) {
+
+        cplxValue1 = _mm_loadu_ps(complexVectorPtr);
+        complexVectorPtr += 4;
+
+        cplxValue2 = _mm_loadu_ps(complexVectorPtr);
+        complexVectorPtr += 4;
+
+        // Arrange in q1q2q3q4 format
+        iValue = _mm_shuffle_ps(cplxValue1, cplxValue2, _MM_SHUFFLE(3, 1, 3, 1));
+
+        _mm_storeu_ps(qBufferPtr, iValue);
+
+        qBufferPtr += 4;
+    }
+
+    volk_32fc_deinterleave_imag_32f_generic(
+        qBufferPtr, (const lv_32fc_t*)complexVectorPtr, num_points - quarterPoints * 4);
+}
+#endif /* LV_HAVE_SSE */
+
 #ifdef LV_HAVE_AVX
 #include <immintrin.h>
 
@@ -115,6 +150,40 @@ static inline void volk_32fc_deinterleave_imag_32f_u_avx(float* qBuffer,
     }
 }
 #endif /* LV_HAVE_AVX */
+
+#ifdef LV_HAVE_AVX512F
+#include <immintrin.h>
+
+static inline void volk_32fc_deinterleave_imag_32f_u_avx512f(float* qBuffer,
+                                                              const lv_32fc_t* complexVector,
+                                                              unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int sixteenthPoints = num_points / 16;
+    const float* complexVectorPtr = (const float*)complexVector;
+    float* qBufferPtr = qBuffer;
+
+    const __m512i idx_im = _mm512_set_epi32(31, 29, 27, 25, 23, 21, 19, 17,
+                                            15, 13, 11, 9, 7, 5, 3, 1);
+
+    for (; number < sixteenthPoints; number++) {
+
+        __m512 cplxValue1 = _mm512_loadu_ps(complexVectorPtr);
+        __m512 cplxValue2 = _mm512_loadu_ps(complexVectorPtr + 16);
+        complexVectorPtr += 32;
+
+        // Extract imaginary parts
+        __m512 qValue = _mm512_permutex2var_ps(cplxValue1, idx_im, cplxValue2);
+
+        _mm512_storeu_ps(qBufferPtr, qValue);
+
+        qBufferPtr += 16;
+    }
+
+    volk_32fc_deinterleave_imag_32f_generic(
+        qBufferPtr, (const lv_32fc_t*)complexVectorPtr, num_points - sixteenthPoints * 16);
+}
+#endif /* LV_HAVE_AVX512F */
 
 #ifdef LV_HAVE_NEON
 #include <arm_neon.h>
@@ -275,5 +344,39 @@ static inline void volk_32fc_deinterleave_imag_32f_a_avx(float* qBuffer,
     }
 }
 #endif /* LV_HAVE_AVX */
+
+#ifdef LV_HAVE_AVX512F
+#include <immintrin.h>
+
+static inline void volk_32fc_deinterleave_imag_32f_a_avx512f(float* qBuffer,
+                                                              const lv_32fc_t* complexVector,
+                                                              unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int sixteenthPoints = num_points / 16;
+    const float* complexVectorPtr = (const float*)complexVector;
+    float* qBufferPtr = qBuffer;
+
+    const __m512i idx_im = _mm512_set_epi32(31, 29, 27, 25, 23, 21, 19, 17,
+                                            15, 13, 11, 9, 7, 5, 3, 1);
+
+    for (; number < sixteenthPoints; number++) {
+
+        __m512 cplxValue1 = _mm512_load_ps(complexVectorPtr);
+        __m512 cplxValue2 = _mm512_load_ps(complexVectorPtr + 16);
+        complexVectorPtr += 32;
+
+        // Extract imaginary parts
+        __m512 qValue = _mm512_permutex2var_ps(cplxValue1, idx_im, cplxValue2);
+
+        _mm512_store_ps(qBufferPtr, qValue);
+
+        qBufferPtr += 16;
+    }
+
+    volk_32fc_deinterleave_imag_32f_generic(
+        qBufferPtr, (const lv_32fc_t*)complexVectorPtr, num_points - sixteenthPoints * 16);
+}
+#endif /* LV_HAVE_AVX512F */
 
 #endif /* INCLUDED_volk_32fc_deinterleave_imag_32f_a_H */

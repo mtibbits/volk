@@ -263,6 +263,51 @@ static inline void volk_32f_binary_slicer_8i_u_avx2(int8_t* cVector,
 #endif /* LV_HAVE_AVX2 */
 
 
+#ifdef LV_HAVE_AVX512F
+#include <immintrin.h>
+
+static inline void volk_32f_binary_slicer_8i_u_avx512f(int8_t* cVector,
+                                                        const float* aVector,
+                                                        unsigned int num_points)
+{
+    int8_t* cPtr = cVector;
+    const float* aPtr = aVector;
+    unsigned int number = 0;
+    unsigned int n64points = num_points / 64;
+
+    const __m512 zero_val = _mm512_setzero_ps();
+    const __m512i ones = _mm512_set1_epi32(1);
+
+    for (number = 0; number < n64points; number++) {
+        __m512 a0_val = _mm512_loadu_ps(aPtr);
+        __m512 a1_val = _mm512_loadu_ps(aPtr + 16);
+        __m512 a2_val = _mm512_loadu_ps(aPtr + 32);
+        __m512 a3_val = _mm512_loadu_ps(aPtr + 48);
+
+        __mmask16 m0 = _mm512_cmp_ps_mask(a0_val, zero_val, _CMP_GE_OS);
+        __mmask16 m1 = _mm512_cmp_ps_mask(a1_val, zero_val, _CMP_GE_OS);
+        __mmask16 m2 = _mm512_cmp_ps_mask(a2_val, zero_val, _CMP_GE_OS);
+        __mmask16 m3 = _mm512_cmp_ps_mask(a3_val, zero_val, _CMP_GE_OS);
+
+        __m128i r0 = _mm512_cvtepi32_epi8(_mm512_maskz_mov_epi32(m0, ones));
+        __m128i r1 = _mm512_cvtepi32_epi8(_mm512_maskz_mov_epi32(m1, ones));
+        __m128i r2 = _mm512_cvtepi32_epi8(_mm512_maskz_mov_epi32(m2, ones));
+        __m128i r3 = _mm512_cvtepi32_epi8(_mm512_maskz_mov_epi32(m3, ones));
+
+        __m512i result = _mm512_inserti32x4(_mm512_castsi128_si512(r0), r1, 1);
+        result = _mm512_inserti32x4(result, r2, 2);
+        result = _mm512_inserti32x4(result, r3, 3);
+
+        _mm512_storeu_si512((__m512i*)cPtr, result);
+        cPtr += 64;
+        aPtr += 64;
+    }
+
+    volk_32f_binary_slicer_8i_generic(cPtr, aPtr, num_points - n64points * 64);
+}
+#endif /* LV_HAVE_AVX512F */
+
+
 #ifdef LV_HAVE_NEON
 #include <arm_neon.h>
 
@@ -522,6 +567,51 @@ static inline void volk_32f_binary_slicer_8i_a_avx2(int8_t* cVector,
     }
 }
 #endif /* LV_HAVE_AVX2 */
+
+
+#ifdef LV_HAVE_AVX512F
+#include <immintrin.h>
+
+static inline void volk_32f_binary_slicer_8i_a_avx512f(int8_t* cVector,
+                                                        const float* aVector,
+                                                        unsigned int num_points)
+{
+    int8_t* cPtr = cVector;
+    const float* aPtr = aVector;
+    unsigned int number = 0;
+    unsigned int n64points = num_points / 64;
+
+    const __m512 zero_val = _mm512_setzero_ps();
+    const __m512i ones = _mm512_set1_epi32(1);
+
+    for (number = 0; number < n64points; number++) {
+        __m512 a0_val = _mm512_load_ps(aPtr);
+        __m512 a1_val = _mm512_load_ps(aPtr + 16);
+        __m512 a2_val = _mm512_load_ps(aPtr + 32);
+        __m512 a3_val = _mm512_load_ps(aPtr + 48);
+
+        __mmask16 m0 = _mm512_cmp_ps_mask(a0_val, zero_val, _CMP_GE_OS);
+        __mmask16 m1 = _mm512_cmp_ps_mask(a1_val, zero_val, _CMP_GE_OS);
+        __mmask16 m2 = _mm512_cmp_ps_mask(a2_val, zero_val, _CMP_GE_OS);
+        __mmask16 m3 = _mm512_cmp_ps_mask(a3_val, zero_val, _CMP_GE_OS);
+
+        __m128i r0 = _mm512_cvtepi32_epi8(_mm512_maskz_mov_epi32(m0, ones));
+        __m128i r1 = _mm512_cvtepi32_epi8(_mm512_maskz_mov_epi32(m1, ones));
+        __m128i r2 = _mm512_cvtepi32_epi8(_mm512_maskz_mov_epi32(m2, ones));
+        __m128i r3 = _mm512_cvtepi32_epi8(_mm512_maskz_mov_epi32(m3, ones));
+
+        __m512i result = _mm512_inserti32x4(_mm512_castsi128_si512(r0), r1, 1);
+        result = _mm512_inserti32x4(result, r2, 2);
+        result = _mm512_inserti32x4(result, r3, 3);
+
+        _mm512_store_si512((__m512i*)cPtr, result);
+        cPtr += 64;
+        aPtr += 64;
+    }
+
+    volk_32f_binary_slicer_8i_generic(cPtr, aPtr, num_points - n64points * 64);
+}
+#endif /* LV_HAVE_AVX512F */
 
 
 #endif /* INCLUDED_volk_32f_binary_slicer_8i_a_H */

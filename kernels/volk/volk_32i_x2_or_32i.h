@@ -93,6 +93,76 @@ static inline void volk_32i_x2_or_32i_generic(int32_t* cVector,
 }
 #endif /* LV_HAVE_GENERIC */
 
+#ifdef LV_HAVE_SSE
+#include <xmmintrin.h>
+
+static inline void volk_32i_x2_or_32i_u_sse(int32_t* cVector,
+                                             const int32_t* aVector,
+                                             const int32_t* bVector,
+                                             unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int quarterPoints = num_points / 4;
+
+    float* cPtr = (float*)cVector;
+    const float* aPtr = (const float*)aVector;
+    const float* bPtr = (const float*)bVector;
+
+    __m128 aVal, bVal, cVal;
+    for (; number < quarterPoints; number++) {
+        aVal = _mm_loadu_ps(aPtr);
+        bVal = _mm_loadu_ps(bPtr);
+
+        cVal = _mm_or_ps(aVal, bVal);
+
+        _mm_storeu_ps(cPtr, cVal);
+
+        aPtr += 4;
+        bPtr += 4;
+        cPtr += 4;
+    }
+
+    number = quarterPoints * 4;
+    volk_32i_x2_or_32i_generic(
+        cVector + number, aVector + number, bVector + number, num_points - number);
+}
+#endif /* LV_HAVE_SSE */
+
+#ifdef LV_HAVE_AVX
+#include <immintrin.h>
+
+static inline void volk_32i_x2_or_32i_u_avx(int32_t* cVector,
+                                             const int32_t* aVector,
+                                             const int32_t* bVector,
+                                             unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int eighthPoints = num_points / 8;
+
+    float* cPtr = (float*)cVector;
+    const float* aPtr = (const float*)aVector;
+    const float* bPtr = (const float*)bVector;
+
+    __m256 aVal, bVal, cVal;
+    for (; number < eighthPoints; number++) {
+        aVal = _mm256_loadu_ps(aPtr);
+        bVal = _mm256_loadu_ps(bPtr);
+
+        cVal = _mm256_or_ps(aVal, bVal);
+
+        _mm256_storeu_ps(cPtr, cVal);
+
+        aPtr += 8;
+        bPtr += 8;
+        cPtr += 8;
+    }
+
+    number = eighthPoints * 8;
+    volk_32i_x2_or_32i_generic(
+        cVector + number, aVector + number, bVector + number, num_points - number);
+}
+#endif /* LV_HAVE_AVX */
+
 #ifdef LV_HAVE_AVX2
 #include <immintrin.h>
 
@@ -313,6 +383,41 @@ static inline void volk_32i_x2_or_32i_a_sse(int32_t* cVector,
     }
 }
 #endif /* LV_HAVE_SSE */
+
+#ifdef LV_HAVE_AVX
+#include <immintrin.h>
+
+static inline void volk_32i_x2_or_32i_a_avx(int32_t* cVector,
+                                             const int32_t* aVector,
+                                             const int32_t* bVector,
+                                             unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int eighthPoints = num_points / 8;
+
+    float* cPtr = (float*)cVector;
+    const float* aPtr = (const float*)aVector;
+    const float* bPtr = (const float*)bVector;
+
+    __m256 aVal, bVal, cVal;
+    for (; number < eighthPoints; number++) {
+        aVal = _mm256_load_ps(aPtr);
+        bVal = _mm256_load_ps(bPtr);
+
+        cVal = _mm256_or_ps(aVal, bVal);
+
+        _mm256_store_ps(cPtr, cVal);
+
+        aPtr += 8;
+        bPtr += 8;
+        cPtr += 8;
+    }
+
+    number = eighthPoints * 8;
+    volk_32i_x2_or_32i_generic(
+        cVector + number, aVector + number, bVector + number, num_points - number);
+}
+#endif /* LV_HAVE_AVX */
 
 #ifdef LV_HAVE_AVX2
 #include <immintrin.h>

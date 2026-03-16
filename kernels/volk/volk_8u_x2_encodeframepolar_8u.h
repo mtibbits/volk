@@ -652,6 +652,180 @@ static inline void volk_8u_x2_encodeframepolar_8u_u_avx2(unsigned char* frame,
 }
 #endif /* LV_HAVE_AVX2 */
 
+#ifdef LV_HAVE_AVX512BW
+#include <immintrin.h>
+
+static inline void volk_8u_x2_encodeframepolar_8u_u_avx512bw(unsigned char* frame,
+                                                               unsigned char* temp,
+                                                               unsigned int frame_size)
+{
+    if (frame_size < 64) {
+        volk_8u_x2_encodeframepolar_8u_generic(frame, temp, frame_size);
+        return;
+    }
+
+    const unsigned int po2 = log2_of_power_of_2(frame_size);
+    unsigned int stage = po2;
+    unsigned char* frame_ptr = frame;
+    const unsigned char* temp_ptr = temp;
+    unsigned int frame_half = frame_size >> 1;
+    unsigned int num_branches = 1;
+    unsigned int branch;
+    unsigned int bit;
+
+    const __m512i mask_s1_512 = _mm512_set1_epi16(0x00FF);
+    __m512i r_frame0, r_temp0, shifted;
+
+    {
+        __m512i r_frame1, r_temp1;
+        const __m128i shuffle_sep_128 =
+            _mm_setr_epi8(0, 2, 4, 6, 8, 10, 12, 14, 1, 3, 5, 7, 9, 11, 13, 15);
+        const __m512i shuffle_sep_512 = _mm512_broadcast_i32x4(shuffle_sep_128);
+        const __m256i shuffle_sep_256 = _mm256_broadcastsi128_si256(shuffle_sep_128);
+        const __m128i mask_s1_128 = _mm_set1_epi16(0x00FF);
+        const __m256i mask_s1_256 = _mm256_set1_epi16(0x00FF);
+        const __m512i perm_deint =
+            _mm512_set_epi64(7, 5, 3, 1, 6, 4, 2, 0);
+
+        while (stage > 4) {
+            frame_ptr = frame;
+            temp_ptr = temp;
+
+            for (branch = 0; branch < num_branches; ++branch) {
+                for (bit = 0; bit < frame_half; bit += 64) {
+                    unsigned int remaining = frame_half - bit;
+                    if (remaining < 64) {
+                        if (remaining < 32) {
+                            /* 16-byte SSE fallback */
+                            __m128i rt0 =
+                                _mm_loadu_si128((const __m128i*)temp_ptr);
+                            temp_ptr += 16;
+                            __m128i rt1 =
+                                _mm_loadu_si128((const __m128i*)temp_ptr);
+                            temp_ptr += 16;
+                            __m128i sh = _mm_srli_si128(rt0, 1);
+                            sh = _mm_and_si128(sh, mask_s1_128);
+                            rt0 = _mm_xor_si128(sh, rt0);
+                            rt0 = _mm_shuffle_epi8(rt0, shuffle_sep_128);
+                            sh = _mm_srli_si128(rt1, 1);
+                            sh = _mm_and_si128(sh, mask_s1_128);
+                            rt1 = _mm_xor_si128(sh, rt1);
+                            rt1 = _mm_shuffle_epi8(rt1, shuffle_sep_128);
+                            _mm_storeu_si128(
+                                (__m128i*)frame_ptr,
+                                _mm_unpacklo_epi64(rt0, rt1));
+                            _mm_storeu_si128(
+                                (__m128i*)(frame_ptr + frame_half),
+                                _mm_unpackhi_epi64(rt0, rt1));
+                            frame_ptr += 16;
+                        } else {
+                            /* 32-byte AVX2 fallback */
+                            __m256i rt0 =
+                                _mm256_loadu_si256((const __m256i*)temp_ptr);
+                            temp_ptr += 32;
+                            __m256i rt1 =
+                                _mm256_loadu_si256((const __m256i*)temp_ptr);
+                            temp_ptr += 32;
+                            __m256i sh = _mm256_srli_si256(rt0, 1);
+                            sh = _mm256_and_si256(sh, mask_s1_256);
+                            rt0 = _mm256_xor_si256(sh, rt0);
+                            rt0 = _mm256_shuffle_epi8(rt0, shuffle_sep_256);
+                            sh = _mm256_srli_si256(rt1, 1);
+                            sh = _mm256_and_si256(sh, mask_s1_256);
+                            rt1 = _mm256_xor_si256(sh, rt1);
+                            rt1 = _mm256_shuffle_epi8(rt1, shuffle_sep_256);
+                            __m256i rf0 = _mm256_unpacklo_epi64(rt0, rt1);
+                            rt1 = _mm256_unpackhi_epi64(rt0, rt1);
+                            rf0 = _mm256_permute4x64_epi64(rf0, 0xd8);
+                            __m256i rf1 =
+                                _mm256_permute4x64_epi64(rt1, 0xd8);
+                            _mm256_storeu_si256((__m256i*)frame_ptr, rf0);
+                            _mm256_storeu_si256(
+                                (__m256i*)(frame_ptr + frame_half), rf1);
+                            frame_ptr += 32;
+                        }
+                        break;
+                    }
+
+                    r_temp0 = _mm512_loadu_si512((const __m512i*)temp_ptr);
+                    temp_ptr += 64;
+                    r_temp1 = _mm512_loadu_si512((const __m512i*)temp_ptr);
+                    temp_ptr += 64;
+
+                    shifted = _mm512_bsrli_epi128(r_temp0, 1);
+                    shifted = _mm512_and_si512(shifted, mask_s1_512);
+                    r_temp0 = _mm512_xor_si512(shifted, r_temp0);
+                    r_temp0 = _mm512_shuffle_epi8(r_temp0, shuffle_sep_512);
+
+                    shifted = _mm512_bsrli_epi128(r_temp1, 1);
+                    shifted = _mm512_and_si512(shifted, mask_s1_512);
+                    r_temp1 = _mm512_xor_si512(shifted, r_temp1);
+                    r_temp1 = _mm512_shuffle_epi8(r_temp1, shuffle_sep_512);
+
+                    r_frame0 = _mm512_unpacklo_epi64(r_temp0, r_temp1);
+                    r_temp1 = _mm512_unpackhi_epi64(r_temp0, r_temp1);
+                    r_frame0 = _mm512_permutexvar_epi64(perm_deint, r_frame0);
+                    r_frame1 = _mm512_permutexvar_epi64(perm_deint, r_temp1);
+
+                    _mm512_storeu_si512((__m512i*)frame_ptr, r_frame0);
+                    _mm512_storeu_si512(
+                        (__m512i*)(frame_ptr + frame_half), r_frame1);
+                    frame_ptr += 64;
+                }
+
+                frame_ptr += frame_half;
+            }
+            memcpy(temp, frame, sizeof(unsigned char) * frame_size);
+
+            num_branches = num_branches << 1;
+            frame_half = frame_half >> 1;
+            stage--;
+        }
+    }
+
+    /* Lower 4 stages: process 64 bytes (4 sub-frames of 16) at a time */
+    frame_ptr = frame;
+    temp_ptr = temp;
+    __VOLK_PREFETCH(temp_ptr);
+
+    const __m128i shuffle_s4_128 =
+        _mm_setr_epi8(0, 8, 4, 12, 2, 10, 6, 14, 1, 9, 5, 13, 3, 11, 7, 15);
+    const __m512i shuffle_s4 = _mm512_broadcast_i32x4(shuffle_s4_128);
+    const __m512i mask_s4 =
+        _mm512_set_epi64(0LL, -1LL, 0LL, -1LL, 0LL, -1LL, 0LL, -1LL);
+    const __m512i mask_s3 = _mm512_set1_epi64(0x00000000FFFFFFFFLL);
+    const __m512i mask_s2 = _mm512_set1_epi32(0x0000FFFF);
+
+    for (branch = 0; branch < num_branches / 4; ++branch) {
+        r_temp0 = _mm512_loadu_si512((const __m512i*)temp_ptr);
+
+        temp_ptr += 64;
+        __VOLK_PREFETCH(temp_ptr);
+
+        r_temp0 = _mm512_shuffle_epi8(r_temp0, shuffle_s4);
+
+        shifted = _mm512_bsrli_epi128(r_temp0, 8);
+        shifted = _mm512_and_si512(shifted, mask_s4);
+        r_frame0 = _mm512_xor_si512(shifted, r_temp0);
+
+        shifted = _mm512_bsrli_epi128(r_frame0, 4);
+        shifted = _mm512_and_si512(shifted, mask_s3);
+        r_frame0 = _mm512_xor_si512(shifted, r_frame0);
+
+        shifted = _mm512_bsrli_epi128(r_frame0, 2);
+        shifted = _mm512_and_si512(shifted, mask_s2);
+        r_frame0 = _mm512_xor_si512(shifted, r_frame0);
+
+        shifted = _mm512_bsrli_epi128(r_frame0, 1);
+        shifted = _mm512_and_si512(shifted, mask_s1_512);
+        r_frame0 = _mm512_xor_si512(shifted, r_frame0);
+
+        _mm512_storeu_si512((__m512i*)frame_ptr, r_frame0);
+        frame_ptr += 64;
+    }
+}
+#endif /* LV_HAVE_AVX512BW */
+
 #ifdef LV_HAVE_RVV
 #include <riscv_vector.h>
 
@@ -1276,5 +1450,179 @@ static inline void volk_8u_x2_encodeframepolar_8u_a_avx2(unsigned char* frame,
     }
 }
 #endif /* LV_HAVE_AVX2 */
+
+#ifdef LV_HAVE_AVX512BW
+#include <immintrin.h>
+
+static inline void volk_8u_x2_encodeframepolar_8u_a_avx512bw(unsigned char* frame,
+                                                               unsigned char* temp,
+                                                               unsigned int frame_size)
+{
+    if (frame_size < 64) {
+        volk_8u_x2_encodeframepolar_8u_generic(frame, temp, frame_size);
+        return;
+    }
+
+    const unsigned int po2 = log2_of_power_of_2(frame_size);
+    unsigned int stage = po2;
+    unsigned char* frame_ptr = frame;
+    const unsigned char* temp_ptr = temp;
+    unsigned int frame_half = frame_size >> 1;
+    unsigned int num_branches = 1;
+    unsigned int branch;
+    unsigned int bit;
+
+    const __m512i mask_s1_512 = _mm512_set1_epi16(0x00FF);
+    __m512i r_frame0, r_temp0, shifted;
+
+    {
+        __m512i r_frame1, r_temp1;
+        const __m128i shuffle_sep_128 =
+            _mm_setr_epi8(0, 2, 4, 6, 8, 10, 12, 14, 1, 3, 5, 7, 9, 11, 13, 15);
+        const __m512i shuffle_sep_512 = _mm512_broadcast_i32x4(shuffle_sep_128);
+        const __m256i shuffle_sep_256 = _mm256_broadcastsi128_si256(shuffle_sep_128);
+        const __m128i mask_s1_128 = _mm_set1_epi16(0x00FF);
+        const __m256i mask_s1_256 = _mm256_set1_epi16(0x00FF);
+        const __m512i perm_deint =
+            _mm512_set_epi64(7, 5, 3, 1, 6, 4, 2, 0);
+
+        while (stage > 4) {
+            frame_ptr = frame;
+            temp_ptr = temp;
+
+            for (branch = 0; branch < num_branches; ++branch) {
+                for (bit = 0; bit < frame_half; bit += 64) {
+                    unsigned int remaining = frame_half - bit;
+                    if (remaining < 64) {
+                        if (remaining < 32) {
+                            /* 16-byte SSE fallback */
+                            __m128i rt0 =
+                                _mm_load_si128((const __m128i*)temp_ptr);
+                            temp_ptr += 16;
+                            __m128i rt1 =
+                                _mm_load_si128((const __m128i*)temp_ptr);
+                            temp_ptr += 16;
+                            __m128i sh = _mm_srli_si128(rt0, 1);
+                            sh = _mm_and_si128(sh, mask_s1_128);
+                            rt0 = _mm_xor_si128(sh, rt0);
+                            rt0 = _mm_shuffle_epi8(rt0, shuffle_sep_128);
+                            sh = _mm_srli_si128(rt1, 1);
+                            sh = _mm_and_si128(sh, mask_s1_128);
+                            rt1 = _mm_xor_si128(sh, rt1);
+                            rt1 = _mm_shuffle_epi8(rt1, shuffle_sep_128);
+                            _mm_store_si128(
+                                (__m128i*)frame_ptr,
+                                _mm_unpacklo_epi64(rt0, rt1));
+                            _mm_store_si128(
+                                (__m128i*)(frame_ptr + frame_half),
+                                _mm_unpackhi_epi64(rt0, rt1));
+                            frame_ptr += 16;
+                        } else {
+                            /* 32-byte AVX2 fallback */
+                            __m256i rt0 =
+                                _mm256_load_si256((const __m256i*)temp_ptr);
+                            temp_ptr += 32;
+                            __m256i rt1 =
+                                _mm256_load_si256((const __m256i*)temp_ptr);
+                            temp_ptr += 32;
+                            __m256i sh = _mm256_srli_si256(rt0, 1);
+                            sh = _mm256_and_si256(sh, mask_s1_256);
+                            rt0 = _mm256_xor_si256(sh, rt0);
+                            rt0 = _mm256_shuffle_epi8(rt0, shuffle_sep_256);
+                            sh = _mm256_srli_si256(rt1, 1);
+                            sh = _mm256_and_si256(sh, mask_s1_256);
+                            rt1 = _mm256_xor_si256(sh, rt1);
+                            rt1 = _mm256_shuffle_epi8(rt1, shuffle_sep_256);
+                            __m256i rf0 = _mm256_unpacklo_epi64(rt0, rt1);
+                            rt1 = _mm256_unpackhi_epi64(rt0, rt1);
+                            rf0 = _mm256_permute4x64_epi64(rf0, 0xd8);
+                            __m256i rf1 =
+                                _mm256_permute4x64_epi64(rt1, 0xd8);
+                            _mm256_store_si256((__m256i*)frame_ptr, rf0);
+                            _mm256_store_si256(
+                                (__m256i*)(frame_ptr + frame_half), rf1);
+                            frame_ptr += 32;
+                        }
+                        break;
+                    }
+
+                    r_temp0 = _mm512_load_si512((const __m512i*)temp_ptr);
+                    temp_ptr += 64;
+                    r_temp1 = _mm512_load_si512((const __m512i*)temp_ptr);
+                    temp_ptr += 64;
+
+                    shifted = _mm512_bsrli_epi128(r_temp0, 1);
+                    shifted = _mm512_and_si512(shifted, mask_s1_512);
+                    r_temp0 = _mm512_xor_si512(shifted, r_temp0);
+                    r_temp0 = _mm512_shuffle_epi8(r_temp0, shuffle_sep_512);
+
+                    shifted = _mm512_bsrli_epi128(r_temp1, 1);
+                    shifted = _mm512_and_si512(shifted, mask_s1_512);
+                    r_temp1 = _mm512_xor_si512(shifted, r_temp1);
+                    r_temp1 = _mm512_shuffle_epi8(r_temp1, shuffle_sep_512);
+
+                    r_frame0 = _mm512_unpacklo_epi64(r_temp0, r_temp1);
+                    r_temp1 = _mm512_unpackhi_epi64(r_temp0, r_temp1);
+                    r_frame0 = _mm512_permutexvar_epi64(perm_deint, r_frame0);
+                    r_frame1 = _mm512_permutexvar_epi64(perm_deint, r_temp1);
+
+                    _mm512_store_si512((__m512i*)frame_ptr, r_frame0);
+                    _mm512_store_si512(
+                        (__m512i*)(frame_ptr + frame_half), r_frame1);
+                    frame_ptr += 64;
+                }
+
+                frame_ptr += frame_half;
+            }
+            memcpy(temp, frame, sizeof(unsigned char) * frame_size);
+
+            num_branches = num_branches << 1;
+            frame_half = frame_half >> 1;
+            stage--;
+        }
+    }
+
+    /* Lower 4 stages: process 64 bytes (4 sub-frames of 16) at a time */
+    frame_ptr = frame;
+    temp_ptr = temp;
+    __VOLK_PREFETCH(temp_ptr);
+
+    const __m128i shuffle_s4_128 =
+        _mm_setr_epi8(0, 8, 4, 12, 2, 10, 6, 14, 1, 9, 5, 13, 3, 11, 7, 15);
+    const __m512i shuffle_s4 = _mm512_broadcast_i32x4(shuffle_s4_128);
+    const __m512i mask_s4 =
+        _mm512_set_epi64(0LL, -1LL, 0LL, -1LL, 0LL, -1LL, 0LL, -1LL);
+    const __m512i mask_s3 = _mm512_set1_epi64(0x00000000FFFFFFFFLL);
+    const __m512i mask_s2 = _mm512_set1_epi32(0x0000FFFF);
+
+    for (branch = 0; branch < num_branches / 4; ++branch) {
+        r_temp0 = _mm512_load_si512((const __m512i*)temp_ptr);
+
+        temp_ptr += 64;
+        __VOLK_PREFETCH(temp_ptr);
+
+        r_temp0 = _mm512_shuffle_epi8(r_temp0, shuffle_s4);
+
+        shifted = _mm512_bsrli_epi128(r_temp0, 8);
+        shifted = _mm512_and_si512(shifted, mask_s4);
+        r_frame0 = _mm512_xor_si512(shifted, r_temp0);
+
+        shifted = _mm512_bsrli_epi128(r_frame0, 4);
+        shifted = _mm512_and_si512(shifted, mask_s3);
+        r_frame0 = _mm512_xor_si512(shifted, r_frame0);
+
+        shifted = _mm512_bsrli_epi128(r_frame0, 2);
+        shifted = _mm512_and_si512(shifted, mask_s2);
+        r_frame0 = _mm512_xor_si512(shifted, r_frame0);
+
+        shifted = _mm512_bsrli_epi128(r_frame0, 1);
+        shifted = _mm512_and_si512(shifted, mask_s1_512);
+        r_frame0 = _mm512_xor_si512(shifted, r_frame0);
+
+        _mm512_store_si512((__m512i*)frame_ptr, r_frame0);
+        frame_ptr += 64;
+    }
+}
+#endif /* LV_HAVE_AVX512BW */
 
 #endif /* VOLK_KERNELS_VOLK_VOLK_8U_X2_ENCODEFRAMEPOLAR_8U_A_H_ */

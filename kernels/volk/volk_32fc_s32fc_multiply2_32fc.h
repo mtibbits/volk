@@ -231,6 +231,48 @@ static inline void volk_32fc_s32fc_multiply2_32fc_u_avx_fma(lv_32fc_t* cVector,
 }
 #endif /* LV_HAVE_AVX && LV_HAVE_FMA */
 
+#ifdef LV_HAVE_AVX512F
+#include <immintrin.h>
+
+static inline void volk_32fc_s32fc_multiply2_32fc_u_avx512f(lv_32fc_t* cVector,
+                                                             const lv_32fc_t* aVector,
+                                                             const lv_32fc_t* scalar,
+                                                             unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int eighthPoints = num_points / 8;
+    unsigned int remainder = num_points & 7;
+    __m512 x, yl, yh, z, tmp1, tmp2;
+    lv_32fc_t* c = cVector;
+    const lv_32fc_t* a = aVector;
+
+    // Set up constant scalar vector
+    yl = _mm512_set1_ps(lv_creal(*scalar));
+    yh = _mm512_set1_ps(lv_cimag(*scalar));
+
+    for (; number < eighthPoints; number++) {
+        x = _mm512_loadu_ps((const float*)a);
+
+        tmp1 = x;
+
+        x = _mm512_shuffle_ps(x, x, 0xB1); // Swap re/im: ai,ar,bi,br,...
+
+        tmp2 = _mm512_mul_ps(x, yh); // tmp2 = ai*ci, ar*ci, ...
+
+        z = _mm512_fmaddsub_ps(tmp1, yl, tmp2); // re-im, im+re, ...
+
+        _mm512_storeu_ps((float*)c, z);
+
+        a += 8;
+        c += 8;
+    }
+
+    if (remainder) {
+        volk_32fc_s32fc_multiply2_32fc_generic(c, a, scalar, remainder);
+    }
+}
+#endif /* LV_HAVE_AVX512F */
+
 #ifdef LV_HAVE_NEON
 #include <arm_neon.h>
 
@@ -470,5 +512,47 @@ static inline void volk_32fc_s32fc_multiply2_32fc_a_avx_fma(lv_32fc_t* cVector,
     }
 }
 #endif /* LV_HAVE_AVX && LV_HAVE_FMA */
+
+#ifdef LV_HAVE_AVX512F
+#include <immintrin.h>
+
+static inline void volk_32fc_s32fc_multiply2_32fc_a_avx512f(lv_32fc_t* cVector,
+                                                             const lv_32fc_t* aVector,
+                                                             const lv_32fc_t* scalar,
+                                                             unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int eighthPoints = num_points / 8;
+    unsigned int remainder = num_points & 7;
+    __m512 x, yl, yh, z, tmp1, tmp2;
+    lv_32fc_t* c = cVector;
+    const lv_32fc_t* a = aVector;
+
+    // Set up constant scalar vector
+    yl = _mm512_set1_ps(lv_creal(*scalar));
+    yh = _mm512_set1_ps(lv_cimag(*scalar));
+
+    for (; number < eighthPoints; number++) {
+        x = _mm512_load_ps((const float*)a);
+
+        tmp1 = x;
+
+        x = _mm512_shuffle_ps(x, x, 0xB1); // Swap re/im: ai,ar,bi,br,...
+
+        tmp2 = _mm512_mul_ps(x, yh); // tmp2 = ai*ci, ar*ci, ...
+
+        z = _mm512_fmaddsub_ps(tmp1, yl, tmp2); // re-im, im+re, ...
+
+        _mm512_store_ps((float*)c, z);
+
+        a += 8;
+        c += 8;
+    }
+
+    if (remainder) {
+        volk_32fc_s32fc_multiply2_32fc_generic(c, a, scalar, remainder);
+    }
+}
+#endif /* LV_HAVE_AVX512F */
 
 #endif /* INCLUDED_volk_32fc_s32fc_multiply2_32fc_a_H */

@@ -3,3 +3,13 @@
 *.pyo
 *build*/
 archives/
+
+# Private planning/strategy docs
+implementationPlan-*.md
+imPlan-*.md
+KernelPerformance-*.md
+majorTask-*.md
+mergeAndBranchHistory.md
+potentialTechDebt.md
+pr-*.md
+remainingChanges.md

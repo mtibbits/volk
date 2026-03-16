@@ -110,6 +110,78 @@ volk_8ic_x2_s32f_multiply_conjugate_32fc_generic(lv_32fc_t* cVector,
 #endif /* LV_HAVE_GENERIC */
 
 
+#ifdef LV_HAVE_SSE4_1
+#include <smmintrin.h>
+
+static inline void
+volk_8ic_x2_s32f_multiply_conjugate_32fc_u_sse4_1(lv_32fc_t* cVector,
+                                                   const lv_8sc_t* aVector,
+                                                   const lv_8sc_t* bVector,
+                                                   const float scalar,
+                                                   unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int quarterPoints = num_points / 4;
+
+    __m128i x, y, realz, imagz;
+    __m128 ret;
+    lv_32fc_t* c = cVector;
+    const lv_8sc_t* a = aVector;
+    const lv_8sc_t* b = bVector;
+    __m128i conjugateSign = _mm_set_epi16(-1, 1, -1, 1, -1, 1, -1, 1);
+
+    const float fInvScalar = 1.0f / scalar;
+    __m128 invScalar = _mm_set_ps1(fInvScalar);
+
+    for (; number < quarterPoints; number++) {
+        // Convert into 8 bit values into 16 bit values
+        x = _mm_cvtepi8_epi16(_mm_loadl_epi64((const __m128i*)a));
+        y = _mm_cvtepi8_epi16(_mm_loadl_epi64((const __m128i*)b));
+
+        // Calculate the ar*cr - ai*(-ci) portions
+        realz = _mm_madd_epi16(x, y);
+
+        // Calculate the complex conjugate of the cr + ci j values
+        y = _mm_sign_epi16(y, conjugateSign);
+
+        // Shift the order of the cr and ci values
+        y = _mm_shufflehi_epi16(_mm_shufflelo_epi16(y, _MM_SHUFFLE(2, 3, 0, 1)),
+                                _MM_SHUFFLE(2, 3, 0, 1));
+
+        // Calculate the ar*(-ci) + cr*(ai)
+        imagz = _mm_madd_epi16(x, y);
+
+        // Interleave real and imaginary and then convert to float values
+        ret = _mm_cvtepi32_ps(_mm_unpacklo_epi32(realz, imagz));
+
+        // Normalize the floating point values
+        ret = _mm_mul_ps(ret, invScalar);
+
+        // Store the floating point values
+        _mm_storeu_ps((float*)c, ret);
+        c += 2;
+
+        // Interleave real and imaginary and then convert to float values
+        ret = _mm_cvtepi32_ps(_mm_unpackhi_epi32(realz, imagz));
+
+        // Normalize the floating point values
+        ret = _mm_mul_ps(ret, invScalar);
+
+        // Store the floating point values
+        _mm_storeu_ps((float*)c, ret);
+        c += 2;
+
+        a += 4;
+        b += 4;
+    }
+
+    number = quarterPoints * 4;
+    volk_8ic_x2_s32f_multiply_conjugate_32fc_generic(
+        c, a, b, scalar, num_points - number);
+}
+#endif /* LV_HAVE_SSE4_1 */
+
+
 #ifdef LV_HAVE_AVX2
 #include <immintrin.h>
 
@@ -194,6 +266,88 @@ volk_8ic_x2_s32f_multiply_conjugate_32fc_u_avx2(lv_32fc_t* cVector,
     }
 }
 #endif /* LV_HAVE_AVX2 */
+
+
+#ifdef LV_HAVE_AVX512F
+#include <immintrin.h>
+
+static inline void
+volk_8ic_x2_s32f_multiply_conjugate_32fc_u_avx512f(lv_32fc_t* cVector,
+                                                     const lv_8sc_t* aVector,
+                                                     const lv_8sc_t* bVector,
+                                                     const float scalar,
+                                                     unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int sixteenthPoints = num_points / 16;
+
+    lv_32fc_t* c = cVector;
+    const lv_8sc_t* a = aVector;
+    const lv_8sc_t* b = bVector;
+
+    const float fInvScalar = 1.0f / scalar;
+    __m512 invScalar = _mm512_set1_ps(fInvScalar);
+
+    __m256i conjugateSign =
+        _mm256_set_epi16(-1, 1, -1, 1, -1, 1, -1, 1, -1, 1, -1, 1, -1, 1, -1, 1);
+
+    for (; number < sixteenthPoints; number++) {
+        /* Process first 8 complex values using AVX2 widening */
+        __m256i x0 = _mm256_cvtepi8_epi16(_mm_loadu_si128((const __m128i*)a));
+        __m256i y0 = _mm256_cvtepi8_epi16(_mm_loadu_si128((const __m128i*)b));
+
+        __m256i realz0 = _mm256_madd_epi16(x0, y0);
+        y0 = _mm256_sign_epi16(y0, conjugateSign);
+        y0 = _mm256_shufflehi_epi16(
+            _mm256_shufflelo_epi16(y0, _MM_SHUFFLE(2, 3, 0, 1)),
+            _MM_SHUFFLE(2, 3, 0, 1));
+        __m256i imagz0 = _mm256_madd_epi16(x0, y0);
+
+        /* Process second 8 complex values using AVX2 widening */
+        __m256i x1 = _mm256_cvtepi8_epi16(_mm_loadu_si128((const __m128i*)(a + 8)));
+        __m256i y1 = _mm256_cvtepi8_epi16(_mm_loadu_si128((const __m128i*)(b + 8)));
+
+        __m256i realz1 = _mm256_madd_epi16(x1, y1);
+        y1 = _mm256_sign_epi16(y1, conjugateSign);
+        y1 = _mm256_shufflehi_epi16(
+            _mm256_shufflelo_epi16(y1, _MM_SHUFFLE(2, 3, 0, 1)),
+            _MM_SHUFFLE(2, 3, 0, 1));
+        __m256i imagz1 = _mm256_madd_epi16(x1, y1);
+
+        /* Combine into 512-bit vectors: [batch0 | batch1] */
+        __m512i realz = _mm512_inserti64x4(_mm512_castsi256_si512(realz0), realz1, 1);
+        __m512i imagz = _mm512_inserti64x4(_mm512_castsi256_si512(imagz0), imagz1, 1);
+
+        /* Interleave real and imaginary, convert to float, and scale */
+        __m512i lo = _mm512_unpacklo_epi32(realz, imagz);
+        __m512i hi = _mm512_unpackhi_epi32(realz, imagz);
+
+        const __m512i merge_lo_idx = _mm512_set_epi32(
+            23, 22, 21, 20, 7, 6, 5, 4, 19, 18, 17, 16, 3, 2, 1, 0);
+        const __m512i merge_hi_idx = _mm512_set_epi32(
+            31, 30, 29, 28, 15, 14, 13, 12, 27, 26, 25, 24, 11, 10, 9, 8);
+
+        __m512 retlo = _mm512_mul_ps(
+            _mm512_cvtepi32_ps(_mm512_permutex2var_epi32(lo, merge_lo_idx, hi)),
+            invScalar);
+        __m512 rethi = _mm512_mul_ps(
+            _mm512_cvtepi32_ps(_mm512_permutex2var_epi32(lo, merge_hi_idx, hi)),
+            invScalar);
+
+        _mm512_storeu_ps((float*)c, retlo);
+        c += 8;
+        _mm512_storeu_ps((float*)c, rethi);
+        c += 8;
+
+        a += 16;
+        b += 16;
+    }
+
+    number = sixteenthPoints * 16;
+    volk_8ic_x2_s32f_multiply_conjugate_32fc_generic(
+        c, a, b, scalar, num_points - number);
+}
+#endif /* LV_HAVE_AVX512F */
 
 
 #ifdef LV_HAVE_NEON
@@ -352,6 +506,90 @@ volk_8ic_x2_s32f_multiply_conjugate_32fc_rvvseg(lv_32fc_t* cVector,
 }
 
 #endif /* LV_HAVE_RVVSEG */
+
+
+#ifdef LV_HAVE_AVX512BW
+#include <immintrin.h>
+
+static inline void
+volk_8ic_x2_s32f_multiply_conjugate_32fc_u_avx512bw(lv_32fc_t* cVector,
+                                                     const lv_8sc_t* aVector,
+                                                     const lv_8sc_t* bVector,
+                                                     const float scalar,
+                                                     unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int sixteenthPoints = num_points / 16;
+
+    lv_32fc_t* c = cVector;
+    const lv_8sc_t* a = aVector;
+    const lv_8sc_t* b = bVector;
+
+    const float fInvScalar = 1.0f / scalar;
+    __m512 invScalar = _mm512_set1_ps(fInvScalar);
+
+    __m512i conjugateSign = _mm512_set_epi16(
+        -1, 1, -1, 1, -1, 1, -1, 1, -1, 1, -1, 1, -1, 1, -1, 1,
+        -1, 1, -1, 1, -1, 1, -1, 1, -1, 1, -1, 1, -1, 1, -1, 1);
+
+    for (; number < sixteenthPoints; number++) {
+        /* Convert 16 complex int8 values to 32 int16 values */
+        __m512i x = _mm512_cvtepi8_epi16(_mm256_loadu_si256((const __m256i*)a));
+        __m512i y = _mm512_cvtepi8_epi16(_mm256_loadu_si256((const __m256i*)b));
+
+        /* Calculate ar*br + ai*bi (real part of conjugate multiply) */
+        __m512i realz = _mm512_madd_epi16(x, y);
+
+        /* Conjugate b: negate the imaginary parts (odd int16 positions).
+         * Multiply by conjugateSign: +1 for real, -1 for imag.
+         * _mm512_sign_epi16 does not exist, so use mullo instead. */
+        y = _mm512_mullo_epi16(y, conjugateSign);
+
+        /* Swap the order of the cr and ci values within each pair */
+        y = _mm512_shufflehi_epi16(
+            _mm512_shufflelo_epi16(y, _MM_SHUFFLE(2, 3, 0, 1)),
+            _MM_SHUFFLE(2, 3, 0, 1));
+
+        /* Calculate ai*br - ar*bi (imaginary part) */
+        __m512i imagz = _mm512_madd_epi16(x, y);
+
+        /* Interleave real and imaginary, convert to float, and scale.
+         * realz and imagz each have 16 int32 values.
+         * unpacklo/hi operates within 128-bit lanes:
+         *   lo = [r0,i0,r1,i1 | r4,i4,r5,i5 | r8,i8,r9,i9 | r12,i12,r13,i13]
+         *   hi = [r2,i2,r3,i3 | r6,i6,r7,i7 | r10,i10,r11,i11 | r14,i14,r15,i15]
+         * We merge them into sequential complex output using permutex2var. */
+        __m512i lo = _mm512_unpacklo_epi32(realz, imagz);
+        __m512i hi = _mm512_unpackhi_epi32(realz, imagz);
+
+        /* Merge lo and hi: indices 0-15 select from lo, 16-31 from hi */
+        const __m512i merge_lo_idx = _mm512_set_epi32(
+            23, 22, 21, 20, 7, 6, 5, 4, 19, 18, 17, 16, 3, 2, 1, 0);
+        const __m512i merge_hi_idx = _mm512_set_epi32(
+            31, 30, 29, 28, 15, 14, 13, 12, 27, 26, 25, 24, 11, 10, 9, 8);
+
+        __m512 retlo = _mm512_mul_ps(
+            _mm512_cvtepi32_ps(_mm512_permutex2var_epi32(lo, merge_lo_idx, hi)),
+            invScalar);
+        __m512 rethi = _mm512_mul_ps(
+            _mm512_cvtepi32_ps(_mm512_permutex2var_epi32(lo, merge_hi_idx, hi)),
+            invScalar);
+
+        _mm512_storeu_ps((float*)c, retlo);
+        c += 8;
+        _mm512_storeu_ps((float*)c, rethi);
+        c += 8;
+
+        a += 16;
+        b += 16;
+    }
+
+    number = sixteenthPoints * 16;
+    volk_8ic_x2_s32f_multiply_conjugate_32fc_generic(
+        c, a, b, scalar, num_points - number);
+}
+#endif /* LV_HAVE_AVX512BW */
+
 
 #endif /* INCLUDED_volk_8ic_x2_s32f_multiply_conjugate_32fc_u_H */
 
@@ -531,6 +769,166 @@ volk_8ic_x2_s32f_multiply_conjugate_32fc_a_avx2(lv_32fc_t* cVector,
     }
 }
 #endif /* LV_HAVE_AVX2 */
+
+
+#ifdef LV_HAVE_AVX512F
+#include <immintrin.h>
+
+static inline void
+volk_8ic_x2_s32f_multiply_conjugate_32fc_a_avx512f(lv_32fc_t* cVector,
+                                                     const lv_8sc_t* aVector,
+                                                     const lv_8sc_t* bVector,
+                                                     const float scalar,
+                                                     unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int sixteenthPoints = num_points / 16;
+
+    lv_32fc_t* c = cVector;
+    const lv_8sc_t* a = aVector;
+    const lv_8sc_t* b = bVector;
+
+    const float fInvScalar = 1.0f / scalar;
+    __m512 invScalar = _mm512_set1_ps(fInvScalar);
+
+    __m256i conjugateSign =
+        _mm256_set_epi16(-1, 1, -1, 1, -1, 1, -1, 1, -1, 1, -1, 1, -1, 1, -1, 1);
+
+    for (; number < sixteenthPoints; number++) {
+        /* Process first 8 complex values using AVX2 widening */
+        __m256i x0 = _mm256_cvtepi8_epi16(_mm_load_si128((const __m128i*)a));
+        __m256i y0 = _mm256_cvtepi8_epi16(_mm_load_si128((const __m128i*)b));
+
+        __m256i realz0 = _mm256_madd_epi16(x0, y0);
+        y0 = _mm256_sign_epi16(y0, conjugateSign);
+        y0 = _mm256_shufflehi_epi16(
+            _mm256_shufflelo_epi16(y0, _MM_SHUFFLE(2, 3, 0, 1)),
+            _MM_SHUFFLE(2, 3, 0, 1));
+        __m256i imagz0 = _mm256_madd_epi16(x0, y0);
+
+        /* Process second 8 complex values using AVX2 widening */
+        __m256i x1 = _mm256_cvtepi8_epi16(_mm_load_si128((const __m128i*)(a + 8)));
+        __m256i y1 = _mm256_cvtepi8_epi16(_mm_load_si128((const __m128i*)(b + 8)));
+
+        __m256i realz1 = _mm256_madd_epi16(x1, y1);
+        y1 = _mm256_sign_epi16(y1, conjugateSign);
+        y1 = _mm256_shufflehi_epi16(
+            _mm256_shufflelo_epi16(y1, _MM_SHUFFLE(2, 3, 0, 1)),
+            _MM_SHUFFLE(2, 3, 0, 1));
+        __m256i imagz1 = _mm256_madd_epi16(x1, y1);
+
+        /* Combine into 512-bit vectors: [batch0 | batch1] */
+        __m512i realz = _mm512_inserti64x4(_mm512_castsi256_si512(realz0), realz1, 1);
+        __m512i imagz = _mm512_inserti64x4(_mm512_castsi256_si512(imagz0), imagz1, 1);
+
+        /* Interleave real and imaginary, convert to float, and scale */
+        __m512i lo = _mm512_unpacklo_epi32(realz, imagz);
+        __m512i hi = _mm512_unpackhi_epi32(realz, imagz);
+
+        const __m512i merge_lo_idx = _mm512_set_epi32(
+            23, 22, 21, 20, 7, 6, 5, 4, 19, 18, 17, 16, 3, 2, 1, 0);
+        const __m512i merge_hi_idx = _mm512_set_epi32(
+            31, 30, 29, 28, 15, 14, 13, 12, 27, 26, 25, 24, 11, 10, 9, 8);
+
+        __m512 retlo = _mm512_mul_ps(
+            _mm512_cvtepi32_ps(_mm512_permutex2var_epi32(lo, merge_lo_idx, hi)),
+            invScalar);
+        __m512 rethi = _mm512_mul_ps(
+            _mm512_cvtepi32_ps(_mm512_permutex2var_epi32(lo, merge_hi_idx, hi)),
+            invScalar);
+
+        _mm512_store_ps((float*)c, retlo);
+        c += 8;
+        _mm512_store_ps((float*)c, rethi);
+        c += 8;
+
+        a += 16;
+        b += 16;
+    }
+
+    number = sixteenthPoints * 16;
+    volk_8ic_x2_s32f_multiply_conjugate_32fc_generic(
+        c, a, b, scalar, num_points - number);
+}
+#endif /* LV_HAVE_AVX512F */
+
+
+#ifdef LV_HAVE_AVX512BW
+#include <immintrin.h>
+
+static inline void
+volk_8ic_x2_s32f_multiply_conjugate_32fc_a_avx512bw(lv_32fc_t* cVector,
+                                                     const lv_8sc_t* aVector,
+                                                     const lv_8sc_t* bVector,
+                                                     const float scalar,
+                                                     unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int sixteenthPoints = num_points / 16;
+
+    lv_32fc_t* c = cVector;
+    const lv_8sc_t* a = aVector;
+    const lv_8sc_t* b = bVector;
+
+    const float fInvScalar = 1.0f / scalar;
+    __m512 invScalar = _mm512_set1_ps(fInvScalar);
+
+    __m512i conjugateSign = _mm512_set_epi16(
+        -1, 1, -1, 1, -1, 1, -1, 1, -1, 1, -1, 1, -1, 1, -1, 1,
+        -1, 1, -1, 1, -1, 1, -1, 1, -1, 1, -1, 1, -1, 1, -1, 1);
+
+    for (; number < sixteenthPoints; number++) {
+        /* Convert 16 complex int8 values to 32 int16 values */
+        __m512i x = _mm512_cvtepi8_epi16(_mm256_load_si256((const __m256i*)a));
+        __m512i y = _mm512_cvtepi8_epi16(_mm256_load_si256((const __m256i*)b));
+
+        /* Calculate ar*br + ai*bi (real part of conjugate multiply) */
+        __m512i realz = _mm512_madd_epi16(x, y);
+
+        /* Conjugate b: negate the imaginary parts (odd int16 positions).
+         * Multiply by conjugateSign: +1 for real, -1 for imag.
+         * _mm512_sign_epi16 does not exist, so use mullo instead. */
+        y = _mm512_mullo_epi16(y, conjugateSign);
+
+        /* Swap the order of the cr and ci values within each pair */
+        y = _mm512_shufflehi_epi16(
+            _mm512_shufflelo_epi16(y, _MM_SHUFFLE(2, 3, 0, 1)),
+            _MM_SHUFFLE(2, 3, 0, 1));
+
+        /* Calculate ai*br - ar*bi (imaginary part) */
+        __m512i imagz = _mm512_madd_epi16(x, y);
+
+        /* Interleave real and imaginary, convert to float, and scale */
+        __m512i lo = _mm512_unpacklo_epi32(realz, imagz);
+        __m512i hi = _mm512_unpackhi_epi32(realz, imagz);
+
+        /* Merge lo and hi: indices 0-15 select from lo, 16-31 from hi */
+        const __m512i merge_lo_idx = _mm512_set_epi32(
+            23, 22, 21, 20, 7, 6, 5, 4, 19, 18, 17, 16, 3, 2, 1, 0);
+        const __m512i merge_hi_idx = _mm512_set_epi32(
+            31, 30, 29, 28, 15, 14, 13, 12, 27, 26, 25, 24, 11, 10, 9, 8);
+
+        __m512 retlo = _mm512_mul_ps(
+            _mm512_cvtepi32_ps(_mm512_permutex2var_epi32(lo, merge_lo_idx, hi)),
+            invScalar);
+        __m512 rethi = _mm512_mul_ps(
+            _mm512_cvtepi32_ps(_mm512_permutex2var_epi32(lo, merge_hi_idx, hi)),
+            invScalar);
+
+        _mm512_store_ps((float*)c, retlo);
+        c += 8;
+        _mm512_store_ps((float*)c, rethi);
+        c += 8;
+
+        a += 16;
+        b += 16;
+    }
+
+    number = sixteenthPoints * 16;
+    volk_8ic_x2_s32f_multiply_conjugate_32fc_generic(
+        c, a, b, scalar, num_points - number);
+}
+#endif /* LV_HAVE_AVX512BW */
 
 
 #endif /* INCLUDED_volk_8ic_x2_s32f_multiply_conjugate_32fc_a_H */

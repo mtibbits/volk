@@ -146,6 +146,60 @@ static inline void volk_32fc_convert_16ic_u_sse2(lv_16sc_t* outputVector,
 }
 #endif /* LV_HAVE_SSE2 */
 
+#ifdef LV_HAVE_AVX
+#include <immintrin.h>
+
+static inline void volk_32fc_convert_16ic_u_avx(lv_16sc_t* outputVector,
+                                                 const lv_32fc_t* inputVector,
+                                                 unsigned int num_points)
+{
+    const unsigned int avx_iters = num_points / 8;
+
+    const float* inputVectorPtr = (const float*)inputVector;
+    int16_t* outputVectorPtr = (int16_t*)outputVector;
+
+    const float min_val = (float)SHRT_MIN;
+    const float max_val = (float)SHRT_MAX;
+
+    __m256 inputVal1, inputVal2;
+    __m256i intInputVal1, intInputVal2;
+    __m256 ret1, ret2;
+    __m128i lo1, hi1, lo2, hi2;
+    const __m256 vmin_val = _mm256_set1_ps(min_val);
+    const __m256 vmax_val = _mm256_set1_ps(max_val);
+    unsigned int i;
+
+    for (i = 0; i < avx_iters; i++) {
+        inputVal1 = _mm256_loadu_ps(inputVectorPtr);
+        inputVectorPtr += 8;
+        inputVal2 = _mm256_loadu_ps(inputVectorPtr);
+        inputVectorPtr += 8;
+        __VOLK_PREFETCH(inputVectorPtr + 16);
+
+        // Clip
+        ret1 = _mm256_max_ps(_mm256_min_ps(inputVal1, vmax_val), vmin_val);
+        ret2 = _mm256_max_ps(_mm256_min_ps(inputVal2, vmax_val), vmin_val);
+
+        intInputVal1 = _mm256_cvtps_epi32(ret1);
+        intInputVal2 = _mm256_cvtps_epi32(ret2);
+
+        // Extract 128-bit halves and pack with SSE2 (AVX lacks 256-bit integer pack)
+        lo1 = _mm256_castsi256_si128(intInputVal1);
+        hi1 = _mm256_extractf128_si256(intInputVal1, 1);
+        lo2 = _mm256_castsi256_si128(intInputVal2);
+        hi2 = _mm256_extractf128_si256(intInputVal2, 1);
+
+        _mm_storeu_si128((__m128i*)outputVectorPtr, _mm_packs_epi32(lo1, hi1));
+        outputVectorPtr += 8;
+        _mm_storeu_si128((__m128i*)outputVectorPtr, _mm_packs_epi32(lo2, hi2));
+        outputVectorPtr += 8;
+    }
+
+    volk_32fc_convert_16ic_generic(
+        (lv_16sc_t*)outputVectorPtr, (const lv_32fc_t*)inputVectorPtr, num_points - avx_iters * 8);
+}
+#endif /* LV_HAVE_AVX */
+
 #ifdef LV_HAVE_AVX2
 #include <immintrin.h>
 
@@ -450,6 +504,60 @@ static inline void volk_32fc_convert_16ic_a_sse2(lv_16sc_t* outputVector,
     }
 }
 #endif /* LV_HAVE_SSE2 */
+
+#ifdef LV_HAVE_AVX
+#include <immintrin.h>
+
+static inline void volk_32fc_convert_16ic_a_avx(lv_16sc_t* outputVector,
+                                                 const lv_32fc_t* inputVector,
+                                                 unsigned int num_points)
+{
+    const unsigned int avx_iters = num_points / 8;
+
+    const float* inputVectorPtr = (const float*)inputVector;
+    int16_t* outputVectorPtr = (int16_t*)outputVector;
+
+    const float min_val = (float)SHRT_MIN;
+    const float max_val = (float)SHRT_MAX;
+
+    __m256 inputVal1, inputVal2;
+    __m256i intInputVal1, intInputVal2;
+    __m256 ret1, ret2;
+    __m128i lo1, hi1, lo2, hi2;
+    const __m256 vmin_val = _mm256_set1_ps(min_val);
+    const __m256 vmax_val = _mm256_set1_ps(max_val);
+    unsigned int i;
+
+    for (i = 0; i < avx_iters; i++) {
+        inputVal1 = _mm256_load_ps(inputVectorPtr);
+        inputVectorPtr += 8;
+        inputVal2 = _mm256_load_ps(inputVectorPtr);
+        inputVectorPtr += 8;
+        __VOLK_PREFETCH(inputVectorPtr + 16);
+
+        // Clip
+        ret1 = _mm256_max_ps(_mm256_min_ps(inputVal1, vmax_val), vmin_val);
+        ret2 = _mm256_max_ps(_mm256_min_ps(inputVal2, vmax_val), vmin_val);
+
+        intInputVal1 = _mm256_cvtps_epi32(ret1);
+        intInputVal2 = _mm256_cvtps_epi32(ret2);
+
+        // Extract 128-bit halves and pack with SSE2 (AVX lacks 256-bit integer pack)
+        lo1 = _mm256_castsi256_si128(intInputVal1);
+        hi1 = _mm256_extractf128_si256(intInputVal1, 1);
+        lo2 = _mm256_castsi256_si128(intInputVal2);
+        hi2 = _mm256_extractf128_si256(intInputVal2, 1);
+
+        _mm_store_si128((__m128i*)outputVectorPtr, _mm_packs_epi32(lo1, hi1));
+        outputVectorPtr += 8;
+        _mm_store_si128((__m128i*)outputVectorPtr, _mm_packs_epi32(lo2, hi2));
+        outputVectorPtr += 8;
+    }
+
+    volk_32fc_convert_16ic_generic(
+        (lv_16sc_t*)outputVectorPtr, (const lv_32fc_t*)inputVectorPtr, num_points - avx_iters * 8);
+}
+#endif /* LV_HAVE_AVX */
 
 #ifdef LV_HAVE_AVX2
 #include <immintrin.h>

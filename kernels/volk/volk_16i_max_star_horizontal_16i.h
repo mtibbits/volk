@@ -99,6 +99,203 @@ static inline void volk_16i_max_star_horizontal_16i_generic(int16_t* target,
 
 #endif /* LV_HAVE_GENERIC */
 
+#ifdef LV_HAVE_SSE2
+
+#include <emmintrin.h>
+
+static inline void volk_16i_max_star_horizontal_16i_u_sse2(int16_t* target,
+                                                            const int16_t* src0,
+                                                            unsigned int num_points)
+{
+    const unsigned int sse_iters = num_points / 16;
+    unsigned int i;
+
+    for (i = 0; i < sse_iters; i++) {
+        __m128i v0 = _mm_loadu_si128((const __m128i*)src0);
+        __m128i v1 = _mm_loadu_si128((const __m128i*)(src0 + 8));
+
+        /* Sign-extend even/odd int16 elements to int32 via shift */
+        __m128i evens0 = _mm_srai_epi32(_mm_slli_epi32(v0, 16), 16);
+        __m128i odds0 = _mm_srai_epi32(v0, 16);
+        __m128i evens1 = _mm_srai_epi32(_mm_slli_epi32(v1, 16), 16);
+        __m128i odds1 = _mm_srai_epi32(v1, 16);
+
+        /* 32-bit max via compare + select (SSE2 lacks _mm_max_epi32) */
+        __m128i gt0 = _mm_cmpgt_epi32(evens0, odds0);
+        __m128i max0 =
+            _mm_or_si128(_mm_and_si128(gt0, evens0), _mm_andnot_si128(gt0, odds0));
+        __m128i gt1 = _mm_cmpgt_epi32(evens1, odds1);
+        __m128i max1 =
+            _mm_or_si128(_mm_and_si128(gt1, evens1), _mm_andnot_si128(gt1, odds1));
+
+        /* Pack 32-bit results to 16-bit (values already in int16 range) */
+        _mm_storeu_si128((__m128i*)target, _mm_packs_epi32(max0, max1));
+        src0 += 16;
+        target += 8;
+    }
+
+    volk_16i_max_star_horizontal_16i_generic(
+        target, src0, num_points - sse_iters * 16);
+}
+
+#endif /* LV_HAVE_SSE2 */
+
+#ifdef LV_HAVE_SSSE3
+
+#include <emmintrin.h>
+#include <tmmintrin.h>
+#include <xmmintrin.h>
+
+static inline void volk_16i_max_star_horizontal_16i_u_ssse3(int16_t* target,
+                                                             const int16_t* src0,
+                                                             unsigned int num_points)
+{
+    const unsigned int num_bytes = num_points * 2;
+
+    static const uint8_t shuf_even_lo[16] = {
+        0x00, 0x01, 0x04, 0x05, 0x08, 0x09, 0x0c, 0x0d,
+        0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff
+    };
+    static const uint8_t shuf_even_hi[16] = {
+        0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+        0x00, 0x01, 0x04, 0x05, 0x08, 0x09, 0x0c, 0x0d
+    };
+    static const uint8_t shuf_odd_lo[16] = {
+        0x02, 0x03, 0x06, 0x07, 0x0a, 0x0b, 0x0e, 0x0f,
+        0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff
+    };
+    static const uint8_t shuf_odd_hi[16] = {
+        0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+        0x02, 0x03, 0x06, 0x07, 0x0a, 0x0b, 0x0e, 0x0f
+    };
+
+    __m128i xmm_even_lo = _mm_load_si128((const __m128i*)shuf_even_lo);
+    __m128i xmm_even_hi = _mm_load_si128((const __m128i*)shuf_even_hi);
+    __m128i xmm_odd_lo = _mm_load_si128((const __m128i*)shuf_odd_lo);
+    __m128i xmm_odd_hi = _mm_load_si128((const __m128i*)shuf_odd_hi);
+
+    __m128i* p_target = (__m128i*)target;
+    const __m128i* p_src0 = (const __m128i*)src0;
+
+    int bound = num_bytes >> 5;
+    int intermediate = (num_bytes >> 4) & 1;
+    int leftovers = (num_bytes >> 1) & 7;
+
+    int i = 0;
+
+    for (i = 0; i < bound; ++i) {
+        __m128i xmm0 = _mm_loadu_si128(&p_src0[0]);
+        __m128i xmm1 = _mm_loadu_si128(&p_src0[1]);
+        p_src0 += 2;
+
+        __m128i evens = _mm_or_si128(
+            _mm_shuffle_epi8(xmm0, xmm_even_lo),
+            _mm_shuffle_epi8(xmm1, xmm_even_hi));
+        __m128i odds = _mm_or_si128(
+            _mm_shuffle_epi8(xmm0, xmm_odd_lo),
+            _mm_shuffle_epi8(xmm1, xmm_odd_hi));
+
+        _mm_storeu_si128(p_target, _mm_max_epi16(evens, odds));
+        p_target += 1;
+    }
+
+    if (intermediate) {
+        __m128i xmm0 = _mm_loadu_si128(p_src0);
+        p_src0 += 1;
+
+        __m128i evens = _mm_shuffle_epi8(xmm0, xmm_even_lo);
+        __m128i odds = _mm_shuffle_epi8(xmm0, xmm_odd_lo);
+        __m128i result = _mm_max_epi16(evens, odds);
+
+        _mm_storel_pd((double*)p_target, bit128_p(&result)->double_vec);
+        p_target = (__m128i*)((int8_t*)p_target + 8);
+    }
+
+    int processed = (bound << 4) + (intermediate << 3);
+    volk_16i_max_star_horizontal_16i_generic(
+        target + (processed >> 1), src0 + processed, leftovers);
+}
+
+#endif /* LV_HAVE_SSSE3 */
+
+#ifdef LV_HAVE_AVX2
+
+#include <immintrin.h>
+
+static inline void volk_16i_max_star_horizontal_16i_u_avx2(int16_t* target,
+                                                            const int16_t* src0,
+                                                            unsigned int num_points)
+{
+    const unsigned int avx_iters = num_points / 32;
+    unsigned int i;
+
+    for (i = 0; i < avx_iters; i++) {
+        __m256i v0 = _mm256_loadu_si256((const __m256i*)src0);
+        __m256i v1 = _mm256_loadu_si256((const __m256i*)(src0 + 16));
+
+        __m256i evens0 = _mm256_srai_epi32(_mm256_slli_epi32(v0, 16), 16);
+        __m256i odds0 = _mm256_srai_epi32(v0, 16);
+        __m256i max0 = _mm256_max_epi32(evens0, odds0);
+
+        __m256i evens1 = _mm256_srai_epi32(_mm256_slli_epi32(v1, 16), 16);
+        __m256i odds1 = _mm256_srai_epi32(v1, 16);
+        __m256i max1 = _mm256_max_epi32(evens1, odds1);
+
+        /* Pack and fix cross-lane artifact from _mm256_packs_epi32 */
+        __m256i packed = _mm256_packs_epi32(max0, max1);
+        packed = _mm256_permute4x64_epi64(packed, _MM_SHUFFLE(3, 1, 2, 0));
+
+        _mm256_storeu_si256((__m256i*)target, packed);
+        src0 += 32;
+        target += 16;
+    }
+
+    volk_16i_max_star_horizontal_16i_generic(
+        target, src0, num_points - avx_iters * 32);
+}
+
+#endif /* LV_HAVE_AVX2 */
+
+#ifdef LV_HAVE_AVX512BW
+
+#include <immintrin.h>
+
+static inline void volk_16i_max_star_horizontal_16i_u_avx512bw(int16_t* target,
+                                                                const int16_t* src0,
+                                                                unsigned int num_points)
+{
+    const unsigned int avx512_iters = num_points / 64;
+    unsigned int i;
+
+    const __m512i fixup = _mm512_set_epi64(7, 5, 3, 1, 6, 4, 2, 0);
+
+    for (i = 0; i < avx512_iters; i++) {
+        __m512i v0 = _mm512_loadu_si512((const __m512i*)src0);
+        __m512i v1 = _mm512_loadu_si512((const __m512i*)(src0 + 32));
+
+        __m512i evens0 = _mm512_srai_epi32(_mm512_slli_epi32(v0, 16), 16);
+        __m512i odds0 = _mm512_srai_epi32(v0, 16);
+        __m512i max0 = _mm512_max_epi32(evens0, odds0);
+
+        __m512i evens1 = _mm512_srai_epi32(_mm512_slli_epi32(v1, 16), 16);
+        __m512i odds1 = _mm512_srai_epi32(v1, 16);
+        __m512i max1 = _mm512_max_epi32(evens1, odds1);
+
+        /* Pack and fix cross-lane artifact from _mm512_packs_epi32 */
+        __m512i packed = _mm512_packs_epi32(max0, max1);
+        packed = _mm512_permutexvar_epi64(fixup, packed);
+
+        _mm512_storeu_si512((__m512i*)target, packed);
+        src0 += 64;
+        target += 32;
+    }
+
+    volk_16i_max_star_horizontal_16i_generic(
+        target, src0, num_points - avx512_iters * 64);
+}
+
+#endif /* LV_HAVE_AVX512BW */
+
 #ifdef LV_HAVE_NEON
 
 #include <arm_neon.h>
@@ -140,6 +337,47 @@ extern void volk_16i_max_star_horizontal_16i_neonasm(int16_t* target,
 
 #include <inttypes.h>
 #include <stdio.h>
+
+#ifdef LV_HAVE_SSE2
+
+#include <emmintrin.h>
+
+static inline void volk_16i_max_star_horizontal_16i_a_sse2(int16_t* target,
+                                                            const int16_t* src0,
+                                                            unsigned int num_points)
+{
+    const unsigned int sse_iters = num_points / 16;
+    unsigned int i;
+
+    for (i = 0; i < sse_iters; i++) {
+        __m128i v0 = _mm_load_si128((const __m128i*)src0);
+        __m128i v1 = _mm_load_si128((const __m128i*)(src0 + 8));
+
+        /* Sign-extend even/odd int16 elements to int32 via shift */
+        __m128i evens0 = _mm_srai_epi32(_mm_slli_epi32(v0, 16), 16);
+        __m128i odds0 = _mm_srai_epi32(v0, 16);
+        __m128i evens1 = _mm_srai_epi32(_mm_slli_epi32(v1, 16), 16);
+        __m128i odds1 = _mm_srai_epi32(v1, 16);
+
+        /* 32-bit max via compare + select (SSE2 lacks _mm_max_epi32) */
+        __m128i gt0 = _mm_cmpgt_epi32(evens0, odds0);
+        __m128i max0 =
+            _mm_or_si128(_mm_and_si128(gt0, evens0), _mm_andnot_si128(gt0, odds0));
+        __m128i gt1 = _mm_cmpgt_epi32(evens1, odds1);
+        __m128i max1 =
+            _mm_or_si128(_mm_and_si128(gt1, evens1), _mm_andnot_si128(gt1, odds1));
+
+        /* Pack 32-bit results to 16-bit (values already in int16 range) */
+        _mm_store_si128((__m128i*)target, _mm_packs_epi32(max0, max1));
+        src0 += 16;
+        target += 8;
+    }
+
+    volk_16i_max_star_horizontal_16i_generic(
+        target, src0, num_points - sse_iters * 16);
+}
+
+#endif /* LV_HAVE_SSE2 */
 
 #ifdef LV_HAVE_SSSE3
 
@@ -221,5 +459,83 @@ static inline void volk_16i_max_star_horizontal_16i_a_ssse3(int16_t* target,
 }
 
 #endif /* LV_HAVE_SSSE3 */
+
+#ifdef LV_HAVE_AVX2
+
+#include <immintrin.h>
+
+static inline void volk_16i_max_star_horizontal_16i_a_avx2(int16_t* target,
+                                                            const int16_t* src0,
+                                                            unsigned int num_points)
+{
+    const unsigned int avx_iters = num_points / 32;
+    unsigned int i;
+
+    for (i = 0; i < avx_iters; i++) {
+        __m256i v0 = _mm256_load_si256((const __m256i*)src0);
+        __m256i v1 = _mm256_load_si256((const __m256i*)(src0 + 16));
+
+        __m256i evens0 = _mm256_srai_epi32(_mm256_slli_epi32(v0, 16), 16);
+        __m256i odds0 = _mm256_srai_epi32(v0, 16);
+        __m256i max0 = _mm256_max_epi32(evens0, odds0);
+
+        __m256i evens1 = _mm256_srai_epi32(_mm256_slli_epi32(v1, 16), 16);
+        __m256i odds1 = _mm256_srai_epi32(v1, 16);
+        __m256i max1 = _mm256_max_epi32(evens1, odds1);
+
+        /* Pack and fix cross-lane artifact from _mm256_packs_epi32 */
+        __m256i packed = _mm256_packs_epi32(max0, max1);
+        packed = _mm256_permute4x64_epi64(packed, _MM_SHUFFLE(3, 1, 2, 0));
+
+        _mm256_store_si256((__m256i*)target, packed);
+        src0 += 32;
+        target += 16;
+    }
+
+    volk_16i_max_star_horizontal_16i_generic(
+        target, src0, num_points - avx_iters * 32);
+}
+
+#endif /* LV_HAVE_AVX2 */
+
+#ifdef LV_HAVE_AVX512BW
+
+#include <immintrin.h>
+
+static inline void volk_16i_max_star_horizontal_16i_a_avx512bw(int16_t* target,
+                                                                const int16_t* src0,
+                                                                unsigned int num_points)
+{
+    const unsigned int avx512_iters = num_points / 64;
+    unsigned int i;
+
+    const __m512i fixup = _mm512_set_epi64(7, 5, 3, 1, 6, 4, 2, 0);
+
+    for (i = 0; i < avx512_iters; i++) {
+        __m512i v0 = _mm512_load_si512((const __m512i*)src0);
+        __m512i v1 = _mm512_load_si512((const __m512i*)(src0 + 32));
+
+        __m512i evens0 = _mm512_srai_epi32(_mm512_slli_epi32(v0, 16), 16);
+        __m512i odds0 = _mm512_srai_epi32(v0, 16);
+        __m512i max0 = _mm512_max_epi32(evens0, odds0);
+
+        __m512i evens1 = _mm512_srai_epi32(_mm512_slli_epi32(v1, 16), 16);
+        __m512i odds1 = _mm512_srai_epi32(v1, 16);
+        __m512i max1 = _mm512_max_epi32(evens1, odds1);
+
+        /* Pack and fix cross-lane artifact from _mm512_packs_epi32 */
+        __m512i packed = _mm512_packs_epi32(max0, max1);
+        packed = _mm512_permutexvar_epi64(fixup, packed);
+
+        _mm512_store_si512((__m512i*)target, packed);
+        src0 += 64;
+        target += 32;
+    }
+
+    volk_16i_max_star_horizontal_16i_generic(
+        target, src0, num_points - avx512_iters * 64);
+}
+
+#endif /* LV_HAVE_AVX512BW */
 
 #endif /* INCLUDED_volk_16i_max_star_horizontal_16i_a_H */

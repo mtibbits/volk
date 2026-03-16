@@ -229,6 +229,56 @@ volk_32fc_x2_s32f_square_dist_scalar_mult_32f_u_avx(float* target,
 
 #endif /* LV_HAVE_AVX */
 
+#ifdef LV_HAVE_FMA
+#include <immintrin.h>
+
+static inline void
+volk_32fc_x2_s32f_square_dist_scalar_mult_32f_u_fma(float* target,
+                                                     const lv_32fc_t* src0,
+                                                     const lv_32fc_t* points,
+                                                     float scalar,
+                                                     unsigned int num_points)
+{
+    const unsigned int eighthPoints = num_points / 8;
+
+    /* Broadcast complex symbol and scalar */
+    const __m256 xmm_symbol = _mm256_castpd_ps(_mm256_broadcast_sd((const double*)src0));
+    const __m256 xmm_scalar = _mm256_broadcast_ss(&scalar);
+
+    for (unsigned int i = 0; i < eighthPoints; ++i) {
+        __m256 pts0 = _mm256_loadu_ps((const float*)points);
+        __m256 pts1 = _mm256_loadu_ps((const float*)(points + 4));
+        points += 8;
+
+        __m256 diff0 = _mm256_sub_ps(xmm_symbol, pts0);
+        __m256 diff1 = _mm256_sub_ps(xmm_symbol, pts1);
+
+        /* Deinterleave real/imag within 128-bit lanes */
+        __m256 re = _mm256_shuffle_ps(diff0, diff1, _MM_SHUFFLE(2, 0, 2, 0));
+        __m256 im = _mm256_shuffle_ps(diff0, diff1, _MM_SHUFFLE(3, 1, 3, 1));
+
+        /* Squared magnitude using FMA: re*re + im*im */
+        __m256 mag_sq = _mm256_fmadd_ps(re, re, _mm256_mul_ps(im, im));
+
+        /* Scale */
+        __m256 scaled = _mm256_mul_ps(mag_sq, xmm_scalar);
+
+        /* Fix cross-lane ordering: [0,1,4,5 | 2,3,6,7] -> [0,1,2,3 | 4,5,6,7] */
+        __m128 lo = _mm256_castps256_ps128(scaled);
+        __m128 hi = _mm256_extractf128_ps(scaled, 1);
+        __m128 first4 = _mm_shuffle_ps(lo, hi, _MM_SHUFFLE(1, 0, 1, 0));
+        __m128 last4 = _mm_shuffle_ps(lo, hi, _MM_SHUFFLE(3, 2, 3, 2));
+        __m256 result = _mm256_insertf128_ps(_mm256_castps128_ps256(first4), last4, 1);
+
+        _mm256_storeu_ps(target, result);
+        target += 8;
+    }
+
+    volk_32fc_x2_s32f_square_dist_scalar_mult_32f_generic(
+        target, src0, points, scalar, num_points - eighthPoints * 8);
+}
+
+#endif /*LV_HAVE_FMA*/
 
 #ifdef LV_HAVE_AVX2
 #include <immintrin.h>
@@ -468,6 +518,63 @@ volk_32fc_x2_s32f_square_dist_scalar_mult_32f_rvvseg(float* target,
 }
 #endif /*LV_HAVE_RVVSEG*/
 
+
+#ifdef LV_HAVE_AVX512F
+#include <immintrin.h>
+
+static inline void
+volk_32fc_x2_s32f_square_dist_scalar_mult_32f_u_avx512f(float* target,
+                                                         const lv_32fc_t* src0,
+                                                         const lv_32fc_t* points,
+                                                         float scalar,
+                                                         unsigned int num_points)
+{
+    const unsigned int sixteenthPoints = num_points / 16;
+    unsigned int number = 0;
+
+    /* Broadcast src0 real and imag */
+    const float src0_real = lv_creal(src0[0]);
+    const float src0_imag = lv_cimag(src0[0]);
+    const __m512 sym_real = _mm512_set1_ps(src0_real);
+    const __m512 sym_imag = _mm512_set1_ps(src0_imag);
+    const __m512 vscalar = _mm512_set1_ps(scalar);
+
+    /* Indices for deinterleaving complex float pairs */
+    const __m512i idx_re =
+        _mm512_set_epi32(30, 28, 26, 24, 22, 20, 18, 16, 14, 12, 10, 8, 6, 4, 2, 0);
+    const __m512i idx_im =
+        _mm512_set_epi32(31, 29, 27, 25, 23, 21, 19, 17, 15, 13, 11, 9, 7, 5, 3, 1);
+
+    for (; number < sixteenthPoints; number++) {
+        /* Load 16 complex points (32 floats) */
+        __m512 pts0 = _mm512_loadu_ps((const float*)points);
+        __m512 pts1 = _mm512_loadu_ps((const float*)(points + 8));
+        points += 16;
+
+        /* Deinterleave into real and imaginary */
+        __m512 pts_real = _mm512_permutex2var_ps(pts0, idx_re, pts1);
+        __m512 pts_imag = _mm512_permutex2var_ps(pts0, idx_im, pts1);
+
+        /* Compute difference */
+        __m512 diff_real = _mm512_sub_ps(sym_real, pts_real);
+        __m512 diff_imag = _mm512_sub_ps(sym_imag, pts_imag);
+
+        /* Compute squared distance: real^2 + imag^2 */
+        __m512 dist_sq = _mm512_fmadd_ps(diff_real, diff_real,
+                                          _mm512_mul_ps(diff_imag, diff_imag));
+
+        /* Scale */
+        _mm512_storeu_ps(target, _mm512_mul_ps(dist_sq, vscalar));
+        target += 16;
+    }
+
+    volk_32fc_x2_s32f_square_dist_scalar_mult_32f_generic(
+        target, src0, points, scalar, num_points - sixteenthPoints * 16);
+}
+
+#endif /*LV_HAVE_AVX512F*/
+
+
 #endif /*INCLUDED_volk_32fc_x2_s32f_square_dist_scalar_mult_32f_u_H*/
 
 #ifndef INCLUDED_volk_32fc_x2_s32f_square_dist_scalar_mult_32f_a_H
@@ -600,6 +707,56 @@ volk_32fc_x2_s32f_square_dist_scalar_mult_32f_a_avx(float* target,
 
 #endif /* LV_HAVE_AVX */
 
+#ifdef LV_HAVE_FMA
+#include <immintrin.h>
+
+static inline void
+volk_32fc_x2_s32f_square_dist_scalar_mult_32f_a_fma(float* target,
+                                                     const lv_32fc_t* src0,
+                                                     const lv_32fc_t* points,
+                                                     float scalar,
+                                                     unsigned int num_points)
+{
+    const unsigned int eighthPoints = num_points / 8;
+
+    /* Broadcast complex symbol and scalar */
+    const __m256 xmm_symbol = _mm256_castpd_ps(_mm256_broadcast_sd((const double*)src0));
+    const __m256 xmm_scalar = _mm256_broadcast_ss(&scalar);
+
+    for (unsigned int i = 0; i < eighthPoints; ++i) {
+        __m256 pts0 = _mm256_load_ps((const float*)points);
+        __m256 pts1 = _mm256_load_ps((const float*)(points + 4));
+        points += 8;
+
+        __m256 diff0 = _mm256_sub_ps(xmm_symbol, pts0);
+        __m256 diff1 = _mm256_sub_ps(xmm_symbol, pts1);
+
+        /* Deinterleave real/imag within 128-bit lanes */
+        __m256 re = _mm256_shuffle_ps(diff0, diff1, _MM_SHUFFLE(2, 0, 2, 0));
+        __m256 im = _mm256_shuffle_ps(diff0, diff1, _MM_SHUFFLE(3, 1, 3, 1));
+
+        /* Squared magnitude using FMA: re*re + im*im */
+        __m256 mag_sq = _mm256_fmadd_ps(re, re, _mm256_mul_ps(im, im));
+
+        /* Scale */
+        __m256 scaled = _mm256_mul_ps(mag_sq, xmm_scalar);
+
+        /* Fix cross-lane ordering: [0,1,4,5 | 2,3,6,7] -> [0,1,2,3 | 4,5,6,7] */
+        __m128 lo = _mm256_castps256_ps128(scaled);
+        __m128 hi = _mm256_extractf128_ps(scaled, 1);
+        __m128 first4 = _mm_shuffle_ps(lo, hi, _MM_SHUFFLE(1, 0, 1, 0));
+        __m128 last4 = _mm_shuffle_ps(lo, hi, _MM_SHUFFLE(3, 2, 3, 2));
+        __m256 result = _mm256_insertf128_ps(_mm256_castps128_ps256(first4), last4, 1);
+
+        _mm256_store_ps(target, result);
+        target += 8;
+    }
+
+    volk_32fc_x2_s32f_square_dist_scalar_mult_32f_generic(
+        target, src0, points, scalar, num_points - eighthPoints * 8);
+}
+
+#endif /*LV_HAVE_FMA*/
 
 #ifdef LV_HAVE_AVX2
 #include <immintrin.h>
@@ -683,5 +840,62 @@ volk_32fc_x2_s32f_square_dist_scalar_mult_32f_a_avx2(float* target,
 }
 
 #endif /*LV_HAVE_AVX2*/
+
+
+#ifdef LV_HAVE_AVX512F
+#include <immintrin.h>
+
+static inline void
+volk_32fc_x2_s32f_square_dist_scalar_mult_32f_a_avx512f(float* target,
+                                                         const lv_32fc_t* src0,
+                                                         const lv_32fc_t* points,
+                                                         float scalar,
+                                                         unsigned int num_points)
+{
+    const unsigned int sixteenthPoints = num_points / 16;
+    unsigned int number = 0;
+
+    /* Broadcast src0 real and imag */
+    const float src0_real = lv_creal(src0[0]);
+    const float src0_imag = lv_cimag(src0[0]);
+    const __m512 sym_real = _mm512_set1_ps(src0_real);
+    const __m512 sym_imag = _mm512_set1_ps(src0_imag);
+    const __m512 vscalar = _mm512_set1_ps(scalar);
+
+    /* Indices for deinterleaving complex float pairs */
+    const __m512i idx_re =
+        _mm512_set_epi32(30, 28, 26, 24, 22, 20, 18, 16, 14, 12, 10, 8, 6, 4, 2, 0);
+    const __m512i idx_im =
+        _mm512_set_epi32(31, 29, 27, 25, 23, 21, 19, 17, 15, 13, 11, 9, 7, 5, 3, 1);
+
+    for (; number < sixteenthPoints; number++) {
+        /* Load 16 complex points (32 floats) */
+        __m512 pts0 = _mm512_load_ps((const float*)points);
+        __m512 pts1 = _mm512_load_ps((const float*)(points + 8));
+        points += 16;
+
+        /* Deinterleave into real and imaginary */
+        __m512 pts_real = _mm512_permutex2var_ps(pts0, idx_re, pts1);
+        __m512 pts_imag = _mm512_permutex2var_ps(pts0, idx_im, pts1);
+
+        /* Compute difference */
+        __m512 diff_real = _mm512_sub_ps(sym_real, pts_real);
+        __m512 diff_imag = _mm512_sub_ps(sym_imag, pts_imag);
+
+        /* Compute squared distance: real^2 + imag^2 */
+        __m512 dist_sq = _mm512_fmadd_ps(diff_real, diff_real,
+                                          _mm512_mul_ps(diff_imag, diff_imag));
+
+        /* Scale */
+        _mm512_store_ps(target, _mm512_mul_ps(dist_sq, vscalar));
+        target += 16;
+    }
+
+    volk_32fc_x2_s32f_square_dist_scalar_mult_32f_generic(
+        target, src0, points, scalar, num_points - sixteenthPoints * 16);
+}
+
+#endif /*LV_HAVE_AVX512F*/
+
 
 #endif /*INCLUDED_volk_32fc_x2_s32f_square_dist_scalar_mult_32f_a_H*/

@@ -75,6 +75,33 @@ static inline void volk_32f_s32f_x2_clamp_32f_generic(float* out,
 }
 #endif /* LV_HAVE_GENERIC */
 
+#ifdef LV_HAVE_SSE
+#include <xmmintrin.h>
+static inline void volk_32f_s32f_x2_clamp_32f_u_sse(float* out,
+                                                     const float* in,
+                                                     const float min,
+                                                     const float max,
+                                                     unsigned int num_points)
+{
+    const __m128 vmin = _mm_set1_ps(min);
+    const __m128 vmax = _mm_set1_ps(max);
+
+    unsigned int number = 0;
+    const unsigned int quarter_points = num_points / 4;
+    for (; number < quarter_points; number++) {
+        __m128 res = _mm_loadu_ps(in);
+        res = _mm_max_ps(res, vmin);
+        res = _mm_min_ps(res, vmax);
+        _mm_storeu_ps(out, res);
+        in += 4;
+        out += 4;
+    }
+
+    number = quarter_points * 4;
+    volk_32f_s32f_x2_clamp_32f_generic(out, in, min, max, num_points - number);
+}
+#endif /* LV_HAVE_SSE */
+
 #if LV_HAVE_SSE4_1
 #include <immintrin.h>
 static inline void volk_32f_s32f_x2_clamp_32f_u_sse4_1(float* out,
@@ -132,6 +159,33 @@ static inline void volk_32f_s32f_x2_clamp_32f_u_avx(float* out,
     volk_32f_s32f_x2_clamp_32f_generic(out, in, min, max, num_points - number);
 }
 #endif /* LV_HAVE_AVX */
+
+#ifdef LV_HAVE_AVX512F
+#include <immintrin.h>
+static inline void volk_32f_s32f_x2_clamp_32f_u_avx512f(float* out,
+                                                         const float* in,
+                                                         const float min,
+                                                         const float max,
+                                                         unsigned int num_points)
+{
+    const __m512 vmin = _mm512_set1_ps(min);
+    const __m512 vmax = _mm512_set1_ps(max);
+
+    unsigned int number = 0;
+    const unsigned int sixteenth_points = num_points / 16;
+    for (; number < sixteenth_points; number++) {
+        __m512 res = _mm512_loadu_ps(in);
+        res = _mm512_max_ps(res, vmin);
+        res = _mm512_min_ps(res, vmax);
+        _mm512_storeu_ps(out, res);
+        in += 16;
+        out += 16;
+    }
+
+    number = sixteenth_points * 16;
+    volk_32f_s32f_x2_clamp_32f_generic(out, in, min, max, num_points - number);
+}
+#endif /* LV_HAVE_AVX512F */
 
 #ifdef LV_HAVE_NEON
 #include <arm_neon.h>
@@ -238,6 +292,33 @@ static inline void volk_32f_s32f_x2_clamp_32f_rvv(float* out,
 #ifndef INCLUDED_volk_32f_s32f_x2_clamp_32f_a_H
 #define INCLUDED_volk_32f_s32f_x2_clamp_32f_a_H
 
+#ifdef LV_HAVE_SSE
+#include <xmmintrin.h>
+static inline void volk_32f_s32f_x2_clamp_32f_a_sse(float* out,
+                                                     const float* in,
+                                                     const float min,
+                                                     const float max,
+                                                     unsigned int num_points)
+{
+    const __m128 vmin = _mm_set1_ps(min);
+    const __m128 vmax = _mm_set1_ps(max);
+
+    unsigned int number = 0;
+    const unsigned int quarter_points = num_points / 4;
+    for (; number < quarter_points; number++) {
+        __m128 res = _mm_load_ps(in);
+        res = _mm_max_ps(res, vmin);
+        res = _mm_min_ps(res, vmax);
+        _mm_store_ps(out, res);
+        in += 4;
+        out += 4;
+    }
+
+    number = quarter_points * 4;
+    volk_32f_s32f_x2_clamp_32f_generic(out, in, min, max, num_points - number);
+}
+#endif /* LV_HAVE_SSE */
+
 #if LV_HAVE_SSE4_1
 #include <immintrin.h>
 static inline void volk_32f_s32f_x2_clamp_32f_a_sse4_1(float* out,
@@ -295,5 +376,32 @@ static inline void volk_32f_s32f_x2_clamp_32f_a_avx(float* out,
     volk_32f_s32f_x2_clamp_32f_generic(out, in, min, max, num_points - number);
 }
 #endif /* LV_HAVE_AVX */
+
+#ifdef LV_HAVE_AVX512F
+#include <immintrin.h>
+static inline void volk_32f_s32f_x2_clamp_32f_a_avx512f(float* out,
+                                                         const float* in,
+                                                         const float min,
+                                                         const float max,
+                                                         unsigned int num_points)
+{
+    const __m512 vmin = _mm512_set1_ps(min);
+    const __m512 vmax = _mm512_set1_ps(max);
+
+    unsigned int number = 0;
+    const unsigned int sixteenth_points = num_points / 16;
+    for (; number < sixteenth_points; number++) {
+        __m512 res = _mm512_load_ps(in);
+        res = _mm512_max_ps(res, vmin);
+        res = _mm512_min_ps(res, vmax);
+        _mm512_store_ps(out, res);
+        in += 16;
+        out += 16;
+    }
+
+    number = sixteenth_points * 16;
+    volk_32f_s32f_x2_clamp_32f_generic(out, in, min, max, num_points - number);
+}
+#endif /* LV_HAVE_AVX512F */
 
 #endif /* INCLUDED_volk_32f_s32f_x2_clamp_32f_a_H */

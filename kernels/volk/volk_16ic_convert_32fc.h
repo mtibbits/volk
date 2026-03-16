@@ -100,6 +100,46 @@ static inline void volk_16ic_convert_32fc_u_sse2(lv_32fc_t* outputVector,
 
 #endif /* LV_HAVE_SSE2 */
 
+#ifdef LV_HAVE_SSE4_1
+#include <smmintrin.h>
+
+static inline void volk_16ic_convert_32fc_u_sse4_1(lv_32fc_t* outputVector,
+                                                    const lv_16sc_t* inputVector,
+                                                    unsigned int num_points)
+{
+    const unsigned int sse_iters = num_points / 4;
+    unsigned int number = 0;
+    const int16_t* complexVectorPtr = (const int16_t*)inputVector;
+    float* outputVectorPtr = (float*)outputVector;
+    __m128i cplxValue;
+    __m128i intVal;
+    __m128 floatVal;
+
+    for (number = 0; number < sse_iters; number++) {
+        cplxValue = _mm_loadu_si128((const __m128i*)complexVectorPtr);
+        complexVectorPtr += 8;
+
+        // Lower 4 int16 → int32 → float
+        intVal = _mm_cvtepi16_epi32(cplxValue);
+        floatVal = _mm_cvtepi32_ps(intVal);
+        _mm_storeu_ps(outputVectorPtr, floatVal);
+
+        // Upper 4 int16 → int32 → float
+        intVal = _mm_cvtepi16_epi32(_mm_srli_si128(cplxValue, 8));
+        floatVal = _mm_cvtepi32_ps(intVal);
+        _mm_storeu_ps(outputVectorPtr + 4, floatVal);
+
+        outputVectorPtr += 8;
+    }
+
+    volk_16ic_convert_32fc_generic(
+        (lv_32fc_t*)outputVectorPtr,
+        (const lv_16sc_t*)complexVectorPtr,
+        num_points - sse_iters * 4);
+}
+
+#endif /* LV_HAVE_SSE4_1 */
+
 #ifdef LV_HAVE_AVX
 #include <immintrin.h>
 
@@ -342,6 +382,46 @@ static inline void volk_16ic_convert_32fc_a_sse2(lv_32fc_t* outputVector,
 }
 
 #endif /* LV_HAVE_SSE2 */
+
+#ifdef LV_HAVE_SSE4_1
+#include <smmintrin.h>
+
+static inline void volk_16ic_convert_32fc_a_sse4_1(lv_32fc_t* outputVector,
+                                                    const lv_16sc_t* inputVector,
+                                                    unsigned int num_points)
+{
+    const unsigned int sse_iters = num_points / 4;
+    unsigned int number = 0;
+    const int16_t* complexVectorPtr = (const int16_t*)inputVector;
+    float* outputVectorPtr = (float*)outputVector;
+    __m128i cplxValue;
+    __m128i intVal;
+    __m128 floatVal;
+
+    for (number = 0; number < sse_iters; number++) {
+        cplxValue = _mm_load_si128((const __m128i*)complexVectorPtr);
+        complexVectorPtr += 8;
+
+        // Lower 4 int16 → int32 → float
+        intVal = _mm_cvtepi16_epi32(cplxValue);
+        floatVal = _mm_cvtepi32_ps(intVal);
+        _mm_store_ps(outputVectorPtr, floatVal);
+
+        // Upper 4 int16 → int32 → float
+        intVal = _mm_cvtepi16_epi32(_mm_srli_si128(cplxValue, 8));
+        floatVal = _mm_cvtepi32_ps(intVal);
+        _mm_store_ps(outputVectorPtr + 4, floatVal);
+
+        outputVectorPtr += 8;
+    }
+
+    volk_16ic_convert_32fc_generic(
+        (lv_32fc_t*)outputVectorPtr,
+        (const lv_16sc_t*)complexVectorPtr,
+        num_points - sse_iters * 4);
+}
+
+#endif /* LV_HAVE_SSE4_1 */
 
 #ifdef LV_HAVE_AVX
 #include <immintrin.h>

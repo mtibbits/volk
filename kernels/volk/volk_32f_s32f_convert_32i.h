@@ -254,6 +254,51 @@ static inline void volk_32f_s32f_convert_32i_u_avx(int32_t* outputVector,
 
 #endif /* LV_HAVE_AVX */
 
+#ifdef LV_HAVE_AVX512F
+#include <immintrin.h>
+
+static inline void volk_32f_s32f_convert_32i_u_avx512f(int32_t* outputVector,
+                                                        const float* inputVector,
+                                                        const float scalar,
+                                                        unsigned int num_points)
+{
+    unsigned int number = 0;
+
+    const unsigned int sixteenthPoints = num_points / 16;
+
+    const float* inputVectorPtr = (const float*)inputVector;
+    int32_t* outputVectorPtr = outputVector;
+
+    const float min_val = (float)INT_MIN;
+    const float max_val = (float)((uint32_t)INT_MAX + 1);
+
+    const __m512 vScalar = _mm512_set1_ps(scalar);
+    const __m512 vmin_val = _mm512_set1_ps(min_val);
+    const __m512 vmax_val = _mm512_set1_ps(max_val);
+
+    for (; number < sixteenthPoints; number++) {
+        __m512 inputVal = _mm512_loadu_ps(inputVectorPtr);
+        inputVectorPtr += 16;
+
+        inputVal = _mm512_max_ps(
+            _mm512_min_ps(_mm512_mul_ps(inputVal, vScalar), vmax_val), vmin_val);
+        __m512i intInputVal = _mm512_cvtps_epi32(inputVal);
+        // Fix positive overflow: VCVTPS2DQ returns 0x80000000 for values >= 2^31
+        __mmask16 overflow = _mm512_cmp_ps_mask(inputVal, vmax_val, _CMP_GE_OS);
+        intInputVal = _mm512_mask_xor_epi32(
+            intInputVal, overflow, intInputVal, _mm512_set1_epi32(-1));
+
+        _mm512_storeu_si512((__m512i*)outputVectorPtr, intInputVal);
+        outputVectorPtr += 16;
+    }
+
+    number = sixteenthPoints * 16;
+    volk_32f_s32f_convert_32i_generic(
+        outputVector + number, inputVector + number, scalar, num_points - number);
+}
+
+#endif /* LV_HAVE_AVX512F */
+
 #ifdef LV_HAVE_NEON
 #include <arm_neon.h>
 
@@ -544,5 +589,50 @@ static inline void volk_32f_s32f_convert_32i_a_avx(int32_t* outputVector,
 }
 
 #endif /* LV_HAVE_AVX */
+
+#ifdef LV_HAVE_AVX512F
+#include <immintrin.h>
+
+static inline void volk_32f_s32f_convert_32i_a_avx512f(int32_t* outputVector,
+                                                        const float* inputVector,
+                                                        const float scalar,
+                                                        unsigned int num_points)
+{
+    unsigned int number = 0;
+
+    const unsigned int sixteenthPoints = num_points / 16;
+
+    const float* inputVectorPtr = (const float*)inputVector;
+    int32_t* outputVectorPtr = outputVector;
+
+    const float min_val = (float)INT_MIN;
+    const float max_val = (float)((uint32_t)INT_MAX + 1);
+
+    const __m512 vScalar = _mm512_set1_ps(scalar);
+    const __m512 vmin_val = _mm512_set1_ps(min_val);
+    const __m512 vmax_val = _mm512_set1_ps(max_val);
+
+    for (; number < sixteenthPoints; number++) {
+        __m512 inputVal = _mm512_load_ps(inputVectorPtr);
+        inputVectorPtr += 16;
+
+        inputVal = _mm512_max_ps(
+            _mm512_min_ps(_mm512_mul_ps(inputVal, vScalar), vmax_val), vmin_val);
+        __m512i intInputVal = _mm512_cvtps_epi32(inputVal);
+        // Fix positive overflow: VCVTPS2DQ returns 0x80000000 for values >= 2^31
+        __mmask16 overflow = _mm512_cmp_ps_mask(inputVal, vmax_val, _CMP_GE_OS);
+        intInputVal = _mm512_mask_xor_epi32(
+            intInputVal, overflow, intInputVal, _mm512_set1_epi32(-1));
+
+        _mm512_store_si512((__m512i*)outputVectorPtr, intInputVal);
+        outputVectorPtr += 16;
+    }
+
+    number = sixteenthPoints * 16;
+    volk_32f_s32f_convert_32i_generic(
+        outputVector + number, inputVector + number, scalar, num_points - number);
+}
+
+#endif /* LV_HAVE_AVX512F */
 
 #endif /* INCLUDED_volk_32f_s32f_convert_32i_a_H */

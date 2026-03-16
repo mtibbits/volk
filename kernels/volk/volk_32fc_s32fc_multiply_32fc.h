@@ -131,6 +131,17 @@ static inline void volk_32fc_s32fc_multiply_32fc_u_avx_fma(lv_32fc_t* cVector,
 }
 #endif /* LV_HAVE_AVX && LV_HAVE_FMA */
 
+#ifdef LV_HAVE_AVX512F
+
+static inline void volk_32fc_s32fc_multiply_32fc_u_avx512f(lv_32fc_t* cVector,
+                                                            const lv_32fc_t* aVector,
+                                                            const lv_32fc_t scalar,
+                                                            unsigned int num_points)
+{
+    volk_32fc_s32fc_multiply2_32fc_u_avx512f(cVector, aVector, &scalar, num_points);
+}
+#endif /* LV_HAVE_AVX512F */
+
 #ifdef LV_HAVE_NEON
 
 static inline void volk_32fc_s32fc_multiply_32fc_neon(lv_32fc_t* cVector,
@@ -195,5 +206,16 @@ static inline void volk_32fc_s32fc_multiply_32fc_a_avx_fma(lv_32fc_t* cVector,
     volk_32fc_s32fc_multiply2_32fc_a_avx_fma(cVector, aVector, &scalar, num_points);
 }
 #endif /* LV_HAVE_AVX && LV_HAVE_FMA */
+
+#ifdef LV_HAVE_AVX512F
+
+static inline void volk_32fc_s32fc_multiply_32fc_a_avx512f(lv_32fc_t* cVector,
+                                                            const lv_32fc_t* aVector,
+                                                            const lv_32fc_t scalar,
+                                                            unsigned int num_points)
+{
+    volk_32fc_s32fc_multiply2_32fc_a_avx512f(cVector, aVector, &scalar, num_points);
+}
+#endif /* LV_HAVE_AVX512F */
 
 #endif /* INCLUDED_volk_32fc_s32fc_multiply_32fc_a_H */

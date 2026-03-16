@@ -78,6 +78,40 @@ static inline void volk_32f_expfast_32f_generic(float* bVector,
 }
 #endif /* LV_HAVE_GENERIC */
 
+#ifdef LV_HAVE_SSE2
+#include <emmintrin.h>
+
+static inline void volk_32f_expfast_32f_u_sse2(float* bVector,
+                                                const float* aVector,
+                                                unsigned int num_points)
+{
+    float* bPtr = bVector;
+    const float* aPtr = aVector;
+
+    unsigned int number = 0;
+    const unsigned int quarterPoints = num_points / 4;
+
+    __m128 aVal, bVal, a, b;
+    __m128i exp;
+    a = _mm_set1_ps(A / Mln2);
+    b = _mm_set1_ps(B - C);
+
+    for (; number < quarterPoints; number++) {
+        aVal = _mm_loadu_ps(aPtr);
+        exp = _mm_cvtps_epi32(_mm_add_ps(_mm_mul_ps(a, aVal), b));
+        bVal = _mm_castsi128_ps(exp);
+
+        _mm_storeu_ps(bPtr, bVal);
+        aPtr += 4;
+        bPtr += 4;
+    }
+
+    number = quarterPoints * 4;
+    volk_32f_expfast_32f_generic(bPtr, aPtr, num_points - number);
+}
+
+#endif /* LV_HAVE_SSE2 */
+
 #ifdef LV_HAVE_SSE4_1
 #include <smmintrin.h>
 
@@ -185,6 +219,40 @@ static inline void volk_32f_expfast_32f_u_avx_fma(float* bVector,
 
 #endif /* LV_HAVE_AVX && LV_HAVE_FMA */
 
+#ifdef LV_HAVE_AVX512F
+#include <immintrin.h>
+
+static inline void volk_32f_expfast_32f_u_avx512f(float* bVector,
+                                                   const float* aVector,
+                                                   unsigned int num_points)
+{
+    float* bPtr = bVector;
+    const float* aPtr = aVector;
+
+    unsigned int number = 0;
+    const unsigned int sixteenthPoints = num_points / 16;
+
+    __m512 aVal, bVal, a, b;
+    __m512i exp;
+    a = _mm512_set1_ps(A / Mln2);
+    b = _mm512_set1_ps(B - C);
+
+    for (; number < sixteenthPoints; number++) {
+        aVal = _mm512_loadu_ps(aPtr);
+        exp = _mm512_cvtps_epi32(_mm512_fmadd_ps(a, aVal, b));
+        bVal = _mm512_castsi512_ps(exp);
+
+        _mm512_storeu_ps(bPtr, bVal);
+        aPtr += 16;
+        bPtr += 16;
+    }
+
+    number = sixteenthPoints * 16;
+    volk_32f_expfast_32f_generic(bPtr, aPtr, num_points - number);
+}
+
+#endif /* LV_HAVE_AVX512F */
+
 #ifdef LV_HAVE_NEON
 #include <arm_neon.h>
 
@@ -285,6 +353,40 @@ volk_32f_expfast_32f_rvv(float* bVector, const float* aVector, unsigned int num_
 
 #ifndef INCLUDED_volk_32f_expfast_32f_a_H
 #define INCLUDED_volk_32f_expfast_32f_a_H
+
+#ifdef LV_HAVE_SSE2
+#include <emmintrin.h>
+
+static inline void volk_32f_expfast_32f_a_sse2(float* bVector,
+                                                const float* aVector,
+                                                unsigned int num_points)
+{
+    float* bPtr = bVector;
+    const float* aPtr = aVector;
+
+    unsigned int number = 0;
+    const unsigned int quarterPoints = num_points / 4;
+
+    __m128 aVal, bVal, a, b;
+    __m128i exp;
+    a = _mm_set1_ps(A / Mln2);
+    b = _mm_set1_ps(B - C);
+
+    for (; number < quarterPoints; number++) {
+        aVal = _mm_load_ps(aPtr);
+        exp = _mm_cvtps_epi32(_mm_add_ps(_mm_mul_ps(a, aVal), b));
+        bVal = _mm_castsi128_ps(exp);
+
+        _mm_store_ps(bPtr, bVal);
+        aPtr += 4;
+        bPtr += 4;
+    }
+
+    number = quarterPoints * 4;
+    volk_32f_expfast_32f_generic(bPtr, aPtr, num_points - number);
+}
+
+#endif /* LV_HAVE_SSE2 */
 
 #ifdef LV_HAVE_SSE4_1
 #include <smmintrin.h>
@@ -392,5 +494,39 @@ static inline void volk_32f_expfast_32f_a_avx_fma(float* bVector,
 }
 
 #endif /* LV_HAVE_AVX && LV_HAVE_FMA */
+
+#ifdef LV_HAVE_AVX512F
+#include <immintrin.h>
+
+static inline void volk_32f_expfast_32f_a_avx512f(float* bVector,
+                                                   const float* aVector,
+                                                   unsigned int num_points)
+{
+    float* bPtr = bVector;
+    const float* aPtr = aVector;
+
+    unsigned int number = 0;
+    const unsigned int sixteenthPoints = num_points / 16;
+
+    __m512 aVal, bVal, a, b;
+    __m512i exp;
+    a = _mm512_set1_ps(A / Mln2);
+    b = _mm512_set1_ps(B - C);
+
+    for (; number < sixteenthPoints; number++) {
+        aVal = _mm512_load_ps(aPtr);
+        exp = _mm512_cvtps_epi32(_mm512_fmadd_ps(a, aVal, b));
+        bVal = _mm512_castsi512_ps(exp);
+
+        _mm512_store_ps(bPtr, bVal);
+        aPtr += 16;
+        bPtr += 16;
+    }
+
+    number = sixteenthPoints * 16;
+    volk_32f_expfast_32f_generic(bPtr, aPtr, num_points - number);
+}
+
+#endif /* LV_HAVE_AVX512F */
 
 #endif /* INCLUDED_volk_32f_expfast_32f_a_H */

@@ -131,6 +131,31 @@ static inline void volk_32u_byteswap_u_sse2(uint32_t* intsToSwap, unsigned int n
 #endif /* LV_HAVE_SSE2 */
 
 
+#ifdef LV_HAVE_SSSE3
+#include <tmmintrin.h>
+
+static inline void volk_32u_byteswap_u_ssse3(uint32_t* intsToSwap, unsigned int num_points)
+{
+    unsigned int number = 0;
+
+    uint32_t* inputPtr = intsToSwap;
+
+    const __m128i myShuffle = _mm_set_epi8(12, 13, 14, 15, 8, 9, 10, 11, 4, 5, 6, 7, 0, 1, 2, 3);
+
+    const uint64_t quarterPoints = num_points / 4;
+    for (; number < quarterPoints; number++) {
+        const __m128i input = _mm_loadu_si128((__m128i*)inputPtr);
+        const __m128i output = _mm_shuffle_epi8(input, myShuffle);
+        _mm_storeu_si128((__m128i*)inputPtr, output);
+        inputPtr += 4;
+    }
+
+    // Byteswap any remaining points:
+    volk_32u_byteswap_generic(inputPtr, num_points - quarterPoints * 4);
+}
+#endif /* LV_HAVE_SSSE3 */
+
+
 #if LV_HAVE_AVX2
 #include <immintrin.h>
 static inline void volk_32u_byteswap_u_avx2(uint32_t* intsToSwap, unsigned int num_points)
@@ -170,6 +195,35 @@ static inline void volk_32u_byteswap_u_avx2(uint32_t* intsToSwap, unsigned int n
     }
 }
 #endif /* LV_HAVE_AVX2 */
+
+
+#ifdef LV_HAVE_AVX512BW
+#include <immintrin.h>
+
+static inline void volk_32u_byteswap_u_avx512bw(uint32_t* intsToSwap,
+                                                  unsigned int num_points)
+{
+    uint32_t* inputPtr = intsToSwap;
+    const unsigned int nPerSet = 16;
+    const unsigned int nSets = num_points / nPerSet;
+
+    const __m512i myShuffle = _mm512_set_epi8(
+        12, 13, 14, 15,  8,  9, 10, 11,  4,  5,  6,  7,  0,  1,  2,  3,
+        12, 13, 14, 15,  8,  9, 10, 11,  4,  5,  6,  7,  0,  1,  2,  3,
+        12, 13, 14, 15,  8,  9, 10, 11,  4,  5,  6,  7,  0,  1,  2,  3,
+        12, 13, 14, 15,  8,  9, 10, 11,  4,  5,  6,  7,  0,  1,  2,  3);
+
+    for (unsigned int number = 0; number < nSets; number++) {
+        const __m512i input = _mm512_loadu_si512((__m512i*)inputPtr);
+        const __m512i output = _mm512_shuffle_epi8(input, myShuffle);
+        _mm512_storeu_si512((__m512i*)inputPtr, output);
+        inputPtr += nPerSet;
+    }
+
+    // Byteswap any remaining points:
+    volk_32u_byteswap_generic(inputPtr, num_points - nPerSet * nSets);
+}
+#endif /* LV_HAVE_AVX512BW */
 
 
 #ifdef LV_HAVE_NEON
@@ -361,6 +415,31 @@ static inline void volk_32u_byteswap_a_sse2(uint32_t* intsToSwap, unsigned int n
 #endif /* LV_HAVE_SSE2 */
 
 
+#ifdef LV_HAVE_SSSE3
+#include <tmmintrin.h>
+
+static inline void volk_32u_byteswap_a_ssse3(uint32_t* intsToSwap, unsigned int num_points)
+{
+    unsigned int number = 0;
+
+    uint32_t* inputPtr = intsToSwap;
+
+    const __m128i myShuffle = _mm_set_epi8(12, 13, 14, 15, 8, 9, 10, 11, 4, 5, 6, 7, 0, 1, 2, 3);
+
+    const uint64_t quarterPoints = num_points / 4;
+    for (; number < quarterPoints; number++) {
+        const __m128i input = _mm_load_si128((__m128i*)inputPtr);
+        const __m128i output = _mm_shuffle_epi8(input, myShuffle);
+        _mm_store_si128((__m128i*)inputPtr, output);
+        inputPtr += 4;
+    }
+
+    // Byteswap any remaining points:
+    volk_32u_byteswap_generic(inputPtr, num_points - quarterPoints * 4);
+}
+#endif /* LV_HAVE_SSSE3 */
+
+
 #if LV_HAVE_AVX2
 #include <immintrin.h>
 static inline void volk_32u_byteswap_a_avx2(uint32_t* intsToSwap, unsigned int num_points)
@@ -400,5 +479,34 @@ static inline void volk_32u_byteswap_a_avx2(uint32_t* intsToSwap, unsigned int n
     }
 }
 #endif /* LV_HAVE_AVX2 */
+
+
+#ifdef LV_HAVE_AVX512BW
+#include <immintrin.h>
+
+static inline void volk_32u_byteswap_a_avx512bw(uint32_t* intsToSwap,
+                                                  unsigned int num_points)
+{
+    uint32_t* inputPtr = intsToSwap;
+    const unsigned int nPerSet = 16;
+    const unsigned int nSets = num_points / nPerSet;
+
+    const __m512i myShuffle = _mm512_set_epi8(
+        12, 13, 14, 15,  8,  9, 10, 11,  4,  5,  6,  7,  0,  1,  2,  3,
+        12, 13, 14, 15,  8,  9, 10, 11,  4,  5,  6,  7,  0,  1,  2,  3,
+        12, 13, 14, 15,  8,  9, 10, 11,  4,  5,  6,  7,  0,  1,  2,  3,
+        12, 13, 14, 15,  8,  9, 10, 11,  4,  5,  6,  7,  0,  1,  2,  3);
+
+    for (unsigned int number = 0; number < nSets; number++) {
+        const __m512i input = _mm512_load_si512((__m512i*)inputPtr);
+        const __m512i output = _mm512_shuffle_epi8(input, myShuffle);
+        _mm512_store_si512((__m512i*)inputPtr, output);
+        inputPtr += nPerSet;
+    }
+
+    // Byteswap any remaining points:
+    volk_32u_byteswap_generic(inputPtr, num_points - nPerSet * nSets);
+}
+#endif /* LV_HAVE_AVX512BW */
 
 #endif /* INCLUDED_volk_32u_byteswap_a_H */

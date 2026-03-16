@@ -277,6 +277,59 @@ static inline void volk_16ic_x2_multiply_16ic_u_avx2(lv_16sc_t* out,
 #endif /* LV_HAVE_AVX2 */
 
 
+#ifdef LV_HAVE_AVX512BW
+#include <immintrin.h>
+
+static inline void volk_16ic_x2_multiply_16ic_u_avx512bw(lv_16sc_t* out,
+                                                          const lv_16sc_t* in_a,
+                                                          const lv_16sc_t* in_b,
+                                                          unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int avx512_points = num_points / 16;
+
+    const lv_16sc_t* _in_a = in_a;
+    const lv_16sc_t* _in_b = in_b;
+    lv_16sc_t* _out = out;
+
+    __m512i a, b, c, c_sr, real, imag, imag1, imag2, b_sl, a_sl, result;
+
+    const __m512i mask_imag = _mm512_set1_epi32((int)0xFFFF0000);
+    const __m512i mask_real = _mm512_set1_epi32(0x0000FFFF);
+
+    for (; number < avx512_points; number++) {
+        a = _mm512_loadu_si512((const __m512i*)_in_a);
+        b = _mm512_loadu_si512((const __m512i*)_in_b);
+        c = _mm512_mullo_epi16(a, b); // [ar*br, ai*bi, ...] per 16-bit lane
+
+        c_sr = _mm512_bsrli_epi128(c, 2); // shift right 2 bytes within 128-bit lanes
+        real = _mm512_sub_epi16(c, c_sr);
+        real = _mm512_and_si512(real, mask_real);
+
+        b_sl = _mm512_bslli_epi128(b, 2); // shift left 2 bytes within 128-bit lanes
+        a_sl = _mm512_bslli_epi128(a, 2);
+
+        imag1 = _mm512_mullo_epi16(a, b_sl);
+        imag2 = _mm512_mullo_epi16(b, a_sl);
+
+        imag = _mm512_add_epi16(imag1, imag2);
+        imag = _mm512_and_si512(imag, mask_imag);
+
+        result = _mm512_or_si512(real, imag);
+
+        _mm512_storeu_si512((__m512i*)_out, result);
+
+        _in_a += 16;
+        _in_b += 16;
+        _out += 16;
+    }
+
+    volk_16ic_x2_multiply_16ic_generic(
+        _out, _in_a, _in_b, num_points - avx512_points * 16);
+}
+#endif /* LV_HAVE_AVX512BW */
+
+
 #ifdef LV_HAVE_NEON
 #include <arm_neon.h>
 
@@ -604,5 +657,58 @@ static inline void volk_16ic_x2_multiply_16ic_a_avx2(lv_16sc_t* out,
     }
 }
 #endif /* LV_HAVE_AVX2 */
+
+
+#ifdef LV_HAVE_AVX512BW
+#include <immintrin.h>
+
+static inline void volk_16ic_x2_multiply_16ic_a_avx512bw(lv_16sc_t* out,
+                                                          const lv_16sc_t* in_a,
+                                                          const lv_16sc_t* in_b,
+                                                          unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int avx512_points = num_points / 16;
+
+    const lv_16sc_t* _in_a = in_a;
+    const lv_16sc_t* _in_b = in_b;
+    lv_16sc_t* _out = out;
+
+    __m512i a, b, c, c_sr, real, imag, imag1, imag2, b_sl, a_sl, result;
+
+    const __m512i mask_imag = _mm512_set1_epi32((int)0xFFFF0000);
+    const __m512i mask_real = _mm512_set1_epi32(0x0000FFFF);
+
+    for (; number < avx512_points; number++) {
+        a = _mm512_load_si512((const __m512i*)_in_a);
+        b = _mm512_load_si512((const __m512i*)_in_b);
+        c = _mm512_mullo_epi16(a, b); // [ar*br, ai*bi, ...] per 16-bit lane
+
+        c_sr = _mm512_bsrli_epi128(c, 2); // shift right 2 bytes within 128-bit lanes
+        real = _mm512_sub_epi16(c, c_sr);
+        real = _mm512_and_si512(real, mask_real);
+
+        b_sl = _mm512_bslli_epi128(b, 2); // shift left 2 bytes within 128-bit lanes
+        a_sl = _mm512_bslli_epi128(a, 2);
+
+        imag1 = _mm512_mullo_epi16(a, b_sl);
+        imag2 = _mm512_mullo_epi16(b, a_sl);
+
+        imag = _mm512_add_epi16(imag1, imag2);
+        imag = _mm512_and_si512(imag, mask_imag);
+
+        result = _mm512_or_si512(real, imag);
+
+        _mm512_store_si512((__m512i*)_out, result);
+
+        _in_a += 16;
+        _in_b += 16;
+        _out += 16;
+    }
+
+    volk_16ic_x2_multiply_16ic_generic(
+        _out, _in_a, _in_b, num_points - avx512_points * 16);
+}
+#endif /* LV_HAVE_AVX512BW */
 
 #endif /* INCLUDED_volk_16ic_x2_multiply_16ic_a_H */

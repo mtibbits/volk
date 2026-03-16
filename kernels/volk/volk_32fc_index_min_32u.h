@@ -85,6 +85,278 @@ static inline void volk_32fc_index_min_32u_generic(uint32_t* target,
 
 #endif /*LV_HAVE_GENERIC*/
 
+#ifdef LV_HAVE_SSE2
+#include <emmintrin.h>
+#include <xmmintrin.h>
+
+static inline void volk_32fc_index_min_32u_u_sse2(uint32_t* target,
+                                                    const lv_32fc_t* source,
+                                                    uint32_t num_points)
+{
+    const uint32_t quarter_points = num_points / 4;
+
+    __m128i current_indices = _mm_setr_epi32(0, 1, 2, 3);
+    const __m128i indices_increment = _mm_set1_epi32(4);
+
+    __m128 min_values = _mm_set1_ps(FLT_MAX);
+    __m128i min_indices = _mm_setzero_si128();
+
+    for (uint32_t i = 0; i < quarter_points; ++i) {
+        __m128 in0 = _mm_loadu_ps((const float*)source);
+        __m128 in1 = _mm_loadu_ps((const float*)(source + 2));
+        source += 4;
+
+        in0 = _mm_mul_ps(in0, in0);
+        in1 = _mm_mul_ps(in1, in1);
+
+        /* Swap adjacent elements to get (im², re², im², re²) */
+        __m128 sw0 = _mm_shuffle_ps(in0, in0, 0xB1);
+        __m128 sw1 = _mm_shuffle_ps(in1, in1, 0xB1);
+        __m128 sum0 = _mm_add_ps(in0, sw0);
+        __m128 sum1 = _mm_add_ps(in1, sw1);
+
+        /* Pick re²+im² from each pair: natural order [0,1,2,3] */
+        __m128 mag_sq = _mm_shuffle_ps(sum0, sum1, 0x88);
+
+        __m128 cmp = _mm_cmplt_ps(mag_sq, min_values);
+        min_values = _mm_min_ps(mag_sq, min_values);
+
+        /* SSE2 blend via and/andnot/or */
+        __m128i cmp_i = _mm_castps_si128(cmp);
+        min_indices = _mm_or_si128(_mm_and_si128(cmp_i, current_indices),
+                                   _mm_andnot_si128(cmp_i, min_indices));
+
+        current_indices = _mm_add_epi32(current_indices, indices_increment);
+    }
+
+    /* Reduce 4 lanes */
+    __VOLK_ATTR_ALIGNED(16) float min_values_buffer[4];
+    __VOLK_ATTR_ALIGNED(16) uint32_t min_indices_buffer[4];
+    _mm_store_ps(min_values_buffer, min_values);
+    _mm_store_si128((__m128i*)min_indices_buffer, min_indices);
+
+    float min = FLT_MAX;
+    uint32_t index = 0;
+    for (unsigned i = 0; i < 4; i++) {
+        if (min_values_buffer[i] < min) {
+            min = min_values_buffer[i];
+            index = min_indices_buffer[i];
+        } else if (min_values_buffer[i] == min) {
+            if (min_indices_buffer[i] < index) {
+                index = min_indices_buffer[i];
+            }
+        }
+    }
+
+    /* Handle tail */
+    const uint32_t tail_start = quarter_points * 4;
+    const uint32_t tail_count = num_points - tail_start;
+    if (tail_count > 0) {
+        uint32_t tail_index = 0;
+        volk_32fc_index_min_32u_generic(&tail_index, source, tail_count);
+        const float re = lv_creal(source[tail_index]);
+        const float im = lv_cimag(source[tail_index]);
+        const float tail_min = re * re + im * im;
+        if (tail_min < min) {
+            index = tail_start + tail_index;
+        }
+    }
+
+    *target = index;
+}
+
+#endif /*LV_HAVE_SSE2*/
+
+#ifdef LV_HAVE_SSE3
+#include <pmmintrin.h>
+#include <xmmintrin.h>
+
+static inline void volk_32fc_index_min_32u_u_sse3(uint32_t* target,
+                                                    const lv_32fc_t* source,
+                                                    uint32_t num_points)
+{
+    union bit128 holderf;
+    union bit128 holderi;
+
+    union bit128 xmm5, xmm4;
+    __m128 xmm1, xmm2, xmm3;
+    __m128i xmm8, xmm11, xmm12, xmm9, xmm10;
+
+    xmm5.int_vec = _mm_setzero_si128();
+    xmm4.int_vec = _mm_setzero_si128();
+    holderf.int_vec = _mm_setzero_si128();
+    holderi.int_vec = _mm_setzero_si128();
+
+    xmm8 = _mm_setr_epi32(0, 1, 2, 3);
+    xmm9 = _mm_setzero_si128();
+    xmm10 = _mm_setr_epi32(4, 4, 4, 4);
+    xmm3 = _mm_set_ps1(FLT_MAX);
+
+    int bound = num_points >> 2;
+
+    for (int i = 0; i < bound; ++i) {
+        xmm1 = _mm_loadu_ps((const float*)source);
+        xmm2 = _mm_loadu_ps((const float*)&source[2]);
+
+        source += 4;
+
+        xmm1 = _mm_mul_ps(xmm1, xmm1);
+        xmm2 = _mm_mul_ps(xmm2, xmm2);
+
+        xmm1 = _mm_hadd_ps(xmm1, xmm2);
+
+        xmm5.float_vec = _mm_cmplt_ps(xmm1, xmm3);
+        xmm4.float_vec = _mm_cmpnlt_ps(xmm1, xmm3);
+
+        xmm3 = _mm_min_ps(xmm1, xmm3);
+
+        xmm11 = _mm_and_si128(xmm8, xmm5.int_vec);
+        xmm12 = _mm_and_si128(xmm9, xmm4.int_vec);
+
+        xmm9 = _mm_add_epi32(xmm11, xmm12);
+
+        xmm8 = _mm_add_epi32(xmm8, xmm10);
+    }
+
+    /* Reduce 4 SSE lanes */
+    _mm_store_ps((float*)&(holderf.f), xmm3);
+    _mm_store_si128(&(holderi.int_vec), xmm9);
+
+    float min = FLT_MAX;
+    uint32_t index = 0;
+    for (int i = 0; i < 4; i++) {
+        if (holderf.f[i] < min) {
+            min = holderf.f[i];
+            index = holderi.i[i];
+        } else if (holderf.f[i] == min) {
+            if ((uint32_t)holderi.i[i] < index) {
+                index = holderi.i[i];
+            }
+        }
+    }
+
+    /* Handle tail */
+    const uint32_t tail_start = bound * 4;
+    const uint32_t tail_count = num_points - tail_start;
+    if (tail_count > 0) {
+        uint32_t tail_index = 0;
+        volk_32fc_index_min_32u_generic(&tail_index, source, tail_count);
+        const float re = lv_creal(source[tail_index]);
+        const float im = lv_cimag(source[tail_index]);
+        const float tail_min = re * re + im * im;
+        if (tail_min < min) {
+            index = tail_start + tail_index;
+        }
+    }
+
+    target[0] = index;
+}
+
+#endif /*LV_HAVE_SSE3*/
+
+#ifdef LV_HAVE_AVX
+#include <immintrin.h>
+
+static inline void volk_32fc_index_min_32u_u_avx(uint32_t* target,
+                                                   const lv_32fc_t* source,
+                                                   uint32_t num_points)
+{
+    const uint32_t eighth_points = num_points / 8;
+
+    /*
+     * After _mm256_shuffle_ps(sum0, sum1, 0x88) the magnitude-squared values
+     * appear in cross-lane order: [0, 1, 4, 5, 2, 3, 6, 7].
+     * Initial indices must match this layout.
+     */
+    __m128i cur_idx_lo = _mm_setr_epi32(0, 1, 4, 5);
+    __m128i cur_idx_hi = _mm_setr_epi32(2, 3, 6, 7);
+    const __m128i idx_incr = _mm_set1_epi32(8);
+
+    __m256 min_values = _mm256_set1_ps(FLT_MAX);
+    __m128i min_idx_lo = _mm_setzero_si128();
+    __m128i min_idx_hi = _mm_setzero_si128();
+
+    for (uint32_t i = 0; i < eighth_points; ++i) {
+        __m256 in0 = _mm256_loadu_ps((const float*)source);
+        __m256 in1 = _mm256_loadu_ps((const float*)(source + 4));
+        source += 8;
+
+        in0 = _mm256_mul_ps(in0, in0);
+        in1 = _mm256_mul_ps(in1, in1);
+
+        __m256 sw0 = _mm256_shuffle_ps(in0, in0, 0xB1);
+        __m256 sw1 = _mm256_shuffle_ps(in1, in1, 0xB1);
+        __m256 sum0 = _mm256_add_ps(in0, sw0);
+        __m256 sum1 = _mm256_add_ps(in1, sw1);
+
+        __m256 mag_sq = _mm256_shuffle_ps(sum0, sum1, 0x88);
+
+        __m256 cmp = _mm256_cmp_ps(mag_sq, min_values, _CMP_LT_OS);
+        min_values = _mm256_min_ps(mag_sq, min_values);
+
+        /* Blend indices in two 128-bit halves (no AVX2 integer ops needed) */
+        __m128 cmp_lo = _mm256_castps256_ps128(cmp);
+        __m128 cmp_hi = _mm256_extractf128_ps(cmp, 1);
+
+        min_idx_lo = _mm_castps_si128(_mm_blendv_ps(
+            _mm_castsi128_ps(min_idx_lo), _mm_castsi128_ps(cur_idx_lo), cmp_lo));
+        min_idx_hi = _mm_castps_si128(_mm_blendv_ps(
+            _mm_castsi128_ps(min_idx_hi), _mm_castsi128_ps(cur_idx_hi), cmp_hi));
+
+        cur_idx_lo = _mm_add_epi32(cur_idx_lo, idx_incr);
+        cur_idx_hi = _mm_add_epi32(cur_idx_hi, idx_incr);
+    }
+
+    /* Reduce 8 lanes */
+    __VOLK_ATTR_ALIGNED(32) float min_values_buffer[8];
+    __VOLK_ATTR_ALIGNED(16) uint32_t min_indices_lo[4];
+    __VOLK_ATTR_ALIGNED(16) uint32_t min_indices_hi[4];
+    _mm256_store_ps(min_values_buffer, min_values);
+    _mm_store_si128((__m128i*)min_indices_lo, min_idx_lo);
+    _mm_store_si128((__m128i*)min_indices_hi, min_idx_hi);
+
+    float min = FLT_MAX;
+    uint32_t index = 0;
+    for (unsigned i = 0; i < 4; i++) {
+        if (min_values_buffer[i] < min) {
+            min = min_values_buffer[i];
+            index = min_indices_lo[i];
+        } else if (min_values_buffer[i] == min) {
+            if (min_indices_lo[i] < index) {
+                index = min_indices_lo[i];
+            }
+        }
+    }
+    for (unsigned i = 0; i < 4; i++) {
+        if (min_values_buffer[4 + i] < min) {
+            min = min_values_buffer[4 + i];
+            index = min_indices_hi[i];
+        } else if (min_values_buffer[4 + i] == min) {
+            if (min_indices_hi[i] < index) {
+                index = min_indices_hi[i];
+            }
+        }
+    }
+
+    /* Handle tail */
+    const uint32_t tail_start = eighth_points * 8;
+    const uint32_t tail_count = num_points - tail_start;
+    if (tail_count > 0) {
+        uint32_t tail_index = 0;
+        volk_32fc_index_min_32u_generic(&tail_index, source, tail_count);
+        const float re = lv_creal(source[tail_index]);
+        const float im = lv_cimag(source[tail_index]);
+        const float tail_min = re * re + im * im;
+        if (tail_min < min) {
+            index = tail_start + tail_index;
+        }
+    }
+
+    *target = index;
+}
+
+#endif /*LV_HAVE_AVX*/
+
 #ifdef LV_HAVE_AVX2
 #include <immintrin.h>
 #include <volk/volk_avx2_intrinsics.h>
@@ -504,6 +776,83 @@ static inline void volk_32fc_index_min_32u_rvvseg(uint32_t* target,
 #include <volk/volk_common.h>
 #include <volk/volk_complex.h>
 
+#ifdef LV_HAVE_SSE2
+#include <emmintrin.h>
+#include <xmmintrin.h>
+
+static inline void volk_32fc_index_min_32u_a_sse2(uint32_t* target,
+                                                    const lv_32fc_t* source,
+                                                    uint32_t num_points)
+{
+    const uint32_t quarter_points = num_points / 4;
+
+    __m128i current_indices = _mm_setr_epi32(0, 1, 2, 3);
+    const __m128i indices_increment = _mm_set1_epi32(4);
+
+    __m128 min_values = _mm_set1_ps(FLT_MAX);
+    __m128i min_indices = _mm_setzero_si128();
+
+    for (uint32_t i = 0; i < quarter_points; ++i) {
+        __m128 in0 = _mm_load_ps((const float*)source);
+        __m128 in1 = _mm_load_ps((const float*)(source + 2));
+        source += 4;
+
+        in0 = _mm_mul_ps(in0, in0);
+        in1 = _mm_mul_ps(in1, in1);
+
+        __m128 sw0 = _mm_shuffle_ps(in0, in0, 0xB1);
+        __m128 sw1 = _mm_shuffle_ps(in1, in1, 0xB1);
+        __m128 sum0 = _mm_add_ps(in0, sw0);
+        __m128 sum1 = _mm_add_ps(in1, sw1);
+
+        __m128 mag_sq = _mm_shuffle_ps(sum0, sum1, 0x88);
+
+        __m128 cmp = _mm_cmplt_ps(mag_sq, min_values);
+        min_values = _mm_min_ps(mag_sq, min_values);
+
+        __m128i cmp_i = _mm_castps_si128(cmp);
+        min_indices = _mm_or_si128(_mm_and_si128(cmp_i, current_indices),
+                                   _mm_andnot_si128(cmp_i, min_indices));
+
+        current_indices = _mm_add_epi32(current_indices, indices_increment);
+    }
+
+    __VOLK_ATTR_ALIGNED(16) float min_values_buffer[4];
+    __VOLK_ATTR_ALIGNED(16) uint32_t min_indices_buffer[4];
+    _mm_store_ps(min_values_buffer, min_values);
+    _mm_store_si128((__m128i*)min_indices_buffer, min_indices);
+
+    float min = FLT_MAX;
+    uint32_t index = 0;
+    for (unsigned i = 0; i < 4; i++) {
+        if (min_values_buffer[i] < min) {
+            min = min_values_buffer[i];
+            index = min_indices_buffer[i];
+        } else if (min_values_buffer[i] == min) {
+            if (min_indices_buffer[i] < index) {
+                index = min_indices_buffer[i];
+            }
+        }
+    }
+
+    const uint32_t tail_start = quarter_points * 4;
+    const uint32_t tail_count = num_points - tail_start;
+    if (tail_count > 0) {
+        uint32_t tail_index = 0;
+        volk_32fc_index_min_32u_generic(&tail_index, source, tail_count);
+        const float re = lv_creal(source[tail_index]);
+        const float im = lv_cimag(source[tail_index]);
+        const float tail_min = re * re + im * im;
+        if (tail_min < min) {
+            index = tail_start + tail_index;
+        }
+    }
+
+    *target = index;
+}
+
+#endif /*LV_HAVE_SSE2*/
+
 #ifdef LV_HAVE_SSE3
 #include <pmmintrin.h>
 #include <xmmintrin.h>
@@ -618,6 +967,106 @@ static inline void volk_32fc_index_min_32u_a_sse3(uint32_t* target,
 }
 
 #endif /*LV_HAVE_SSE3*/
+
+#ifdef LV_HAVE_AVX
+#include <immintrin.h>
+
+static inline void volk_32fc_index_min_32u_a_avx(uint32_t* target,
+                                                   const lv_32fc_t* source,
+                                                   uint32_t num_points)
+{
+    const uint32_t eighth_points = num_points / 8;
+
+    /*
+     * After _mm256_shuffle_ps(sum0, sum1, 0x88) the magnitude-squared values
+     * appear in cross-lane order: [0, 1, 4, 5, 2, 3, 6, 7].
+     * Initial indices must match this layout.
+     */
+    __m128i cur_idx_lo = _mm_setr_epi32(0, 1, 4, 5);
+    __m128i cur_idx_hi = _mm_setr_epi32(2, 3, 6, 7);
+    const __m128i idx_incr = _mm_set1_epi32(8);
+
+    __m256 min_values = _mm256_set1_ps(FLT_MAX);
+    __m128i min_idx_lo = _mm_setzero_si128();
+    __m128i min_idx_hi = _mm_setzero_si128();
+
+    for (uint32_t i = 0; i < eighth_points; ++i) {
+        __m256 in0 = _mm256_load_ps((const float*)source);
+        __m256 in1 = _mm256_load_ps((const float*)(source + 4));
+        source += 8;
+
+        in0 = _mm256_mul_ps(in0, in0);
+        in1 = _mm256_mul_ps(in1, in1);
+
+        __m256 sw0 = _mm256_shuffle_ps(in0, in0, 0xB1);
+        __m256 sw1 = _mm256_shuffle_ps(in1, in1, 0xB1);
+        __m256 sum0 = _mm256_add_ps(in0, sw0);
+        __m256 sum1 = _mm256_add_ps(in1, sw1);
+
+        __m256 mag_sq = _mm256_shuffle_ps(sum0, sum1, 0x88);
+
+        __m256 cmp = _mm256_cmp_ps(mag_sq, min_values, _CMP_LT_OS);
+        min_values = _mm256_min_ps(mag_sq, min_values);
+
+        __m128 cmp_lo = _mm256_castps256_ps128(cmp);
+        __m128 cmp_hi = _mm256_extractf128_ps(cmp, 1);
+
+        min_idx_lo = _mm_castps_si128(_mm_blendv_ps(
+            _mm_castsi128_ps(min_idx_lo), _mm_castsi128_ps(cur_idx_lo), cmp_lo));
+        min_idx_hi = _mm_castps_si128(_mm_blendv_ps(
+            _mm_castsi128_ps(min_idx_hi), _mm_castsi128_ps(cur_idx_hi), cmp_hi));
+
+        cur_idx_lo = _mm_add_epi32(cur_idx_lo, idx_incr);
+        cur_idx_hi = _mm_add_epi32(cur_idx_hi, idx_incr);
+    }
+
+    __VOLK_ATTR_ALIGNED(32) float min_values_buffer[8];
+    __VOLK_ATTR_ALIGNED(16) uint32_t min_indices_lo[4];
+    __VOLK_ATTR_ALIGNED(16) uint32_t min_indices_hi[4];
+    _mm256_store_ps(min_values_buffer, min_values);
+    _mm_store_si128((__m128i*)min_indices_lo, min_idx_lo);
+    _mm_store_si128((__m128i*)min_indices_hi, min_idx_hi);
+
+    float min = FLT_MAX;
+    uint32_t index = 0;
+    for (unsigned i = 0; i < 4; i++) {
+        if (min_values_buffer[i] < min) {
+            min = min_values_buffer[i];
+            index = min_indices_lo[i];
+        } else if (min_values_buffer[i] == min) {
+            if (min_indices_lo[i] < index) {
+                index = min_indices_lo[i];
+            }
+        }
+    }
+    for (unsigned i = 0; i < 4; i++) {
+        if (min_values_buffer[4 + i] < min) {
+            min = min_values_buffer[4 + i];
+            index = min_indices_hi[i];
+        } else if (min_values_buffer[4 + i] == min) {
+            if (min_indices_hi[i] < index) {
+                index = min_indices_hi[i];
+            }
+        }
+    }
+
+    const uint32_t tail_start = eighth_points * 8;
+    const uint32_t tail_count = num_points - tail_start;
+    if (tail_count > 0) {
+        uint32_t tail_index = 0;
+        volk_32fc_index_min_32u_generic(&tail_index, source, tail_count);
+        const float re = lv_creal(source[tail_index]);
+        const float im = lv_cimag(source[tail_index]);
+        const float tail_min = re * re + im * im;
+        if (tail_min < min) {
+            index = tail_start + tail_index;
+        }
+    }
+
+    *target = index;
+}
+
+#endif /*LV_HAVE_AVX*/
 
 #ifdef LV_HAVE_AVX2
 #include <immintrin.h>

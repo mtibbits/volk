@@ -128,6 +128,55 @@ static inline void volk_16i_s32f_convert_32f_u_sse(float* outputVector,
 }
 #endif /* LV_HAVE_SSE */
 
+#ifdef LV_HAVE_SSE2
+#include <emmintrin.h>
+
+static inline void volk_16i_s32f_convert_32f_u_sse2(float* outputVector,
+                                                     const int16_t* inputVector,
+                                                     const float scalar,
+                                                     unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int eighthPoints = num_points / 8;
+
+    const float reciprocal = 1.0f / scalar;
+    float* outputVectorPtr = outputVector;
+    __m128 invScalar = _mm_set_ps1(reciprocal);
+    const int16_t* inputPtr = inputVector;
+    __m128i inputVal, sign, lo32, hi32;
+    __m128 ret;
+
+    for (; number < eighthPoints; number++) {
+
+        // Load 8 int16 values
+        inputVal = _mm_loadu_si128((const __m128i*)inputPtr);
+
+        // Sign-extend int16 to int32 (SSE2 pattern)
+        sign = _mm_srai_epi16(inputVal, 15);
+        lo32 = _mm_unpacklo_epi16(inputVal, sign);
+        hi32 = _mm_unpackhi_epi16(inputVal, sign);
+
+        // Convert int32 to float and scale
+        ret = _mm_cvtepi32_ps(lo32);
+        ret = _mm_mul_ps(ret, invScalar);
+        _mm_storeu_ps(outputVectorPtr, ret);
+        outputVectorPtr += 4;
+
+        ret = _mm_cvtepi32_ps(hi32);
+        ret = _mm_mul_ps(ret, invScalar);
+        _mm_storeu_ps(outputVectorPtr, ret);
+
+        outputVectorPtr += 4;
+
+        inputPtr += 8;
+    }
+
+    number = eighthPoints * 8;
+    volk_16i_s32f_convert_32f_generic(
+        outputVector + number, inputVector + number, scalar, num_points - number);
+}
+#endif /* LV_HAVE_SSE2 */
+
 #ifdef LV_HAVE_SSE4_1
 #include <smmintrin.h>
 
@@ -479,6 +528,55 @@ static inline void volk_16i_s32f_convert_32f_a_sse(float* outputVector,
     }
 }
 #endif /* LV_HAVE_SSE */
+
+#ifdef LV_HAVE_SSE2
+#include <emmintrin.h>
+
+static inline void volk_16i_s32f_convert_32f_a_sse2(float* outputVector,
+                                                     const int16_t* inputVector,
+                                                     const float scalar,
+                                                     unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int eighthPoints = num_points / 8;
+
+    const float reciprocal = 1.0f / scalar;
+    float* outputVectorPtr = outputVector;
+    __m128 invScalar = _mm_set_ps1(reciprocal);
+    const int16_t* inputPtr = inputVector;
+    __m128i inputVal, sign, lo32, hi32;
+    __m128 ret;
+
+    for (; number < eighthPoints; number++) {
+
+        // Load 8 int16 values (aligned)
+        inputVal = _mm_load_si128((const __m128i*)inputPtr);
+
+        // Sign-extend int16 to int32 (SSE2 pattern)
+        sign = _mm_srai_epi16(inputVal, 15);
+        lo32 = _mm_unpacklo_epi16(inputVal, sign);
+        hi32 = _mm_unpackhi_epi16(inputVal, sign);
+
+        // Convert int32 to float and scale
+        ret = _mm_cvtepi32_ps(lo32);
+        ret = _mm_mul_ps(ret, invScalar);
+        _mm_store_ps(outputVectorPtr, ret);
+        outputVectorPtr += 4;
+
+        ret = _mm_cvtepi32_ps(hi32);
+        ret = _mm_mul_ps(ret, invScalar);
+        _mm_store_ps(outputVectorPtr, ret);
+
+        outputVectorPtr += 4;
+
+        inputPtr += 8;
+    }
+
+    number = eighthPoints * 8;
+    volk_16i_s32f_convert_32f_generic(
+        outputVector + number, inputVector + number, scalar, num_points - number);
+}
+#endif /* LV_HAVE_SSE2 */
 
 #ifdef LV_HAVE_SSE4_1
 #include <smmintrin.h>

@@ -323,6 +323,84 @@ static inline void volk_16ic_x2_dot_prod_16ic_u_avx2(lv_16sc_t* out,
 #endif /* LV_HAVE_AVX2 */
 
 
+#ifdef LV_HAVE_AVX512BW
+#include <immintrin.h>
+
+static inline void volk_16ic_x2_dot_prod_16ic_u_avx512bw(lv_16sc_t* out,
+                                                          const lv_16sc_t* in_a,
+                                                          const lv_16sc_t* in_b,
+                                                          unsigned int num_points)
+{
+    lv_16sc_t dotProduct = lv_cmake((int16_t)0, (int16_t)0);
+
+    const unsigned int avx512_iters = num_points / 16;
+
+    const lv_16sc_t* _in_a = in_a;
+    const lv_16sc_t* _in_b = in_b;
+    lv_16sc_t* _out = out;
+    unsigned int number;
+
+    if (avx512_iters > 0) {
+        __m512i a, b, c, c_sr, real, imag, imag1, imag2, b_sl, a_sl, result;
+        __VOLK_ATTR_ALIGNED(64) lv_16sc_t dotProductVector[16];
+
+        __m512i realcacc = _mm512_setzero_si512();
+        __m512i imagcacc = _mm512_setzero_si512();
+
+        const __m512i mask_imag = _mm512_set1_epi32((int)0xFFFF0000);
+        const __m512i mask_real = _mm512_set1_epi32(0x0000FFFF);
+
+        for (number = 0; number < avx512_iters; number++) {
+            a = _mm512_loadu_si512((const __m512i*)_in_a);
+            b = _mm512_loadu_si512((const __m512i*)_in_b);
+            c = _mm512_mullo_epi16(a, b);
+
+            c_sr = _mm512_bsrli_epi128(c, 2);
+            real = _mm512_subs_epi16(c, c_sr);
+
+            b_sl = _mm512_bslli_epi128(b, 2);
+            a_sl = _mm512_bslli_epi128(a, 2);
+
+            imag1 = _mm512_mullo_epi16(a, b_sl);
+            imag2 = _mm512_mullo_epi16(b, a_sl);
+
+            imag = _mm512_adds_epi16(imag1, imag2);
+
+            realcacc = _mm512_adds_epi16(realcacc, real);
+            imagcacc = _mm512_adds_epi16(imagcacc, imag);
+
+            _in_a += 16;
+            _in_b += 16;
+        }
+
+        realcacc = _mm512_and_si512(realcacc, mask_real);
+        imagcacc = _mm512_and_si512(imagcacc, mask_imag);
+
+        result = _mm512_or_si512(realcacc, imagcacc);
+
+        _mm512_storeu_si512((__m512i*)dotProductVector, result);
+
+        for (number = 0; number < 16; ++number) {
+            dotProduct = lv_cmake(
+                sat_adds16i(lv_creal(dotProduct), lv_creal(dotProductVector[number])),
+                sat_adds16i(lv_cimag(dotProduct), lv_cimag(dotProductVector[number])));
+        }
+    }
+
+    if (num_points - avx512_iters * 16 > 0) {
+        lv_16sc_t tail_result;
+        volk_16ic_x2_dot_prod_16ic_generic(
+            &tail_result, _in_a, _in_b, num_points - avx512_iters * 16);
+        dotProduct =
+            lv_cmake(sat_adds16i(lv_creal(dotProduct), lv_creal(tail_result)),
+                     sat_adds16i(lv_cimag(dotProduct), lv_cimag(tail_result)));
+    }
+
+    *_out = dotProduct;
+}
+#endif /* LV_HAVE_AVX512BW */
+
+
 #ifdef LV_HAVE_NEON
 #include <arm_neon.h>
 
@@ -884,6 +962,84 @@ static inline void volk_16ic_x2_dot_prod_16ic_a_avx2(lv_16sc_t* out,
     *_out = dotProduct;
 }
 #endif /* LV_HAVE_AVX2 */
+
+
+#ifdef LV_HAVE_AVX512BW
+#include <immintrin.h>
+
+static inline void volk_16ic_x2_dot_prod_16ic_a_avx512bw(lv_16sc_t* out,
+                                                          const lv_16sc_t* in_a,
+                                                          const lv_16sc_t* in_b,
+                                                          unsigned int num_points)
+{
+    lv_16sc_t dotProduct = lv_cmake((int16_t)0, (int16_t)0);
+
+    const unsigned int avx512_iters = num_points / 16;
+
+    const lv_16sc_t* _in_a = in_a;
+    const lv_16sc_t* _in_b = in_b;
+    lv_16sc_t* _out = out;
+    unsigned int number;
+
+    if (avx512_iters > 0) {
+        __m512i a, b, c, c_sr, real, imag, imag1, imag2, b_sl, a_sl, result;
+        __VOLK_ATTR_ALIGNED(64) lv_16sc_t dotProductVector[16];
+
+        __m512i realcacc = _mm512_setzero_si512();
+        __m512i imagcacc = _mm512_setzero_si512();
+
+        const __m512i mask_imag = _mm512_set1_epi32((int)0xFFFF0000);
+        const __m512i mask_real = _mm512_set1_epi32(0x0000FFFF);
+
+        for (number = 0; number < avx512_iters; number++) {
+            a = _mm512_load_si512((const __m512i*)_in_a);
+            b = _mm512_load_si512((const __m512i*)_in_b);
+            c = _mm512_mullo_epi16(a, b);
+
+            c_sr = _mm512_bsrli_epi128(c, 2);
+            real = _mm512_subs_epi16(c, c_sr);
+
+            b_sl = _mm512_bslli_epi128(b, 2);
+            a_sl = _mm512_bslli_epi128(a, 2);
+
+            imag1 = _mm512_mullo_epi16(a, b_sl);
+            imag2 = _mm512_mullo_epi16(b, a_sl);
+
+            imag = _mm512_adds_epi16(imag1, imag2);
+
+            realcacc = _mm512_adds_epi16(realcacc, real);
+            imagcacc = _mm512_adds_epi16(imagcacc, imag);
+
+            _in_a += 16;
+            _in_b += 16;
+        }
+
+        realcacc = _mm512_and_si512(realcacc, mask_real);
+        imagcacc = _mm512_and_si512(imagcacc, mask_imag);
+
+        result = _mm512_or_si512(realcacc, imagcacc);
+
+        _mm512_store_si512((__m512i*)dotProductVector, result);
+
+        for (number = 0; number < 16; ++number) {
+            dotProduct = lv_cmake(
+                sat_adds16i(lv_creal(dotProduct), lv_creal(dotProductVector[number])),
+                sat_adds16i(lv_cimag(dotProduct), lv_cimag(dotProductVector[number])));
+        }
+    }
+
+    if (num_points - avx512_iters * 16 > 0) {
+        lv_16sc_t tail_result;
+        volk_16ic_x2_dot_prod_16ic_generic(
+            &tail_result, _in_a, _in_b, num_points - avx512_iters * 16);
+        dotProduct =
+            lv_cmake(sat_adds16i(lv_creal(dotProduct), lv_creal(tail_result)),
+                     sat_adds16i(lv_cimag(dotProduct), lv_cimag(tail_result)));
+    }
+
+    *_out = dotProduct;
+}
+#endif /* LV_HAVE_AVX512BW */
 
 
 #endif /* INCLUDED_volk_16ic_x2_dot_prod_16ic_a_H */

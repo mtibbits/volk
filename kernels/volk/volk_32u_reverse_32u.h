@@ -287,6 +287,92 @@ static inline void volk_32u_reverse_32u_bintree_permute_bottom_up(uint32_t* out,
 }
 #endif /* LV_HAVE_GENERIC */
 
+#ifdef LV_HAVE_SSSE3
+#include <tmmintrin.h>
+
+static inline void
+volk_32u_reverse_32u_u_ssse3(uint32_t* out, const uint32_t* in, unsigned int num_points)
+{
+    const __m128i byte_rev =
+        _mm_setr_epi8(3, 2, 1, 0, 7, 6, 5, 4, 11, 10, 9, 8, 15, 14, 13, 12);
+    const __m128i nibble_rev = _mm_setr_epi8(
+        0x0, 0x8, 0x4, 0xC, 0x2, 0xA, 0x6, 0xE, 0x1, 0x9, 0x5, 0xD, 0x3, 0xB, 0x7, 0xF);
+    const __m128i lo_mask = _mm_set1_epi8(0x0F);
+
+    const unsigned int quarterPoints = num_points / 4;
+    unsigned int number = 0;
+    for (; number < quarterPoints; ++number) {
+        __m128i v = _mm_loadu_si128((const __m128i*)(in + number * 4));
+        v = _mm_shuffle_epi8(v, byte_rev);
+        __m128i lo = _mm_and_si128(v, lo_mask);
+        __m128i hi = _mm_and_si128(_mm_srli_epi16(v, 4), lo_mask);
+        v = _mm_or_si128(_mm_slli_epi16(_mm_shuffle_epi8(nibble_rev, lo), 4),
+                         _mm_shuffle_epi8(nibble_rev, hi));
+        _mm_storeu_si128((__m128i*)(out + number * 4), v);
+    }
+    number = quarterPoints * 4;
+    volk_32u_reverse_32u_generic(out + number, in + number, num_points - number);
+}
+#endif /* LV_HAVE_SSSE3 */
+
+#ifdef LV_HAVE_AVX2
+#include <immintrin.h>
+
+static inline void
+volk_32u_reverse_32u_u_avx2(uint32_t* out, const uint32_t* in, unsigned int num_points)
+{
+    const __m256i byte_rev = _mm256_broadcastsi128_si256(
+        _mm_setr_epi8(3, 2, 1, 0, 7, 6, 5, 4, 11, 10, 9, 8, 15, 14, 13, 12));
+    const __m256i nibble_rev = _mm256_broadcastsi128_si256(_mm_setr_epi8(
+        0x0, 0x8, 0x4, 0xC, 0x2, 0xA, 0x6, 0xE, 0x1, 0x9, 0x5, 0xD, 0x3, 0xB, 0x7, 0xF));
+    const __m256i lo_mask = _mm256_set1_epi8(0x0F);
+
+    const unsigned int eighthPoints = num_points / 8;
+    unsigned int number = 0;
+    for (; number < eighthPoints; ++number) {
+        __m256i v = _mm256_loadu_si256((const __m256i*)(in + number * 8));
+        v = _mm256_shuffle_epi8(v, byte_rev);
+        __m256i lo = _mm256_and_si256(v, lo_mask);
+        __m256i hi = _mm256_and_si256(_mm256_srli_epi16(v, 4), lo_mask);
+        v = _mm256_or_si256(_mm256_slli_epi16(_mm256_shuffle_epi8(nibble_rev, lo), 4),
+                            _mm256_shuffle_epi8(nibble_rev, hi));
+        _mm256_storeu_si256((__m256i*)(out + number * 8), v);
+    }
+    number = eighthPoints * 8;
+    volk_32u_reverse_32u_generic(out + number, in + number, num_points - number);
+}
+#endif /* LV_HAVE_AVX2 */
+
+#ifdef LV_HAVE_AVX512BW
+#include <immintrin.h>
+
+static inline void
+volk_32u_reverse_32u_u_avx512bw(uint32_t* out,
+                                 const uint32_t* in,
+                                 unsigned int num_points)
+{
+    const __m512i byte_rev = _mm512_broadcast_i32x4(
+        _mm_setr_epi8(3, 2, 1, 0, 7, 6, 5, 4, 11, 10, 9, 8, 15, 14, 13, 12));
+    const __m512i nibble_rev = _mm512_broadcast_i32x4(_mm_setr_epi8(
+        0x0, 0x8, 0x4, 0xC, 0x2, 0xA, 0x6, 0xE, 0x1, 0x9, 0x5, 0xD, 0x3, 0xB, 0x7, 0xF));
+    const __m512i lo_mask = _mm512_set1_epi8(0x0F);
+
+    const unsigned int sixteenthPoints = num_points / 16;
+    unsigned int number = 0;
+    for (; number < sixteenthPoints; ++number) {
+        __m512i v = _mm512_loadu_si512((const __m512i*)(in + number * 16));
+        v = _mm512_shuffle_epi8(v, byte_rev);
+        __m512i lo = _mm512_and_si512(v, lo_mask);
+        __m512i hi = _mm512_and_si512(_mm512_srli_epi16(v, 4), lo_mask);
+        v = _mm512_or_si512(_mm512_slli_epi16(_mm512_shuffle_epi8(nibble_rev, lo), 4),
+                            _mm512_shuffle_epi8(nibble_rev, hi));
+        _mm512_storeu_si512((__m512i*)(out + number * 16), v);
+    }
+    number = sixteenthPoints * 16;
+    volk_32u_reverse_32u_generic(out + number, in + number, num_points - number);
+}
+#endif /* LV_HAVE_AVX512BW */
+
 #ifdef LV_HAVE_NEON
 #include <arm_neon.h>
 
@@ -425,3 +511,94 @@ volk_32u_reverse_32u_rva23(uint32_t* out, const uint32_t* in, unsigned int num_p
 #endif /* LV_HAVE_RVA23 */
 
 #endif /* INCLUDED_VOLK_32u_REVERSE_32u_U_H */
+
+#ifndef INCLUDED_VOLK_32u_REVERSE_32u_A_H
+#define INCLUDED_VOLK_32u_REVERSE_32u_A_H
+
+#ifdef LV_HAVE_SSSE3
+#include <tmmintrin.h>
+
+static inline void
+volk_32u_reverse_32u_a_ssse3(uint32_t* out, const uint32_t* in, unsigned int num_points)
+{
+    const __m128i byte_rev =
+        _mm_setr_epi8(3, 2, 1, 0, 7, 6, 5, 4, 11, 10, 9, 8, 15, 14, 13, 12);
+    const __m128i nibble_rev = _mm_setr_epi8(
+        0x0, 0x8, 0x4, 0xC, 0x2, 0xA, 0x6, 0xE, 0x1, 0x9, 0x5, 0xD, 0x3, 0xB, 0x7, 0xF);
+    const __m128i lo_mask = _mm_set1_epi8(0x0F);
+
+    const unsigned int quarterPoints = num_points / 4;
+    unsigned int number = 0;
+    for (; number < quarterPoints; ++number) {
+        __m128i v = _mm_load_si128((const __m128i*)(in + number * 4));
+        v = _mm_shuffle_epi8(v, byte_rev);
+        __m128i lo = _mm_and_si128(v, lo_mask);
+        __m128i hi = _mm_and_si128(_mm_srli_epi16(v, 4), lo_mask);
+        v = _mm_or_si128(_mm_slli_epi16(_mm_shuffle_epi8(nibble_rev, lo), 4),
+                         _mm_shuffle_epi8(nibble_rev, hi));
+        _mm_store_si128((__m128i*)(out + number * 4), v);
+    }
+    number = quarterPoints * 4;
+    volk_32u_reverse_32u_generic(out + number, in + number, num_points - number);
+}
+#endif /* LV_HAVE_SSSE3 */
+
+#ifdef LV_HAVE_AVX2
+#include <immintrin.h>
+
+static inline void
+volk_32u_reverse_32u_a_avx2(uint32_t* out, const uint32_t* in, unsigned int num_points)
+{
+    const __m256i byte_rev = _mm256_broadcastsi128_si256(
+        _mm_setr_epi8(3, 2, 1, 0, 7, 6, 5, 4, 11, 10, 9, 8, 15, 14, 13, 12));
+    const __m256i nibble_rev = _mm256_broadcastsi128_si256(_mm_setr_epi8(
+        0x0, 0x8, 0x4, 0xC, 0x2, 0xA, 0x6, 0xE, 0x1, 0x9, 0x5, 0xD, 0x3, 0xB, 0x7, 0xF));
+    const __m256i lo_mask = _mm256_set1_epi8(0x0F);
+
+    const unsigned int eighthPoints = num_points / 8;
+    unsigned int number = 0;
+    for (; number < eighthPoints; ++number) {
+        __m256i v = _mm256_load_si256((const __m256i*)(in + number * 8));
+        v = _mm256_shuffle_epi8(v, byte_rev);
+        __m256i lo = _mm256_and_si256(v, lo_mask);
+        __m256i hi = _mm256_and_si256(_mm256_srli_epi16(v, 4), lo_mask);
+        v = _mm256_or_si256(_mm256_slli_epi16(_mm256_shuffle_epi8(nibble_rev, lo), 4),
+                            _mm256_shuffle_epi8(nibble_rev, hi));
+        _mm256_store_si256((__m256i*)(out + number * 8), v);
+    }
+    number = eighthPoints * 8;
+    volk_32u_reverse_32u_generic(out + number, in + number, num_points - number);
+}
+#endif /* LV_HAVE_AVX2 */
+
+#ifdef LV_HAVE_AVX512BW
+#include <immintrin.h>
+
+static inline void
+volk_32u_reverse_32u_a_avx512bw(uint32_t* out,
+                                 const uint32_t* in,
+                                 unsigned int num_points)
+{
+    const __m512i byte_rev = _mm512_broadcast_i32x4(
+        _mm_setr_epi8(3, 2, 1, 0, 7, 6, 5, 4, 11, 10, 9, 8, 15, 14, 13, 12));
+    const __m512i nibble_rev = _mm512_broadcast_i32x4(_mm_setr_epi8(
+        0x0, 0x8, 0x4, 0xC, 0x2, 0xA, 0x6, 0xE, 0x1, 0x9, 0x5, 0xD, 0x3, 0xB, 0x7, 0xF));
+    const __m512i lo_mask = _mm512_set1_epi8(0x0F);
+
+    const unsigned int sixteenthPoints = num_points / 16;
+    unsigned int number = 0;
+    for (; number < sixteenthPoints; ++number) {
+        __m512i v = _mm512_load_si512((const __m512i*)(in + number * 16));
+        v = _mm512_shuffle_epi8(v, byte_rev);
+        __m512i lo = _mm512_and_si512(v, lo_mask);
+        __m512i hi = _mm512_and_si512(_mm512_srli_epi16(v, 4), lo_mask);
+        v = _mm512_or_si512(_mm512_slli_epi16(_mm512_shuffle_epi8(nibble_rev, lo), 4),
+                            _mm512_shuffle_epi8(nibble_rev, hi));
+        _mm512_store_si512((__m512i*)(out + number * 16), v);
+    }
+    number = sixteenthPoints * 16;
+    volk_32u_reverse_32u_generic(out + number, in + number, num_points - number);
+}
+#endif /* LV_HAVE_AVX512BW */
+
+#endif /* INCLUDED_VOLK_32u_REVERSE_32u_A_H */

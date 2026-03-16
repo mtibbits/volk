@@ -240,6 +240,91 @@ static inline void volk_32fc_x2_conjugate_dot_prod_32fc_u_avx(lv_32fc_t* result,
 
 #endif /* LV_HAVE_AVX */
 
+#if LV_HAVE_AVX && LV_HAVE_FMA
+
+#include <immintrin.h>
+
+static inline void
+volk_32fc_x2_conjugate_dot_prod_32fc_u_avx_fma(lv_32fc_t* result,
+                                                const lv_32fc_t* input,
+                                                const lv_32fc_t* taps,
+                                                unsigned int num_points)
+{
+    /* Four independent accumulators to saturate FMA pipeline (4-cycle latency,
+     * 0.5-cycle throughput on Skylake → need ≥8 in-flight FMAs). Each accumulator
+     * holds 4 complex partial sums, so 4 accumulators = 16 complex in flight.
+     */
+    __m256 dotProdVal0 = _mm256_setzero_ps();
+    __m256 dotProdVal1 = _mm256_setzero_ps();
+    __m256 dotProdVal2 = _mm256_setzero_ps();
+    __m256 dotProdVal3 = _mm256_setzero_ps();
+
+    for (long unsigned i = 0; i < (num_points & ~15u); i += 16) {
+        /* Conjugate dot product: (ar + j·ai) * conj(br + j·bi)
+         * = ar·br + ai·bi + j·(ai·br − ar·bi)
+         *
+         * Strategy: load a and b, duplicate b's real/imag parts,
+         * swap a's real/imag, then use fmsubadd to get:
+         *   even lanes: a·b_real + a_swap·b_imag = ar·br + ai·bi  (real)
+         *   odd  lanes: a·b_real − a_swap·b_imag = ai·br − ar·bi  (imag)
+         */
+        __m256 a0 = _mm256_loadu_ps((const float*)&input[i]);
+        __m256 b0 = _mm256_loadu_ps((const float*)&taps[i]);
+        __m256 b0r = _mm256_moveldup_ps(b0);
+        __m256 b0i = _mm256_movehdup_ps(b0);
+        __m256 a0s = _mm256_permute_ps(a0, 0xB1);
+        dotProdVal0 = _mm256_add_ps(
+            dotProdVal0, _mm256_fmsubadd_ps(a0, b0r, _mm256_mul_ps(a0s, b0i)));
+
+        __m256 a1 = _mm256_loadu_ps((const float*)&input[i + 4]);
+        __m256 b1 = _mm256_loadu_ps((const float*)&taps[i + 4]);
+        __m256 b1r = _mm256_moveldup_ps(b1);
+        __m256 b1i = _mm256_movehdup_ps(b1);
+        __m256 a1s = _mm256_permute_ps(a1, 0xB1);
+        dotProdVal1 = _mm256_add_ps(
+            dotProdVal1, _mm256_fmsubadd_ps(a1, b1r, _mm256_mul_ps(a1s, b1i)));
+
+        __m256 a2 = _mm256_loadu_ps((const float*)&input[i + 8]);
+        __m256 b2 = _mm256_loadu_ps((const float*)&taps[i + 8]);
+        __m256 b2r = _mm256_moveldup_ps(b2);
+        __m256 b2i = _mm256_movehdup_ps(b2);
+        __m256 a2s = _mm256_permute_ps(a2, 0xB1);
+        dotProdVal2 = _mm256_add_ps(
+            dotProdVal2, _mm256_fmsubadd_ps(a2, b2r, _mm256_mul_ps(a2s, b2i)));
+
+        __m256 a3 = _mm256_loadu_ps((const float*)&input[i + 12]);
+        __m256 b3 = _mm256_loadu_ps((const float*)&taps[i + 12]);
+        __m256 b3r = _mm256_moveldup_ps(b3);
+        __m256 b3i = _mm256_movehdup_ps(b3);
+        __m256 a3s = _mm256_permute_ps(a3, 0xB1);
+        dotProdVal3 = _mm256_add_ps(
+            dotProdVal3, _mm256_fmsubadd_ps(a3, b3r, _mm256_mul_ps(a3s, b3i)));
+    }
+
+    // Merge four accumulators into one.
+    dotProdVal0 = _mm256_add_ps(dotProdVal0, dotProdVal1);
+    dotProdVal2 = _mm256_add_ps(dotProdVal2, dotProdVal3);
+    __m256 sum = _mm256_add_ps(dotProdVal0, dotProdVal2);
+
+    // Horizontal reduction: 4 complex → 1 complex.
+    sum = _mm256_add_ps(sum, _mm256_permute2f128_ps(sum, sum, 0x01));
+    sum = _mm256_add_ps(sum, _mm256_permute_ps(sum, _MM_SHUFFLE(1, 0, 3, 2)));
+    _mm_storel_pi((__m64*)result, _mm256_castps256_ps128(sum));
+
+    // Handle remaining elements.
+    if (num_points & 15u) {
+        lv_32fc_t tail_result;
+        volk_32fc_x2_conjugate_dot_prod_32fc_generic(
+            &tail_result,
+            input + (num_points & ~15u),
+            taps + (num_points & ~15u),
+            num_points & 15u);
+        *result += tail_result;
+    }
+}
+
+#endif /* LV_HAVE_AVX && LV_HAVE_FMA */
+
 #if LV_HAVE_AVX512F && LV_HAVE_AVX512DQ
 
 #include <immintrin.h>
@@ -301,7 +386,7 @@ volk_32fc_x2_conjugate_dot_prod_32fc_u_avx512dq(lv_32fc_t* result,
 
     // Horizontal sum: reduce 8 complex numbers to 1
     // First reduce to 4 complex (256 bits)
-    __m256 sum_high = _mm512_extractf32x8_ps(sum, 1);
+    __m256 sum_high = _mm256_castpd_ps(_mm512_extractf64x4_pd(_mm512_castps_pd(sum), 1));
     __m256 sum_low = _mm512_castps512_ps256(sum);
     __m256 sum256 = _mm256_add_ps(sum_high, sum_low);
 
@@ -668,6 +753,84 @@ static inline void volk_32fc_x2_conjugate_dot_prod_32fc_a_avx(lv_32fc_t* result,
 
 #endif /* LV_HAVE_AVX */
 
+#if LV_HAVE_AVX && LV_HAVE_FMA
+
+#include <immintrin.h>
+
+static inline void
+volk_32fc_x2_conjugate_dot_prod_32fc_a_avx_fma(lv_32fc_t* result,
+                                                const lv_32fc_t* input,
+                                                const lv_32fc_t* taps,
+                                                unsigned int num_points)
+{
+    /* Four independent accumulators to saturate FMA pipeline. */
+    __m256 dotProdVal0 = _mm256_setzero_ps();
+    __m256 dotProdVal1 = _mm256_setzero_ps();
+    __m256 dotProdVal2 = _mm256_setzero_ps();
+    __m256 dotProdVal3 = _mm256_setzero_ps();
+
+    for (long unsigned i = 0; i < (num_points & ~15u); i += 16) {
+        /* Conjugate dot product via fmsubadd:
+         *   even lanes: a·b_real + a_swap·b_imag = ar·br + ai·bi  (real)
+         *   odd  lanes: a·b_real − a_swap·b_imag = ai·br − ar·bi  (imag)
+         */
+        __m256 a0 = _mm256_load_ps((const float*)&input[i]);
+        __m256 b0 = _mm256_load_ps((const float*)&taps[i]);
+        __m256 b0r = _mm256_moveldup_ps(b0);
+        __m256 b0i = _mm256_movehdup_ps(b0);
+        __m256 a0s = _mm256_permute_ps(a0, 0xB1);
+        dotProdVal0 = _mm256_add_ps(
+            dotProdVal0, _mm256_fmsubadd_ps(a0, b0r, _mm256_mul_ps(a0s, b0i)));
+
+        __m256 a1 = _mm256_load_ps((const float*)&input[i + 4]);
+        __m256 b1 = _mm256_load_ps((const float*)&taps[i + 4]);
+        __m256 b1r = _mm256_moveldup_ps(b1);
+        __m256 b1i = _mm256_movehdup_ps(b1);
+        __m256 a1s = _mm256_permute_ps(a1, 0xB1);
+        dotProdVal1 = _mm256_add_ps(
+            dotProdVal1, _mm256_fmsubadd_ps(a1, b1r, _mm256_mul_ps(a1s, b1i)));
+
+        __m256 a2 = _mm256_load_ps((const float*)&input[i + 8]);
+        __m256 b2 = _mm256_load_ps((const float*)&taps[i + 8]);
+        __m256 b2r = _mm256_moveldup_ps(b2);
+        __m256 b2i = _mm256_movehdup_ps(b2);
+        __m256 a2s = _mm256_permute_ps(a2, 0xB1);
+        dotProdVal2 = _mm256_add_ps(
+            dotProdVal2, _mm256_fmsubadd_ps(a2, b2r, _mm256_mul_ps(a2s, b2i)));
+
+        __m256 a3 = _mm256_load_ps((const float*)&input[i + 12]);
+        __m256 b3 = _mm256_load_ps((const float*)&taps[i + 12]);
+        __m256 b3r = _mm256_moveldup_ps(b3);
+        __m256 b3i = _mm256_movehdup_ps(b3);
+        __m256 a3s = _mm256_permute_ps(a3, 0xB1);
+        dotProdVal3 = _mm256_add_ps(
+            dotProdVal3, _mm256_fmsubadd_ps(a3, b3r, _mm256_mul_ps(a3s, b3i)));
+    }
+
+    // Merge four accumulators into one.
+    dotProdVal0 = _mm256_add_ps(dotProdVal0, dotProdVal1);
+    dotProdVal2 = _mm256_add_ps(dotProdVal2, dotProdVal3);
+    __m256 sum = _mm256_add_ps(dotProdVal0, dotProdVal2);
+
+    // Horizontal reduction: 4 complex → 1 complex.
+    sum = _mm256_add_ps(sum, _mm256_permute2f128_ps(sum, sum, 0x01));
+    sum = _mm256_add_ps(sum, _mm256_permute_ps(sum, _MM_SHUFFLE(1, 0, 3, 2)));
+    _mm_storel_pi((__m64*)result, _mm256_castps256_ps128(sum));
+
+    // Handle remaining elements.
+    if (num_points & 15u) {
+        lv_32fc_t tail_result;
+        volk_32fc_x2_conjugate_dot_prod_32fc_generic(
+            &tail_result,
+            input + (num_points & ~15u),
+            taps + (num_points & ~15u),
+            num_points & 15u);
+        *result += tail_result;
+    }
+}
+
+#endif /* LV_HAVE_AVX && LV_HAVE_FMA */
+
 #if LV_HAVE_AVX512F && LV_HAVE_AVX512DQ
 
 #include <immintrin.h>
@@ -728,7 +891,7 @@ volk_32fc_x2_conjugate_dot_prod_32fc_a_avx512dq(lv_32fc_t* result,
     __m512 sum = _mm512_add_ps(sum_a_mult_b_real, sum_a_mult_b_imag);
 
     // Horizontal sum: reduce 8 complex numbers to 1
-    __m256 sum_high = _mm512_extractf32x8_ps(sum, 1);
+    __m256 sum_high = _mm256_castpd_ps(_mm512_extractf64x4_pd(_mm512_castps_pd(sum), 1));
     __m256 sum_low = _mm512_castps512_ps256(sum);
     __m256 sum256 = _mm256_add_ps(sum_high, sum_low);
 

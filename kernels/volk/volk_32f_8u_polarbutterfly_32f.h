@@ -386,6 +386,127 @@ static inline void volk_32f_8u_polarbutterfly_32f_u_avx2(float* llrs,
 
 #endif /* LV_HAVE_AVX2 */
 
+#ifdef LV_HAVE_AVX512F
+#include <immintrin.h>
+
+static inline void volk_32f_8u_polarbutterfly_32f_u_avx512f(float* llrs,
+                                                              unsigned char* u,
+                                                              const int frame_exp,
+                                                              const int stage,
+                                                              const int u_num,
+                                                              const int row)
+{
+    const int frame_size = 0x01 << frame_exp;
+    if (row % 2) { // for odd rows just do the only necessary calculation and return.
+        const float* next_llrs = llrs + frame_size + row;
+        *(llrs + row) = llr_even(*(next_llrs - 1), *next_llrs, u[u_num - 1]);
+        return;
+    }
+
+    const int max_stage_depth = calculate_max_stage_depth_for_row(frame_exp, row);
+    if (max_stage_depth < 4) { // 512-bit vectors need at least 16 elements
+        volk_32f_8u_polarbutterfly_32f_u_avx2(llrs, u, frame_exp, stage, u_num, row);
+        return;
+    }
+
+    int loop_stage = max_stage_depth;
+    int stage_size = 0x01 << loop_stage;
+
+    float* src_llr_ptr;
+    float* dst_llr_ptr;
+
+    // Permutation indices for deinterleaving interleaved float pairs
+    const __m512i deinterleave_even = _mm512_setr_epi32(
+        0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30);
+    const __m512i deinterleave_odd = _mm512_setr_epi32(
+        1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31);
+    const __m512i sign_bit = _mm512_castps_si512(_mm512_set1_ps(-0.0f));
+    const __m512i abs_mask = _mm512_andnot_epi32(sign_bit, _mm512_set1_epi32(-1));
+
+    if (row) { // not necessary for ZERO row. == first bit to be decoded.
+        // first do bit combination for all stages
+        // effectively encode some decoded bits again.
+        unsigned char* u_target = u + frame_size;
+        unsigned char* u_temp = u + 2 * frame_size;
+        memcpy(u_temp, u + u_num - stage_size, sizeof(unsigned char) * stage_size);
+
+        volk_8u_x2_encodeframepolar_8u_u_avx2(u_target, u_temp, stage_size);
+
+        src_llr_ptr = llrs + (max_stage_depth + 1) * frame_size + row - stage_size;
+        dst_llr_ptr = llrs + max_stage_depth * frame_size + row;
+
+        int p;
+        for (p = 0; p < stage_size; p += 16) {
+            // Load 16 decision bytes and expand to 32-bit
+            __m128i fbits = _mm_loadu_si128((const __m128i*)u_target);
+            u_target += 16;
+            __m512i fbits32 = _mm512_cvtepi8_epi32(fbits);
+            __mmask16 nz_mask =
+                _mm512_cmpneq_epi32_mask(fbits32, _mm512_setzero_si512());
+            __m512i fsign = _mm512_maskz_mov_epi32(nz_mask, sign_bit);
+
+            // Load 32 interleaved floats and deinterleave
+            __m512 src0 = _mm512_loadu_ps(src_llr_ptr);
+            __m512 src1 = _mm512_loadu_ps(src_llr_ptr + 16);
+            src_llr_ptr += 32;
+
+            __m512 llr0 = _mm512_permutex2var_ps(src0, deinterleave_even, src1);
+            __m512 llr1 = _mm512_permutex2var_ps(src0, deinterleave_odd, src1);
+
+            // Apply sign flip and add: if f[i] then (llr1 - llr0) else (llr1 + llr0)
+            llr0 = _mm512_castsi512_ps(
+                _mm512_xor_epi32(_mm512_castps_si512(llr0), fsign));
+            __m512 dst = _mm512_add_ps(llr0, llr1);
+
+            _mm512_storeu_ps(dst_llr_ptr, dst);
+            dst_llr_ptr += 16;
+        }
+
+        --loop_stage;
+        stage_size >>= 1;
+    }
+
+    const int min_stage = stage > 3 ? stage : 3;
+
+    int el;
+    while (min_stage < loop_stage) {
+        dst_llr_ptr = llrs + loop_stage * frame_size + row;
+        src_llr_ptr = dst_llr_ptr + frame_size;
+        for (el = 0; el < stage_size; el += 16) {
+            __m512 src0 = _mm512_loadu_ps(src_llr_ptr);
+            src_llr_ptr += 16;
+            __m512 src1 = _mm512_loadu_ps(src_llr_ptr);
+            src_llr_ptr += 16;
+
+            __m512 llr0 = _mm512_permutex2var_ps(src0, deinterleave_even, src1);
+            __m512 llr1 = _mm512_permutex2var_ps(src0, deinterleave_odd, src1);
+
+            // minsum: sign(a)*sign(b)*min(|a|,|b|)
+            __m512i sign = _mm512_xor_epi32(
+                _mm512_and_epi32(_mm512_castps_si512(llr0), sign_bit),
+                _mm512_and_epi32(_mm512_castps_si512(llr1), sign_bit));
+            __m512 abs0 = _mm512_castsi512_ps(
+                _mm512_and_epi32(_mm512_castps_si512(llr0), abs_mask));
+            __m512 abs1 = _mm512_castsi512_ps(
+                _mm512_and_epi32(_mm512_castps_si512(llr1), abs_mask));
+            __m512 min_val = _mm512_min_ps(abs0, abs1);
+            __m512 dst = _mm512_castsi512_ps(
+                _mm512_or_epi32(_mm512_castps_si512(min_val), sign));
+
+            _mm512_storeu_ps(dst_llr_ptr, dst);
+            dst_llr_ptr += 16;
+        }
+
+        --loop_stage;
+        stage_size >>= 1;
+    }
+
+    // for stages < 4 vectors are too small!.
+    llr_odd_stages(llrs, stage, loop_stage + 1, frame_size, row);
+}
+
+#endif /* LV_HAVE_AVX512F */
+
 #ifdef LV_HAVE_RVV
 #include <riscv_vector.h>
 

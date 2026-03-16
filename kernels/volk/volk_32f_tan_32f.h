@@ -393,6 +393,106 @@ volk_32f_tan_32f_u_avx2_fma(float* bVector, const float* aVector, unsigned int n
 
 #endif /* LV_HAVE_AVX2 && LV_HAVE_FMA for unaligned */
 
+#ifdef LV_HAVE_AVX512F
+#include <immintrin.h>
+
+static inline void
+volk_32f_tan_32f_u_avx512f(float* bVector, const float* aVector, unsigned int num_points)
+{
+    float* bPtr = bVector;
+    const float* aPtr = aVector;
+
+    unsigned int number = 0;
+    const unsigned int sixteenthPoints = num_points / 16;
+    unsigned int i = 0;
+
+    __m512 aVal, s, m4pi, pio4A, pio4B, cp1, cp2, cp3, cp4, cp5, ffours, ftwos, fones;
+    __m512 sine, cosine, tangent;
+    __m512i q, r, ones, twos, fours;
+
+    m4pi = _mm512_set1_ps(1.273239545);
+    pio4A = _mm512_set1_ps(0.78515625);
+    pio4B = _mm512_set1_ps(0.241876e-3);
+    ffours = _mm512_set1_ps(4.0);
+    ftwos = _mm512_set1_ps(2.0);
+    fones = _mm512_set1_ps(1.0);
+    ones = _mm512_set1_epi32(1);
+    twos = _mm512_set1_epi32(2);
+    fours = _mm512_set1_epi32(4);
+
+    cp1 = _mm512_set1_ps(1.0);
+    cp2 = _mm512_set1_ps(0.83333333e-1);
+    cp3 = _mm512_set1_ps(0.2777778e-2);
+    cp4 = _mm512_set1_ps(0.49603e-4);
+    cp5 = _mm512_set1_ps(0.551e-6);
+
+    for (; number < sixteenthPoints; number++) {
+        aVal = _mm512_loadu_ps(aPtr);
+
+        /* s = abs(aVal) */
+        s = _mm512_abs_ps(aVal);
+
+        q = _mm512_cvtps_epi32(_mm512_floor_ps(_mm512_mul_ps(s, m4pi)));
+        r = _mm512_add_epi32(q, _mm512_and_si512(q, ones));
+
+        s = _mm512_fnmadd_ps(_mm512_cvtepi32_ps(r), pio4A, s);
+        s = _mm512_fnmadd_ps(_mm512_cvtepi32_ps(r), pio4B, s);
+
+        s = _mm512_div_ps(s, _mm512_set1_ps(8.0));
+        s = _mm512_mul_ps(s, s);
+
+        /* Evaluate Taylor series */
+        s = _mm512_mul_ps(
+            _mm512_fmadd_ps(
+                _mm512_fmsub_ps(
+                    _mm512_fmadd_ps(_mm512_fmsub_ps(s, cp5, cp4), s, cp3), s, cp2),
+                s,
+                cp1),
+            s);
+
+        for (i = 0; i < 3; i++) {
+            s = _mm512_mul_ps(s, _mm512_sub_ps(ffours, s));
+        }
+        s = _mm512_div_ps(s, ftwos);
+
+        sine = _mm512_sqrt_ps(_mm512_mul_ps(_mm512_sub_ps(ftwos, s), s));
+        cosine = _mm512_sub_ps(fones, s);
+
+        /* Conditionally swap sine/cosine */
+        __mmask16 cond1 = _mm512_cmp_epi32_mask(
+            _mm512_and_si512(_mm512_add_epi32(q, ones), twos),
+            _mm512_setzero_si512(),
+            _MM_CMPINT_NE);
+        __m512 temp_sine = sine;
+        sine = _mm512_mask_blend_ps(cond1, sine, cosine);
+        cosine = _mm512_mask_blend_ps(cond1, cosine, temp_sine);
+
+        /* Negate sine where needed based on sign of input XOR octant */
+        __mmask16 neg_input = _mm512_cmp_ps_mask(aVal, _mm512_setzero_ps(), _CMP_LT_OS);
+        __mmask16 q_and_4 = _mm512_cmp_epi32_mask(
+            _mm512_and_si512(q, fours), _mm512_setzero_si512(), _MM_CMPINT_NE);
+        __mmask16 cond2 = neg_input ^ q_and_4;
+        sine = _mm512_mask_sub_ps(sine, cond2, _mm512_setzero_ps(), sine);
+
+        /* Negate cosine where needed */
+        __mmask16 cond3 = _mm512_cmp_epi32_mask(
+            _mm512_and_si512(_mm512_add_epi32(q, twos), fours),
+            _mm512_setzero_si512(),
+            _MM_CMPINT_NE);
+        cosine = _mm512_mask_sub_ps(cosine, cond3, _mm512_setzero_ps(), cosine);
+
+        tangent = _mm512_div_ps(sine, cosine);
+        _mm512_storeu_ps(bPtr, tangent);
+        aPtr += 16;
+        bPtr += 16;
+    }
+
+    number = sixteenthPoints * 16;
+    volk_32f_tan_32f_generic(bPtr, aPtr, num_points - number);
+}
+
+#endif /* LV_HAVE_AVX512F for unaligned */
+
 #ifdef LV_HAVE_NEON
 #include <arm_neon.h>
 #include <volk/volk_neon_intrinsics.h>
@@ -840,6 +940,106 @@ volk_32f_tan_32f_a_avx2_fma(float* bVector, const float* aVector, unsigned int n
 }
 
 #endif /* LV_HAVE_AVX2 && LV_HAVE_FMA for aligned */
+
+#ifdef LV_HAVE_AVX512F
+#include <immintrin.h>
+
+static inline void
+volk_32f_tan_32f_a_avx512f(float* bVector, const float* aVector, unsigned int num_points)
+{
+    float* bPtr = bVector;
+    const float* aPtr = aVector;
+
+    unsigned int number = 0;
+    const unsigned int sixteenthPoints = num_points / 16;
+    unsigned int i = 0;
+
+    __m512 aVal, s, m4pi, pio4A, pio4B, cp1, cp2, cp3, cp4, cp5, ffours, ftwos, fones;
+    __m512 sine, cosine, tangent;
+    __m512i q, r, ones, twos, fours;
+
+    m4pi = _mm512_set1_ps(1.273239545);
+    pio4A = _mm512_set1_ps(0.78515625);
+    pio4B = _mm512_set1_ps(0.241876e-3);
+    ffours = _mm512_set1_ps(4.0);
+    ftwos = _mm512_set1_ps(2.0);
+    fones = _mm512_set1_ps(1.0);
+    ones = _mm512_set1_epi32(1);
+    twos = _mm512_set1_epi32(2);
+    fours = _mm512_set1_epi32(4);
+
+    cp1 = _mm512_set1_ps(1.0);
+    cp2 = _mm512_set1_ps(0.83333333e-1);
+    cp3 = _mm512_set1_ps(0.2777778e-2);
+    cp4 = _mm512_set1_ps(0.49603e-4);
+    cp5 = _mm512_set1_ps(0.551e-6);
+
+    for (; number < sixteenthPoints; number++) {
+        aVal = _mm512_load_ps(aPtr);
+
+        /* s = abs(aVal) */
+        s = _mm512_abs_ps(aVal);
+
+        q = _mm512_cvtps_epi32(_mm512_floor_ps(_mm512_mul_ps(s, m4pi)));
+        r = _mm512_add_epi32(q, _mm512_and_si512(q, ones));
+
+        s = _mm512_fnmadd_ps(_mm512_cvtepi32_ps(r), pio4A, s);
+        s = _mm512_fnmadd_ps(_mm512_cvtepi32_ps(r), pio4B, s);
+
+        s = _mm512_div_ps(s, _mm512_set1_ps(8.0));
+        s = _mm512_mul_ps(s, s);
+
+        /* Evaluate Taylor series */
+        s = _mm512_mul_ps(
+            _mm512_fmadd_ps(
+                _mm512_fmsub_ps(
+                    _mm512_fmadd_ps(_mm512_fmsub_ps(s, cp5, cp4), s, cp3), s, cp2),
+                s,
+                cp1),
+            s);
+
+        for (i = 0; i < 3; i++) {
+            s = _mm512_mul_ps(s, _mm512_sub_ps(ffours, s));
+        }
+        s = _mm512_div_ps(s, ftwos);
+
+        sine = _mm512_sqrt_ps(_mm512_mul_ps(_mm512_sub_ps(ftwos, s), s));
+        cosine = _mm512_sub_ps(fones, s);
+
+        /* Conditionally swap sine/cosine */
+        __mmask16 cond1 = _mm512_cmp_epi32_mask(
+            _mm512_and_si512(_mm512_add_epi32(q, ones), twos),
+            _mm512_setzero_si512(),
+            _MM_CMPINT_NE);
+        __m512 temp_sine = sine;
+        sine = _mm512_mask_blend_ps(cond1, sine, cosine);
+        cosine = _mm512_mask_blend_ps(cond1, cosine, temp_sine);
+
+        /* Negate sine where needed based on sign of input XOR octant */
+        __mmask16 neg_input = _mm512_cmp_ps_mask(aVal, _mm512_setzero_ps(), _CMP_LT_OS);
+        __mmask16 q_and_4 = _mm512_cmp_epi32_mask(
+            _mm512_and_si512(q, fours), _mm512_setzero_si512(), _MM_CMPINT_NE);
+        __mmask16 cond2 = neg_input ^ q_and_4;
+        sine = _mm512_mask_sub_ps(sine, cond2, _mm512_setzero_ps(), sine);
+
+        /* Negate cosine where needed */
+        __mmask16 cond3 = _mm512_cmp_epi32_mask(
+            _mm512_and_si512(_mm512_add_epi32(q, twos), fours),
+            _mm512_setzero_si512(),
+            _MM_CMPINT_NE);
+        cosine = _mm512_mask_sub_ps(cosine, cond3, _mm512_setzero_ps(), cosine);
+
+        tangent = _mm512_div_ps(sine, cosine);
+        _mm512_store_ps(bPtr, tangent);
+        aPtr += 16;
+        bPtr += 16;
+    }
+
+    number = sixteenthPoints * 16;
+    volk_32f_tan_32f_generic(bPtr, aPtr, num_points - number);
+}
+
+#endif /* LV_HAVE_AVX512F for aligned */
 
 
 #endif /* INCLUDED_volk_32f_tan_32f_a_H */

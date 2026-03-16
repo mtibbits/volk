@@ -117,6 +117,52 @@ static inline __m256 _mm256_arcsin_poly_avx(const __m256 x)
     return _mm256_mul_ps(x, p);
 }
 
+/*
+ * Approximate sin(x) via polynomial expansion
+ * on the interval [-pi/4, pi/4]
+ *
+ * Maximum absolute error ~1.1e-7
+ * sin(x) = x + x^3 * (s1 + x^2 * (s2 + x^2 * s3))
+ *
+ * Uses only AVX float ops (no AVX2 integer ops required).
+ */
+static inline __m256 _mm256_sin_poly_avx(const __m256 x)
+{
+    const __m256 s1 = _mm256_set1_ps(-0x1.555552p-3f);
+    const __m256 s2 = _mm256_set1_ps(+0x1.110be2p-7f);
+    const __m256 s3 = _mm256_set1_ps(-0x1.9ab22ap-13f);
+
+    const __m256 x2 = _mm256_mul_ps(x, x);
+    const __m256 x3 = _mm256_mul_ps(x2, x);
+
+    __m256 poly = _mm256_add_ps(_mm256_mul_ps(x2, s3), s2);
+    poly = _mm256_add_ps(_mm256_mul_ps(x2, poly), s1);
+    return _mm256_add_ps(_mm256_mul_ps(x3, poly), x);
+}
+
+/*
+ * Approximate cos(x) via polynomial expansion
+ * on the interval [-pi/4, pi/4]
+ *
+ * Maximum absolute error ~1.1e-7
+ * cos(x) = 1 + x^2 * (c1 + x^2 * (c2 + x^2 * c3))
+ *
+ * Uses only AVX float ops (no AVX2 integer ops required).
+ */
+static inline __m256 _mm256_cos_poly_avx(const __m256 x)
+{
+    const __m256 c1 = _mm256_set1_ps(-0x1.fffff4p-2f);
+    const __m256 c2 = _mm256_set1_ps(+0x1.554a46p-5f);
+    const __m256 c3 = _mm256_set1_ps(-0x1.661be2p-10f);
+    const __m256 one = _mm256_set1_ps(1.0f);
+
+    const __m256 x2 = _mm256_mul_ps(x, x);
+
+    __m256 poly = _mm256_add_ps(_mm256_mul_ps(x2, c3), c2);
+    poly = _mm256_add_ps(_mm256_mul_ps(x2, poly), c1);
+    return _mm256_add_ps(_mm256_mul_ps(x2, poly), one);
+}
+
 static inline __m256 _mm256_complexmul_ps(__m256 x, __m256 y)
 {
     __m256 yl, yh, tmp1, tmp2;

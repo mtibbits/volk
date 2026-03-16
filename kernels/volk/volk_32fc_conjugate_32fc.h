@@ -76,6 +76,38 @@ static inline void volk_32fc_conjugate_32fc_generic(lv_32fc_t* cVector,
 }
 #endif /* LV_HAVE_GENERIC */
 
+#ifdef LV_HAVE_SSE
+#include <xmmintrin.h>
+
+static inline void volk_32fc_conjugate_32fc_u_sse(lv_32fc_t* cVector,
+                                                  const lv_32fc_t* aVector,
+                                                  unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int halfPoints = num_points / 2;
+
+    __m128 x;
+    lv_32fc_t* c = cVector;
+    const lv_32fc_t* a = aVector;
+
+    __m128 conjugator = _mm_setr_ps(0, -0.f, 0, -0.f);
+
+    for (; number < halfPoints; number++) {
+
+        x = _mm_loadu_ps((const float*)a);
+
+        x = _mm_xor_ps(x, conjugator);
+
+        _mm_storeu_ps((float*)c, x);
+
+        a += 2;
+        c += 2;
+    }
+
+    volk_32fc_conjugate_32fc_generic(c, a, num_points - halfPoints * 2);
+}
+#endif /* LV_HAVE_SSE */
+
 #ifdef LV_HAVE_SSE3
 #include <pmmintrin.h>
 
@@ -145,6 +177,37 @@ static inline void volk_32fc_conjugate_32fc_u_avx(lv_32fc_t* cVector,
     }
 }
 #endif /* LV_HAVE_AVX */
+
+#ifdef LV_HAVE_AVX512F
+#include <immintrin.h>
+
+static inline void volk_32fc_conjugate_32fc_u_avx512f(lv_32fc_t* cVector,
+                                                      const lv_32fc_t* aVector,
+                                                      unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int eighthPoints = num_points / 8;
+
+    lv_32fc_t* c = cVector;
+    const lv_32fc_t* a = aVector;
+
+    const __m512i conjugator = _mm512_set1_epi64(0x8000000000000000LL);
+
+    for (; number < eighthPoints; number++) {
+
+        __m512i x = _mm512_loadu_si512((const __m512i*)a);
+
+        x = _mm512_xor_si512(x, conjugator);
+
+        _mm512_storeu_si512((__m512i*)c, x);
+
+        a += 8;
+        c += 8;
+    }
+
+    volk_32fc_conjugate_32fc_generic(c, a, num_points - eighthPoints * 8);
+}
+#endif /* LV_HAVE_AVX512F */
 
 #ifdef LV_HAVE_NEON
 #include <arm_neon.h>
@@ -247,6 +310,38 @@ static inline void volk_32fc_conjugate_32fc_rvv(lv_32fc_t* cVector,
 #include <stdio.h>
 #include <volk/volk_complex.h>
 
+#ifdef LV_HAVE_SSE
+#include <xmmintrin.h>
+
+static inline void volk_32fc_conjugate_32fc_a_sse(lv_32fc_t* cVector,
+                                                  const lv_32fc_t* aVector,
+                                                  unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int halfPoints = num_points / 2;
+
+    __m128 x;
+    lv_32fc_t* c = cVector;
+    const lv_32fc_t* a = aVector;
+
+    __m128 conjugator = _mm_setr_ps(0, -0.f, 0, -0.f);
+
+    for (; number < halfPoints; number++) {
+
+        x = _mm_load_ps((const float*)a);
+
+        x = _mm_xor_ps(x, conjugator);
+
+        _mm_store_ps((float*)c, x);
+
+        a += 2;
+        c += 2;
+    }
+
+    volk_32fc_conjugate_32fc_generic(c, a, num_points - halfPoints * 2);
+}
+#endif /* LV_HAVE_SSE */
+
 #ifdef LV_HAVE_SSE3
 #include <pmmintrin.h>
 
@@ -316,5 +411,36 @@ static inline void volk_32fc_conjugate_32fc_a_avx(lv_32fc_t* cVector,
     }
 }
 #endif /* LV_HAVE_AVX */
+
+#ifdef LV_HAVE_AVX512F
+#include <immintrin.h>
+
+static inline void volk_32fc_conjugate_32fc_a_avx512f(lv_32fc_t* cVector,
+                                                      const lv_32fc_t* aVector,
+                                                      unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int eighthPoints = num_points / 8;
+
+    lv_32fc_t* c = cVector;
+    const lv_32fc_t* a = aVector;
+
+    const __m512i conjugator = _mm512_set1_epi64(0x8000000000000000LL);
+
+    for (; number < eighthPoints; number++) {
+
+        __m512i x = _mm512_load_si512((const __m512i*)a);
+
+        x = _mm512_xor_si512(x, conjugator);
+
+        _mm512_store_si512((__m512i*)c, x);
+
+        a += 8;
+        c += 8;
+    }
+
+    volk_32fc_conjugate_32fc_generic(c, a, num_points - eighthPoints * 8);
+}
+#endif /* LV_HAVE_AVX512F */
 
 #endif /* INCLUDED_volk_32fc_conjugate_32fc_a_H */

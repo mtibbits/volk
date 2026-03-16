@@ -235,6 +235,36 @@ static inline void volk_64u_byteswap_u_avx2(uint64_t* intsToSwap, unsigned int n
 #endif /* LV_HAVE_AVX2 */
 
 
+#ifdef LV_HAVE_AVX512BW
+#include <immintrin.h>
+
+static inline void volk_64u_byteswap_u_avx512bw(uint64_t* intsToSwap,
+                                                  unsigned int num_points)
+{
+    uint32_t* inputPtr = (uint32_t*)intsToSwap;
+    const unsigned int nPerSet = 8;
+    const unsigned int nSets = num_points / nPerSet;
+
+    const __m512i myShuffle = _mm512_set_epi8(
+         8,  9, 10, 11, 12, 13, 14, 15,  0,  1,  2,  3,  4,  5,  6,  7,
+         8,  9, 10, 11, 12, 13, 14, 15,  0,  1,  2,  3,  4,  5,  6,  7,
+         8,  9, 10, 11, 12, 13, 14, 15,  0,  1,  2,  3,  4,  5,  6,  7,
+         8,  9, 10, 11, 12, 13, 14, 15,  0,  1,  2,  3,  4,  5,  6,  7);
+
+    for (unsigned int number = 0; number < nSets; number++) {
+        const __m512i input = _mm512_loadu_si512((__m512i*)inputPtr);
+        const __m512i output = _mm512_shuffle_epi8(input, myShuffle);
+        _mm512_storeu_si512((__m512i*)inputPtr, output);
+        inputPtr += 2 * nPerSet;
+    }
+
+    // Byteswap any remaining points:
+    volk_64u_byteswap_generic(intsToSwap + nSets * nPerSet,
+                              num_points - nSets * nPerSet);
+}
+#endif /* LV_HAVE_AVX512BW */
+
+
 #ifdef LV_HAVE_NEON
 #include <arm_neon.h>
 
@@ -488,5 +518,35 @@ static inline void volk_64u_byteswap_a_avx2(uint64_t* intsToSwap, unsigned int n
 }
 
 #endif /* LV_HAVE_AVX2 */
+
+
+#ifdef LV_HAVE_AVX512BW
+#include <immintrin.h>
+
+static inline void volk_64u_byteswap_a_avx512bw(uint64_t* intsToSwap,
+                                                  unsigned int num_points)
+{
+    uint32_t* inputPtr = (uint32_t*)intsToSwap;
+    const unsigned int nPerSet = 8;
+    const unsigned int nSets = num_points / nPerSet;
+
+    const __m512i myShuffle = _mm512_set_epi8(
+         8,  9, 10, 11, 12, 13, 14, 15,  0,  1,  2,  3,  4,  5,  6,  7,
+         8,  9, 10, 11, 12, 13, 14, 15,  0,  1,  2,  3,  4,  5,  6,  7,
+         8,  9, 10, 11, 12, 13, 14, 15,  0,  1,  2,  3,  4,  5,  6,  7,
+         8,  9, 10, 11, 12, 13, 14, 15,  0,  1,  2,  3,  4,  5,  6,  7);
+
+    for (unsigned int number = 0; number < nSets; number++) {
+        const __m512i input = _mm512_load_si512((__m512i*)inputPtr);
+        const __m512i output = _mm512_shuffle_epi8(input, myShuffle);
+        _mm512_store_si512((__m512i*)inputPtr, output);
+        inputPtr += 2 * nPerSet;
+    }
+
+    // Byteswap any remaining points:
+    volk_64u_byteswap_generic(intsToSwap + nSets * nPerSet,
+                              num_points - nSets * nPerSet);
+}
+#endif /* LV_HAVE_AVX512BW */
 
 #endif /* INCLUDED_volk_64u_byteswap_a_H */

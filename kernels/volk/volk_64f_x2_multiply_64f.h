@@ -160,6 +160,42 @@ static inline void volk_64f_x2_multiply_64f_u_avx(double* cVector,
 #endif /* LV_HAVE_AVX */
 
 
+#ifdef LV_HAVE_AVX512F
+
+#include <immintrin.h>
+
+static inline void volk_64f_x2_multiply_64f_u_avx512f(double* cVector,
+                                                       const double* aVector,
+                                                       const double* bVector,
+                                                       unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int eighth_points = num_points / 8;
+
+    double* cPtr = cVector;
+    const double* aPtr = aVector;
+    const double* bPtr = bVector;
+
+    __m512d aVal, bVal, cVal;
+    for (; number < eighth_points; number++) {
+        aVal = _mm512_loadu_pd(aPtr);
+        bVal = _mm512_loadu_pd(bPtr);
+
+        cVal = _mm512_mul_pd(aVal, bVal);
+
+        _mm512_storeu_pd(cPtr, cVal);
+
+        aPtr += 8;
+        bPtr += 8;
+        cPtr += 8;
+    }
+
+    volk_64f_x2_multiply_64f_generic(cPtr, aPtr, bPtr, num_points - eighth_points * 8);
+}
+
+#endif /* LV_HAVE_AVX512F */
+
+
 #ifdef LV_HAVE_NEONV8
 #include <arm_neon.h>
 
@@ -306,6 +342,42 @@ static inline void volk_64f_x2_multiply_64f_a_avx(double* cVector,
 }
 
 #endif /* LV_HAVE_AVX */
+
+
+#ifdef LV_HAVE_AVX512F
+
+#include <immintrin.h>
+
+static inline void volk_64f_x2_multiply_64f_a_avx512f(double* cVector,
+                                                       const double* aVector,
+                                                       const double* bVector,
+                                                       unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int eighth_points = num_points / 8;
+
+    double* cPtr = cVector;
+    const double* aPtr = aVector;
+    const double* bPtr = bVector;
+
+    __m512d aVal, bVal, cVal;
+    for (; number < eighth_points; number++) {
+        aVal = _mm512_load_pd(aPtr);
+        bVal = _mm512_load_pd(bPtr);
+
+        cVal = _mm512_mul_pd(aVal, bVal);
+
+        _mm512_store_pd(cPtr, cVal);
+
+        aPtr += 8;
+        bPtr += 8;
+        cPtr += 8;
+    }
+
+    volk_64f_x2_multiply_64f_generic(cPtr, aPtr, bPtr, num_points - eighth_points * 8);
+}
+
+#endif /* LV_HAVE_AVX512F */
 
 
 #endif /* INCLUDED_volk_64f_x2_multiply_64f_a_H */
