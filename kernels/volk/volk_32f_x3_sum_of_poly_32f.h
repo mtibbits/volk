@@ -128,6 +128,166 @@ static inline void volk_32f_x3_sum_of_poly_32f_generic(float* target,
 
 #endif /*LV_HAVE_GENERIC*/
 
+#ifdef LV_HAVE_SSE
+#include <xmmintrin.h>
+
+static inline void volk_32f_x3_sum_of_poly_32f_u_sse(float* target,
+                                                      const float* src0,
+                                                      const float* center_point_array,
+                                                      const float* cutoff,
+                                                      unsigned int num_points)
+{
+    const unsigned int eighth_points = num_points / 8;
+
+    __m128 cpa0 = _mm_load1_ps(&center_point_array[0]);
+    __m128 cpa1 = _mm_load1_ps(&center_point_array[1]);
+    __m128 cpa2 = _mm_load1_ps(&center_point_array[2]);
+    __m128 cpa3 = _mm_load1_ps(&center_point_array[3]);
+    __m128 cutoff_vec = _mm_load1_ps(cutoff);
+    __m128 acc0 = _mm_setzero_ps();
+    __m128 acc1 = _mm_setzero_ps();
+
+    __m128 x_to_1, x_to_2, x_to_3, x_to_4;
+
+    unsigned int i;
+    for (i = 0; i < eighth_points; ++i) {
+        // 1st group of 4
+        x_to_1 = _mm_loadu_ps(src0);
+        x_to_1 = _mm_max_ps(x_to_1, cutoff_vec);
+        x_to_2 = _mm_mul_ps(x_to_1, x_to_1);
+        x_to_3 = _mm_mul_ps(x_to_1, x_to_2);
+        x_to_4 = _mm_mul_ps(x_to_2, x_to_2);
+
+        x_to_1 = _mm_mul_ps(x_to_1, cpa0);
+        x_to_2 = _mm_mul_ps(x_to_2, cpa1);
+        x_to_3 = _mm_mul_ps(x_to_3, cpa2);
+        x_to_4 = _mm_mul_ps(x_to_4, cpa3);
+
+        x_to_1 = _mm_add_ps(x_to_1, x_to_2);
+        x_to_3 = _mm_add_ps(x_to_3, x_to_4);
+        acc0 = _mm_add_ps(x_to_1, acc0);
+        acc0 = _mm_add_ps(x_to_3, acc0);
+
+        src0 += 4;
+
+        // 2nd group of 4
+        x_to_1 = _mm_loadu_ps(src0);
+        x_to_1 = _mm_max_ps(x_to_1, cutoff_vec);
+        x_to_2 = _mm_mul_ps(x_to_1, x_to_1);
+        x_to_3 = _mm_mul_ps(x_to_1, x_to_2);
+        x_to_4 = _mm_mul_ps(x_to_2, x_to_2);
+
+        x_to_1 = _mm_mul_ps(x_to_1, cpa0);
+        x_to_2 = _mm_mul_ps(x_to_2, cpa1);
+        x_to_3 = _mm_mul_ps(x_to_3, cpa2);
+        x_to_4 = _mm_mul_ps(x_to_4, cpa3);
+
+        x_to_1 = _mm_add_ps(x_to_1, x_to_2);
+        x_to_3 = _mm_add_ps(x_to_3, x_to_4);
+        acc1 = _mm_add_ps(x_to_1, acc1);
+        acc1 = _mm_add_ps(x_to_3, acc1);
+
+        src0 += 4;
+    }
+
+    // Horizontal reduction via shuffle+add (avoids slow hadd)
+    acc0 = _mm_add_ps(acc0, acc1);
+    __m128 shuf = _mm_shuffle_ps(acc0, acc0, _MM_SHUFFLE(1, 0, 3, 2));
+    acc0 = _mm_add_ps(acc0, shuf);
+    shuf = _mm_shuffle_ps(acc0, acc0, _MM_SHUFFLE(0, 1, 0, 1));
+    acc0 = _mm_add_ps(acc0, shuf);
+
+    float result;
+    _mm_store_ss(&result, acc0);
+
+    // Handle remaining elements via generic
+    float tail_result;
+    volk_32f_x3_sum_of_poly_32f_generic(
+        &tail_result, src0, center_point_array, cutoff, num_points - eighth_points * 8);
+    *target = result + tail_result + (float)(eighth_points * 8) * center_point_array[4];
+}
+#endif /* LV_HAVE_SSE */
+
+#ifdef LV_HAVE_SSE3
+#include <pmmintrin.h>
+#include <xmmintrin.h>
+
+static inline void volk_32f_x3_sum_of_poly_32f_u_sse3(float* target,
+                                                       const float* src0,
+                                                       const float* center_point_array,
+                                                       const float* cutoff,
+                                                       unsigned int num_points)
+{
+    float result = 0.0f;
+
+    __m128 xmm0, xmm1, xmm2, xmm3, xmm4, xmm5, xmm6, xmm7, xmm8, xmm9, xmm10;
+
+    xmm9 = _mm_setzero_ps();
+    xmm1 = _mm_setzero_ps();
+    xmm0 = _mm_load1_ps(&center_point_array[0]);
+    xmm6 = _mm_load1_ps(&center_point_array[1]);
+    xmm7 = _mm_load1_ps(&center_point_array[2]);
+    xmm8 = _mm_load1_ps(&center_point_array[3]);
+    xmm10 = _mm_load1_ps(cutoff);
+
+    int bound = num_points / 8;
+    int leftovers = num_points - 8 * bound;
+    int i = 0;
+    for (; i < bound; ++i) {
+        // 1st
+        xmm2 = _mm_loadu_ps(src0);
+        xmm2 = _mm_max_ps(xmm10, xmm2);
+        xmm3 = _mm_mul_ps(xmm2, xmm2);
+        xmm4 = _mm_mul_ps(xmm2, xmm3);
+        xmm5 = _mm_mul_ps(xmm3, xmm3);
+
+        xmm2 = _mm_mul_ps(xmm2, xmm0);
+        xmm3 = _mm_mul_ps(xmm3, xmm6);
+        xmm4 = _mm_mul_ps(xmm4, xmm7);
+        xmm5 = _mm_mul_ps(xmm5, xmm8);
+
+        xmm2 = _mm_add_ps(xmm2, xmm3);
+        xmm3 = _mm_add_ps(xmm4, xmm5);
+
+        src0 += 4;
+
+        xmm9 = _mm_add_ps(xmm2, xmm9);
+        xmm9 = _mm_add_ps(xmm3, xmm9);
+
+        // 2nd
+        xmm2 = _mm_loadu_ps(src0);
+        xmm2 = _mm_max_ps(xmm10, xmm2);
+        xmm3 = _mm_mul_ps(xmm2, xmm2);
+        xmm4 = _mm_mul_ps(xmm2, xmm3);
+        xmm5 = _mm_mul_ps(xmm3, xmm3);
+
+        xmm2 = _mm_mul_ps(xmm2, xmm0);
+        xmm3 = _mm_mul_ps(xmm3, xmm6);
+        xmm4 = _mm_mul_ps(xmm4, xmm7);
+        xmm5 = _mm_mul_ps(xmm5, xmm8);
+
+        xmm2 = _mm_add_ps(xmm2, xmm3);
+        xmm3 = _mm_add_ps(xmm4, xmm5);
+
+        src0 += 4;
+
+        xmm1 = _mm_add_ps(xmm2, xmm1);
+        xmm1 = _mm_add_ps(xmm3, xmm1);
+    }
+    xmm2 = _mm_hadd_ps(xmm9, xmm1);
+    xmm3 = _mm_hadd_ps(xmm2, xmm2);
+    xmm4 = _mm_hadd_ps(xmm3, xmm3);
+    _mm_store_ss(&result, xmm4);
+
+    // Handle remaining elements via generic
+    float tail_result;
+    volk_32f_x3_sum_of_poly_32f_generic(
+        &tail_result, src0, center_point_array, cutoff, leftovers);
+    result += tail_result + (float)(num_points - leftovers) * center_point_array[4];
+    *target = result;
+}
+#endif /* LV_HAVE_SSE3 */
+
 #ifdef LV_HAVE_AVX
 #include <immintrin.h>
 
@@ -271,6 +431,62 @@ static inline void volk_32f_x3_sum_of_poly_32f_u_avx_fma(float* target,
 }
 #endif /* LV_HAVE_AVX && LV_HAVE_FMA */
 
+#ifdef LV_HAVE_AVX512F
+#include <immintrin.h>
+
+static inline void volk_32f_x3_sum_of_poly_32f_u_avx512f(float* target,
+                                                          const float* src0,
+                                                          const float* center_point_array,
+                                                          const float* cutoff,
+                                                          unsigned int num_points)
+{
+    const unsigned int sixteenth_points = num_points / 16;
+
+    __m512 cpa0 = _mm512_set1_ps(center_point_array[0]);
+    __m512 cpa1 = _mm512_set1_ps(center_point_array[1]);
+    __m512 cpa2 = _mm512_set1_ps(center_point_array[2]);
+    __m512 cpa3 = _mm512_set1_ps(center_point_array[3]);
+    __m512 cutoff_vec = _mm512_set1_ps(*cutoff);
+
+    // 4 independent accumulators to saturate FMA pipeline
+    __m512 acc0 = _mm512_setzero_ps();
+    __m512 acc1 = _mm512_setzero_ps();
+    __m512 acc2 = _mm512_setzero_ps();
+    __m512 acc3 = _mm512_setzero_ps();
+
+    __m512 x_to_1, x_to_2, x_to_3, x_to_4;
+
+    unsigned int i;
+    for (i = 0; i < sixteenth_points; ++i) {
+        x_to_1 = _mm512_loadu_ps(src0);
+        x_to_1 = _mm512_max_ps(x_to_1, cutoff_vec);
+        x_to_2 = _mm512_mul_ps(x_to_1, x_to_1); // x^2
+        x_to_3 = _mm512_mul_ps(x_to_1, x_to_2); // x^3
+        x_to_4 = _mm512_mul_ps(x_to_2, x_to_2); // x^4
+
+        // AVX-512F implies FMA
+        acc0 = _mm512_fmadd_ps(x_to_1, cpa0, acc0); // cpa[0] * x^1
+        acc1 = _mm512_fmadd_ps(x_to_2, cpa1, acc1); // cpa[1] * x^2
+        acc2 = _mm512_fmadd_ps(x_to_3, cpa2, acc2); // cpa[2] * x^3
+        acc3 = _mm512_fmadd_ps(x_to_4, cpa3, acc3); // cpa[3] * x^4
+
+        src0 += 16;
+    }
+
+    acc0 = _mm512_add_ps(acc0, acc1);
+    acc2 = _mm512_add_ps(acc2, acc3);
+    acc0 = _mm512_add_ps(acc0, acc2);
+    float result = _mm512_reduce_add_ps(acc0);
+
+    // Handle remaining elements via generic
+    float tail_result;
+    volk_32f_x3_sum_of_poly_32f_generic(
+        &tail_result, src0, center_point_array, cutoff, num_points - sixteenth_points * 16);
+    *target =
+        result + tail_result + (float)(sixteenth_points * 16) * center_point_array[4];
+}
+#endif /* LV_HAVE_AVX512F */
+
 #ifdef LV_HAVE_NEON
 #include <arm_neon.h>
 
@@ -406,6 +622,86 @@ static inline void volk_32f_x3_sum_of_poly_32f_rvv(float* target,
 #ifndef MAX
 #define MAX(X, Y) ((X) > (Y) ? (X) : (Y))
 #endif
+
+#ifdef LV_HAVE_SSE
+#include <xmmintrin.h>
+
+static inline void volk_32f_x3_sum_of_poly_32f_a_sse(float* target,
+                                                      const float* src0,
+                                                      const float* center_point_array,
+                                                      const float* cutoff,
+                                                      unsigned int num_points)
+{
+    const unsigned int eighth_points = num_points / 8;
+
+    __m128 cpa0 = _mm_load1_ps(&center_point_array[0]);
+    __m128 cpa1 = _mm_load1_ps(&center_point_array[1]);
+    __m128 cpa2 = _mm_load1_ps(&center_point_array[2]);
+    __m128 cpa3 = _mm_load1_ps(&center_point_array[3]);
+    __m128 cutoff_vec = _mm_load1_ps(cutoff);
+    __m128 acc0 = _mm_setzero_ps();
+    __m128 acc1 = _mm_setzero_ps();
+
+    __m128 x_to_1, x_to_2, x_to_3, x_to_4;
+
+    unsigned int i;
+    for (i = 0; i < eighth_points; ++i) {
+        // 1st group of 4
+        x_to_1 = _mm_load_ps(src0);
+        x_to_1 = _mm_max_ps(x_to_1, cutoff_vec);
+        x_to_2 = _mm_mul_ps(x_to_1, x_to_1);
+        x_to_3 = _mm_mul_ps(x_to_1, x_to_2);
+        x_to_4 = _mm_mul_ps(x_to_2, x_to_2);
+
+        x_to_1 = _mm_mul_ps(x_to_1, cpa0);
+        x_to_2 = _mm_mul_ps(x_to_2, cpa1);
+        x_to_3 = _mm_mul_ps(x_to_3, cpa2);
+        x_to_4 = _mm_mul_ps(x_to_4, cpa3);
+
+        x_to_1 = _mm_add_ps(x_to_1, x_to_2);
+        x_to_3 = _mm_add_ps(x_to_3, x_to_4);
+        acc0 = _mm_add_ps(x_to_1, acc0);
+        acc0 = _mm_add_ps(x_to_3, acc0);
+
+        src0 += 4;
+
+        // 2nd group of 4
+        x_to_1 = _mm_load_ps(src0);
+        x_to_1 = _mm_max_ps(x_to_1, cutoff_vec);
+        x_to_2 = _mm_mul_ps(x_to_1, x_to_1);
+        x_to_3 = _mm_mul_ps(x_to_1, x_to_2);
+        x_to_4 = _mm_mul_ps(x_to_2, x_to_2);
+
+        x_to_1 = _mm_mul_ps(x_to_1, cpa0);
+        x_to_2 = _mm_mul_ps(x_to_2, cpa1);
+        x_to_3 = _mm_mul_ps(x_to_3, cpa2);
+        x_to_4 = _mm_mul_ps(x_to_4, cpa3);
+
+        x_to_1 = _mm_add_ps(x_to_1, x_to_2);
+        x_to_3 = _mm_add_ps(x_to_3, x_to_4);
+        acc1 = _mm_add_ps(x_to_1, acc1);
+        acc1 = _mm_add_ps(x_to_3, acc1);
+
+        src0 += 4;
+    }
+
+    // Horizontal reduction via shuffle+add (avoids slow hadd)
+    acc0 = _mm_add_ps(acc0, acc1);
+    __m128 shuf = _mm_shuffle_ps(acc0, acc0, _MM_SHUFFLE(1, 0, 3, 2));
+    acc0 = _mm_add_ps(acc0, shuf);
+    shuf = _mm_shuffle_ps(acc0, acc0, _MM_SHUFFLE(0, 1, 0, 1));
+    acc0 = _mm_add_ps(acc0, shuf);
+
+    float result;
+    _mm_store_ss(&result, acc0);
+
+    // Handle remaining elements via generic
+    float tail_result;
+    volk_32f_x3_sum_of_poly_32f_generic(
+        &tail_result, src0, center_point_array, cutoff, num_points - eighth_points * 8);
+    *target = result + tail_result + (float)(eighth_points * 8) * center_point_array[4];
+}
+#endif /* LV_HAVE_SSE */
 
 #ifdef LV_HAVE_SSE3
 #include <pmmintrin.h>
@@ -638,5 +934,61 @@ static inline void volk_32f_x3_sum_of_poly_32f_a_avx_fma(float* target,
     *target += (float)(num_points)*center_point_array[4];
 }
 #endif /* LV_HAVE_AVX && LV_HAVE_FMA */
+
+#ifdef LV_HAVE_AVX512F
+#include <immintrin.h>
+
+static inline void volk_32f_x3_sum_of_poly_32f_a_avx512f(float* target,
+                                                          const float* src0,
+                                                          const float* center_point_array,
+                                                          const float* cutoff,
+                                                          unsigned int num_points)
+{
+    const unsigned int sixteenth_points = num_points / 16;
+
+    __m512 cpa0 = _mm512_set1_ps(center_point_array[0]);
+    __m512 cpa1 = _mm512_set1_ps(center_point_array[1]);
+    __m512 cpa2 = _mm512_set1_ps(center_point_array[2]);
+    __m512 cpa3 = _mm512_set1_ps(center_point_array[3]);
+    __m512 cutoff_vec = _mm512_set1_ps(*cutoff);
+
+    // 4 independent accumulators to saturate FMA pipeline
+    __m512 acc0 = _mm512_setzero_ps();
+    __m512 acc1 = _mm512_setzero_ps();
+    __m512 acc2 = _mm512_setzero_ps();
+    __m512 acc3 = _mm512_setzero_ps();
+
+    __m512 x_to_1, x_to_2, x_to_3, x_to_4;
+
+    unsigned int i;
+    for (i = 0; i < sixteenth_points; ++i) {
+        x_to_1 = _mm512_load_ps(src0);
+        x_to_1 = _mm512_max_ps(x_to_1, cutoff_vec);
+        x_to_2 = _mm512_mul_ps(x_to_1, x_to_1); // x^2
+        x_to_3 = _mm512_mul_ps(x_to_1, x_to_2); // x^3
+        x_to_4 = _mm512_mul_ps(x_to_2, x_to_2); // x^4
+
+        // AVX-512F implies FMA
+        acc0 = _mm512_fmadd_ps(x_to_1, cpa0, acc0); // cpa[0] * x^1
+        acc1 = _mm512_fmadd_ps(x_to_2, cpa1, acc1); // cpa[1] * x^2
+        acc2 = _mm512_fmadd_ps(x_to_3, cpa2, acc2); // cpa[2] * x^3
+        acc3 = _mm512_fmadd_ps(x_to_4, cpa3, acc3); // cpa[3] * x^4
+
+        src0 += 16;
+    }
+
+    acc0 = _mm512_add_ps(acc0, acc1);
+    acc2 = _mm512_add_ps(acc2, acc3);
+    acc0 = _mm512_add_ps(acc0, acc2);
+    float result = _mm512_reduce_add_ps(acc0);
+
+    // Handle remaining elements via generic
+    float tail_result;
+    volk_32f_x3_sum_of_poly_32f_generic(
+        &tail_result, src0, center_point_array, cutoff, num_points - sixteenth_points * 16);
+    *target =
+        result + tail_result + (float)(sixteenth_points * 16) * center_point_array[4];
+}
+#endif /* LV_HAVE_AVX512F */
 
 #endif /*INCLUDED_volk_32f_x3_sum_of_poly_32f_a_H*/

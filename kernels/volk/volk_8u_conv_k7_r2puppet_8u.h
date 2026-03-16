@@ -92,6 +92,77 @@ static inline int chainback_viterbi(unsigned char* data,
 }
 
 
+#if LV_HAVE_SSE2
+
+#include <emmintrin.h>
+
+static inline void volk_8u_conv_k7_r2puppet_8u_sse2(unsigned char* dec,
+                                                     unsigned char* syms,
+                                                     unsigned int framebits)
+{
+    if (framebits < 12) {
+        return;
+    }
+
+    static int once = 1;
+    int d_numstates = (1 << 6);
+    int rate = 2;
+    static unsigned char* D;
+    static unsigned char* Y;
+    static unsigned char* X;
+    static unsigned int excess = 6;
+    static unsigned char* Branchtab;
+
+    int d_polys[2] = { 79, 109 };
+
+
+    if (once) {
+
+        X = (unsigned char*)volk_malloc(2 * d_numstates, volk_get_alignment());
+        Y = X + d_numstates;
+        Branchtab =
+            (unsigned char*)volk_malloc(d_numstates / 2 * rate, volk_get_alignment());
+        D = (unsigned char*)volk_malloc((d_numstates / 8) * (framebits + 6),
+                                        volk_get_alignment());
+        int state, i;
+
+        /*  Initialize the branch table */
+        for (state = 0; state < d_numstates / 2; state++) {
+            for (i = 0; i < rate; i++) {
+                Branchtab[i * d_numstates / 2 + state] =
+                    parity((2 * state) & d_polys[i]) ? 255 : 0;
+            }
+        }
+
+        once = 0;
+    }
+
+    // unbias the old_metrics
+    memset(X, 31, d_numstates);
+
+    // initialize decisions
+    memset(D, 0, (d_numstates / 8) * (framebits + 6));
+
+    volk_8u_x4_conv_k7_r2_8u_sse2(
+        Y, X, syms, D, framebits / 2 - excess, excess, Branchtab);
+
+    unsigned int min = X[0];
+    int i = 0, state = 0;
+    for (i = 0; i < (d_numstates); ++i) {
+        if (X[i] < min) {
+            min = X[i];
+            state = i;
+        }
+    }
+
+    chainback_viterbi(dec, framebits / 2 - excess, state, excess, D);
+
+    return;
+}
+
+#endif /*LV_HAVE_SSE2*/
+
+
 #if LV_HAVE_SSE3
 
 #include <emmintrin.h>
@@ -306,6 +377,77 @@ static inline void volk_8u_conv_k7_r2puppet_8u_avx2(unsigned char* dec,
 }
 
 #endif /*LV_HAVE_AVX2*/
+
+
+#if LV_HAVE_AVX512BW
+
+#include <immintrin.h>
+
+static inline void volk_8u_conv_k7_r2puppet_8u_avx512bw(unsigned char* dec,
+                                                         unsigned char* syms,
+                                                         unsigned int framebits)
+{
+    if (framebits < 12) {
+        return;
+    }
+
+    static int once = 1;
+    int d_numstates = (1 << 6);
+    int rate = 2;
+    static unsigned char* D;
+    static unsigned char* Y;
+    static unsigned char* X;
+    static unsigned int excess = 6;
+    static unsigned char* Branchtab;
+
+    int d_polys[2] = { 79, 109 };
+
+
+    if (once) {
+
+        X = (unsigned char*)volk_malloc(2 * d_numstates, volk_get_alignment());
+        Y = X + d_numstates;
+        Branchtab =
+            (unsigned char*)volk_malloc(d_numstates / 2 * rate, volk_get_alignment());
+        D = (unsigned char*)volk_malloc((d_numstates / 8) * (framebits + 6),
+                                        volk_get_alignment());
+        int state, i;
+
+        /*  Initialize the branch table */
+        for (state = 0; state < d_numstates / 2; state++) {
+            for (i = 0; i < rate; i++) {
+                Branchtab[i * d_numstates / 2 + state] =
+                    parity((2 * state) & d_polys[i]) ? 255 : 0;
+            }
+        }
+
+        once = 0;
+    }
+
+    // unbias the old_metrics
+    memset(X, 31, d_numstates);
+
+    // initialize decisions
+    memset(D, 0, (d_numstates / 8) * (framebits + 6));
+
+    volk_8u_x4_conv_k7_r2_8u_avx512bw(
+        Y, X, syms, D, framebits / 2 - excess, excess, Branchtab);
+
+    unsigned int min = X[0];
+    int i = 0, state = 0;
+    for (i = 0; i < (d_numstates); ++i) {
+        if (X[i] < min) {
+            min = X[i];
+            state = i;
+        }
+    }
+
+    chainback_viterbi(dec, framebits / 2 - excess, state, excess, D);
+
+    return;
+}
+
+#endif /*LV_HAVE_AVX512BW*/
 
 
 #if LV_HAVE_GENERIC

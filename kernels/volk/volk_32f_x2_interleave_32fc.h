@@ -82,6 +82,44 @@ static inline void volk_32f_x2_interleave_32fc_generic(lv_32fc_t* complexVector,
 }
 #endif /* LV_HAVE_GENERIC */
 
+#ifdef LV_HAVE_SSE
+#include <xmmintrin.h>
+
+static inline void volk_32f_x2_interleave_32fc_u_sse(lv_32fc_t* complexVector,
+                                                      const float* iBuffer,
+                                                      const float* qBuffer,
+                                                      unsigned int num_points)
+{
+    unsigned int number = 0;
+    float* complexVectorPtr = (float*)complexVector;
+    const float* iBufferPtr = iBuffer;
+    const float* qBufferPtr = qBuffer;
+
+    const uint64_t quarterPoints = num_points / 4;
+
+    __m128 iValue, qValue, cplxValue;
+    for (; number < quarterPoints; number++) {
+        iValue = _mm_loadu_ps(iBufferPtr);
+        qValue = _mm_loadu_ps(qBufferPtr);
+
+        cplxValue = _mm_unpacklo_ps(iValue, qValue);
+        _mm_storeu_ps(complexVectorPtr, cplxValue);
+        complexVectorPtr += 4;
+
+        cplxValue = _mm_unpackhi_ps(iValue, qValue);
+        _mm_storeu_ps(complexVectorPtr, cplxValue);
+        complexVectorPtr += 4;
+
+        iBufferPtr += 4;
+        qBufferPtr += 4;
+    }
+
+    number = quarterPoints * 4;
+    volk_32f_x2_interleave_32fc_generic(
+        (lv_32fc_t*)complexVectorPtr, iBufferPtr, qBufferPtr, num_points - number);
+}
+#endif /* LV_HAVE_SSE */
+
 #ifdef LV_HAVE_AVX
 #include <immintrin.h>
 
@@ -126,6 +164,47 @@ static inline void volk_32f_x2_interleave_32fc_u_avx(lv_32fc_t* complexVector,
     }
 }
 #endif /* LV_HAVE_AVX */
+
+#ifdef LV_HAVE_AVX512F
+#include <immintrin.h>
+
+static inline void volk_32f_x2_interleave_32fc_u_avx512f(lv_32fc_t* complexVector,
+                                                          const float* iBuffer,
+                                                          const float* qBuffer,
+                                                          unsigned int num_points)
+{
+    unsigned int number = 0;
+    float* complexVectorPtr = (float*)complexVector;
+    const float* iBufferPtr = iBuffer;
+    const float* qBufferPtr = qBuffer;
+
+    const uint64_t sixteenthPoints = num_points / 16;
+
+    const __m512i idx_lo =
+        _mm512_set_epi32(23, 7, 22, 6, 21, 5, 20, 4, 19, 3, 18, 2, 17, 1, 16, 0);
+    const __m512i idx_hi =
+        _mm512_set_epi32(31, 15, 30, 14, 29, 13, 28, 12, 27, 11, 26, 10, 25, 9, 24, 8);
+
+    __m512 iValue, qValue;
+    for (; number < sixteenthPoints; number++) {
+        iValue = _mm512_loadu_ps(iBufferPtr);
+        qValue = _mm512_loadu_ps(qBufferPtr);
+
+        _mm512_storeu_ps(complexVectorPtr,
+                         _mm512_permutex2var_ps(iValue, idx_lo, qValue));
+        _mm512_storeu_ps(complexVectorPtr + 16,
+                         _mm512_permutex2var_ps(iValue, idx_hi, qValue));
+
+        iBufferPtr += 16;
+        qBufferPtr += 16;
+        complexVectorPtr += 32;
+    }
+
+    number = sixteenthPoints * 16;
+    volk_32f_x2_interleave_32fc_generic(
+        (lv_32fc_t*)complexVectorPtr, iBufferPtr, qBufferPtr, num_points - number);
+}
+#endif /* LV_HAVE_AVX512F */
 
 #ifdef LV_HAVE_NEON
 #include <arm_neon.h>
@@ -327,5 +406,46 @@ static inline void volk_32f_x2_interleave_32fc_a_avx(lv_32fc_t* complexVector,
     }
 }
 #endif /* LV_HAVE_AVX */
+
+#ifdef LV_HAVE_AVX512F
+#include <immintrin.h>
+
+static inline void volk_32f_x2_interleave_32fc_a_avx512f(lv_32fc_t* complexVector,
+                                                          const float* iBuffer,
+                                                          const float* qBuffer,
+                                                          unsigned int num_points)
+{
+    unsigned int number = 0;
+    float* complexVectorPtr = (float*)complexVector;
+    const float* iBufferPtr = iBuffer;
+    const float* qBufferPtr = qBuffer;
+
+    const uint64_t sixteenthPoints = num_points / 16;
+
+    const __m512i idx_lo =
+        _mm512_set_epi32(23, 7, 22, 6, 21, 5, 20, 4, 19, 3, 18, 2, 17, 1, 16, 0);
+    const __m512i idx_hi =
+        _mm512_set_epi32(31, 15, 30, 14, 29, 13, 28, 12, 27, 11, 26, 10, 25, 9, 24, 8);
+
+    __m512 iValue, qValue;
+    for (; number < sixteenthPoints; number++) {
+        iValue = _mm512_load_ps(iBufferPtr);
+        qValue = _mm512_load_ps(qBufferPtr);
+
+        _mm512_store_ps(complexVectorPtr,
+                        _mm512_permutex2var_ps(iValue, idx_lo, qValue));
+        _mm512_store_ps(complexVectorPtr + 16,
+                        _mm512_permutex2var_ps(iValue, idx_hi, qValue));
+
+        iBufferPtr += 16;
+        qBufferPtr += 16;
+        complexVectorPtr += 32;
+    }
+
+    number = sixteenthPoints * 16;
+    volk_32f_x2_interleave_32fc_generic(
+        (lv_32fc_t*)complexVectorPtr, iBufferPtr, qBufferPtr, num_points - number);
+}
+#endif /* LV_HAVE_AVX512F */
 
 #endif /* INCLUDED_volk_32f_x2_interleave_32fc_a_H */

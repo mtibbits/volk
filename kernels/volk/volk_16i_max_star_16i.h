@@ -89,6 +89,146 @@ volk_16i_max_star_16i_generic(short* target, const short* src0, unsigned int num
 
 #endif /*LV_HAVE_GENERIC*/
 
+
+#ifdef LV_HAVE_SSE2
+#include <emmintrin.h>
+
+static inline void
+volk_16i_max_star_16i_u_sse2(short* target, const short* src0, unsigned int num_points)
+{
+    const unsigned int num_bytes = num_points * 2;
+
+    short candidate = src0[0];
+    short cands[8];
+    __m128i xmm0, xmm1;
+
+    const __m128i* p_src0;
+
+    p_src0 = (const __m128i*)src0;
+
+    int bound = num_bytes >> 4;
+    int leftovers = (num_bytes >> 1) & 7;
+
+    int i = 0;
+
+    xmm0 = _mm_set1_epi16(candidate);
+
+    for (i = 0; i < bound; ++i) {
+        xmm1 = _mm_loadu_si128(p_src0);
+        p_src0 += 1;
+
+        xmm0 = _mm_max_epi16(xmm0, xmm1);
+    }
+
+    _mm_storeu_si128((__m128i*)cands, xmm0);
+
+    for (i = 0; i < 8; ++i) {
+        candidate = (candidate > cands[i]) ? candidate : cands[i];
+    }
+
+    if (leftovers > 0) {
+        short tail_result;
+        volk_16i_max_star_16i_generic(&tail_result, src0 + (bound << 3), leftovers);
+        candidate = (candidate > tail_result) ? candidate : tail_result;
+    }
+
+    target[0] = candidate;
+}
+
+#endif /*LV_HAVE_SSE2*/
+
+
+#ifdef LV_HAVE_AVX2
+#include <immintrin.h>
+
+static inline void
+volk_16i_max_star_16i_u_avx2(short* target, const short* src0, unsigned int num_points)
+{
+    short candidate = src0[0];
+
+    const unsigned int sixteenthPoints = num_points / 16;
+    int leftovers = num_points - sixteenthPoints * 16;
+
+    __m256i xmm0 = _mm256_set1_epi16(candidate);
+    const __m256i* p_src0 = (const __m256i*)src0;
+
+    for (unsigned int i = 0; i < sixteenthPoints; ++i) {
+        __m256i xmm1 = _mm256_loadu_si256(p_src0);
+        p_src0 += 1;
+        xmm0 = _mm256_max_epi16(xmm0, xmm1);
+    }
+
+    // Reduce 256-bit to 128-bit
+    __m128i lo = _mm256_castsi256_si128(xmm0);
+    __m128i hi = _mm256_extracti128_si256(xmm0, 1);
+    __m128i reduced = _mm_max_epi16(lo, hi);
+
+    __VOLK_ATTR_ALIGNED(16) short cands[8];
+    _mm_storeu_si128((__m128i*)cands, reduced);
+
+    for (int i = 0; i < 8; ++i) {
+        candidate = (candidate > cands[i]) ? candidate : cands[i];
+    }
+
+    if (leftovers > 0) {
+        short tail_result;
+        volk_16i_max_star_16i_generic(
+            &tail_result, src0 + sixteenthPoints * 16, leftovers);
+        candidate = (candidate > tail_result) ? candidate : tail_result;
+    }
+
+    target[0] = candidate;
+}
+#endif /* LV_HAVE_AVX2 */
+
+
+#ifdef LV_HAVE_AVX512BW
+#include <immintrin.h>
+
+static inline void
+volk_16i_max_star_16i_u_avx512bw(short* target, const short* src0, unsigned int num_points)
+{
+    short candidate = src0[0];
+
+    const unsigned int thirtysecondPoints = num_points / 32;
+    int leftovers = num_points - thirtysecondPoints * 32;
+
+    __m512i xmm0 = _mm512_set1_epi16(candidate);
+    const __m512i* p_src0 = (const __m512i*)src0;
+
+    for (unsigned int i = 0; i < thirtysecondPoints; ++i) {
+        __m512i xmm1 = _mm512_loadu_si512(p_src0);
+        p_src0 += 1;
+        xmm0 = _mm512_max_epi16(xmm0, xmm1);
+    }
+
+    // Reduce 512-bit to 256-bit to 128-bit
+    __m256i lo256 = _mm512_castsi512_si256(xmm0);
+    __m256i hi256 = _mm512_extracti64x4_epi64(xmm0, 1);
+    __m256i reduced256 = _mm256_max_epi16(lo256, hi256);
+
+    __m128i lo = _mm256_castsi256_si128(reduced256);
+    __m128i hi = _mm256_extracti128_si256(reduced256, 1);
+    __m128i reduced = _mm_max_epi16(lo, hi);
+
+    __VOLK_ATTR_ALIGNED(16) short cands[8];
+    _mm_storeu_si128((__m128i*)cands, reduced);
+
+    for (int i = 0; i < 8; ++i) {
+        candidate = (candidate > cands[i]) ? candidate : cands[i];
+    }
+
+    if (leftovers > 0) {
+        short tail_result;
+        volk_16i_max_star_16i_generic(
+            &tail_result, src0 + thirtysecondPoints * 32, leftovers);
+        candidate = (candidate > tail_result) ? candidate : tail_result;
+    }
+
+    target[0] = candidate;
+}
+#endif /* LV_HAVE_AVX512BW */
+
 #endif /* INCLUDED_volk_16i_max_star_16i_u_H */
 
 #ifndef INCLUDED_volk_16i_max_star_16i_a_H
@@ -107,7 +247,7 @@ volk_16i_max_star_16i_a_sse2(short* target, const short* src0, unsigned int num_
     const unsigned int num_bytes = num_points * 2;
 
     short candidate = src0[0];
-    short cands[8];
+    __VOLK_ATTR_ALIGNED(16) short cands[8];
     __m128i xmm0, xmm1;
 
     const __m128i* p_src0;
@@ -144,5 +284,97 @@ volk_16i_max_star_16i_a_sse2(short* target, const short* src0, unsigned int num_
 }
 
 #endif /*LV_HAVE_SSE2*/
+
+
+#ifdef LV_HAVE_AVX2
+#include <immintrin.h>
+
+static inline void
+volk_16i_max_star_16i_a_avx2(short* target, const short* src0, unsigned int num_points)
+{
+    short candidate = src0[0];
+
+    const unsigned int sixteenthPoints = num_points / 16;
+    int leftovers = num_points - sixteenthPoints * 16;
+
+    __m256i xmm0 = _mm256_set1_epi16(candidate);
+    const __m256i* p_src0 = (const __m256i*)src0;
+
+    for (unsigned int i = 0; i < sixteenthPoints; ++i) {
+        __m256i xmm1 = _mm256_load_si256(p_src0);
+        p_src0 += 1;
+        xmm0 = _mm256_max_epi16(xmm0, xmm1);
+    }
+
+    // Reduce 256-bit to 128-bit
+    __m128i lo = _mm256_castsi256_si128(xmm0);
+    __m128i hi = _mm256_extracti128_si256(xmm0, 1);
+    __m128i reduced = _mm_max_epi16(lo, hi);
+
+    __VOLK_ATTR_ALIGNED(16) short cands[8];
+    _mm_store_si128((__m128i*)cands, reduced);
+
+    for (int i = 0; i < 8; ++i) {
+        candidate = (candidate > cands[i]) ? candidate : cands[i];
+    }
+
+    if (leftovers > 0) {
+        short tail_result;
+        volk_16i_max_star_16i_generic(
+            &tail_result, src0 + sixteenthPoints * 16, leftovers);
+        candidate = (candidate > tail_result) ? candidate : tail_result;
+    }
+
+    target[0] = candidate;
+}
+#endif /* LV_HAVE_AVX2 */
+
+
+#ifdef LV_HAVE_AVX512BW
+#include <immintrin.h>
+
+static inline void
+volk_16i_max_star_16i_a_avx512bw(short* target, const short* src0, unsigned int num_points)
+{
+    short candidate = src0[0];
+
+    const unsigned int thirtysecondPoints = num_points / 32;
+    int leftovers = num_points - thirtysecondPoints * 32;
+
+    __m512i xmm0 = _mm512_set1_epi16(candidate);
+    const __m512i* p_src0 = (const __m512i*)src0;
+
+    for (unsigned int i = 0; i < thirtysecondPoints; ++i) {
+        __m512i xmm1 = _mm512_load_si512(p_src0);
+        p_src0 += 1;
+        xmm0 = _mm512_max_epi16(xmm0, xmm1);
+    }
+
+    // Reduce 512-bit to 256-bit to 128-bit
+    __m256i lo256 = _mm512_castsi512_si256(xmm0);
+    __m256i hi256 = _mm512_extracti64x4_epi64(xmm0, 1);
+    __m256i reduced256 = _mm256_max_epi16(lo256, hi256);
+
+    __m128i lo = _mm256_castsi256_si128(reduced256);
+    __m128i hi = _mm256_extracti128_si256(reduced256, 1);
+    __m128i reduced = _mm_max_epi16(lo, hi);
+
+    __VOLK_ATTR_ALIGNED(16) short cands[8];
+    _mm_store_si128((__m128i*)cands, reduced);
+
+    for (int i = 0; i < 8; ++i) {
+        candidate = (candidate > cands[i]) ? candidate : cands[i];
+    }
+
+    if (leftovers > 0) {
+        short tail_result;
+        volk_16i_max_star_16i_generic(
+            &tail_result, src0 + thirtysecondPoints * 32, leftovers);
+        candidate = (candidate > tail_result) ? candidate : tail_result;
+    }
+
+    target[0] = candidate;
+}
+#endif /* LV_HAVE_AVX512BW */
 
 #endif /* INCLUDED_volk_16i_max_star_16i_a_H */

@@ -268,4 +268,19 @@ static inline __m512 _mm512_log2_poly_avx512(const __m512 x)
     return poly;
 }
 
+////////////////////////////////////////////////////////////////////////
+// Youngs & Cramer square sum accumulator for stddev_and_mean
+// SquareSum += reciprocal * ((n_plus_one * val) - sum)^2
+// Requires AVX512F
+////////////////////////////////////////////////////////////////////////
+static inline __m512 _mm512_accumulate_square_sum_ps(
+    __m512 sq_acc, __m512 acc, __m512 val, __m512 rec, __m512 aux)
+{
+    // aux = n_plus_one * val - acc
+    aux = _mm512_fmsub_ps(aux, val, acc);
+    // sq_acc += rec * aux * aux
+    aux = _mm512_mul_ps(aux, aux);
+    return _mm512_fmadd_ps(rec, aux, sq_acc);
+}
+
 #endif /* INCLUDE_VOLK_VOLK_AVX512_INTRINSICS_H_ */

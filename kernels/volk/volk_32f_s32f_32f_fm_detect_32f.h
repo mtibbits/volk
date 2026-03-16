@@ -118,6 +118,84 @@ static inline void volk_32f_s32f_32f_fm_detect_32f_generic(float* outputVector,
 }
 #endif /* LV_HAVE_GENERIC */
 
+#ifdef LV_HAVE_SSE
+#include <xmmintrin.h>
+
+static inline void volk_32f_s32f_32f_fm_detect_32f_u_sse(float* outputVector,
+                                                          const float* inputVector,
+                                                          const float bound,
+                                                          float* saveValue,
+                                                          unsigned int num_points)
+{
+    if (num_points < 1) {
+        return;
+    }
+    unsigned int number = 1;
+    unsigned int j = 0;
+    const unsigned int quarterPoints = (num_points - 1) / 4;
+
+    float* outPtr = outputVector;
+    const float* inPtr = inputVector;
+    __m128 upperBound = _mm_set_ps1(bound);
+    __m128 lowerBound = _mm_set_ps1(-bound);
+    __m128 next3old1;
+    __m128 next4;
+    __m128 boundAdjust;
+    __m128 posBoundAdjust = _mm_set_ps1(-2 * bound);
+    __m128 negBoundAdjust = _mm_set_ps1(2 * bound);
+    // Do the first 4 by hand since we're going in from the saveValue:
+    *outPtr = *inPtr - *saveValue;
+    if (*outPtr > bound)
+        *outPtr -= 2 * bound;
+    if (*outPtr < -bound)
+        *outPtr += 2 * bound;
+    inPtr++;
+    outPtr++;
+    for (j = 1; j < ((4 < num_points) ? 4 : num_points); j++) {
+        *outPtr = *(inPtr) - *(inPtr - 1);
+        if (*outPtr > bound)
+            *outPtr -= 2 * bound;
+        if (*outPtr < -bound)
+            *outPtr += 2 * bound;
+        inPtr++;
+        outPtr++;
+    }
+
+    for (; number < quarterPoints; number++) {
+        // Load data
+        next3old1 = _mm_loadu_ps((const float*)(inPtr - 1));
+        next4 = _mm_loadu_ps(inPtr);
+        inPtr += 4;
+        // Subtract and store:
+        next3old1 = _mm_sub_ps(next4, next3old1);
+        // Bound:
+        boundAdjust = _mm_cmpgt_ps(next3old1, upperBound);
+        boundAdjust = _mm_and_ps(boundAdjust, posBoundAdjust);
+        next4 = _mm_cmplt_ps(next3old1, lowerBound);
+        next4 = _mm_and_ps(next4, negBoundAdjust);
+        boundAdjust = _mm_or_ps(next4, boundAdjust);
+        // Make sure we're in the bounding interval:
+        next3old1 = _mm_add_ps(next3old1, boundAdjust);
+        _mm_storeu_ps(outPtr, next3old1); // Store the results back into the output
+        outPtr += 4;
+    }
+
+    for (number = (4 > (quarterPoints * 4) ? 4 : (4 * quarterPoints));
+         number < num_points;
+         number++) {
+        *outPtr = *(inPtr) - *(inPtr - 1);
+        if (*outPtr > bound)
+            *outPtr -= 2 * bound;
+        if (*outPtr < -bound)
+            *outPtr += 2 * bound;
+        inPtr++;
+        outPtr++;
+    }
+
+    *saveValue = inputVector[num_points - 1];
+}
+#endif /* LV_HAVE_SSE */
+
 #ifdef LV_HAVE_AVX
 #include <immintrin.h>
 
@@ -196,6 +274,79 @@ static inline void volk_32f_s32f_32f_fm_detect_32f_u_avx(float* outputVector,
     *saveValue = inputVector[num_points - 1];
 }
 #endif /* LV_HAVE_AVX */
+
+#ifdef LV_HAVE_AVX512F
+#include <immintrin.h>
+
+static inline void volk_32f_s32f_32f_fm_detect_32f_u_avx512f(float* outputVector,
+                                                               const float* inputVector,
+                                                               const float bound,
+                                                               float* saveValue,
+                                                               unsigned int num_points)
+{
+    if (num_points < 1) {
+        return;
+    }
+
+    float* outPtr = outputVector;
+    const float* inPtr = inputVector;
+    const unsigned int sixteenthPoints = (num_points - 1) / 16;
+
+    const __m512 upperBound = _mm512_set1_ps(bound);
+    const __m512 lowerBound = _mm512_set1_ps(-bound);
+    const __m512 twoBound = _mm512_set1_ps(2.0f * bound);
+
+    // Do the first element from saveValue:
+    *outPtr = *inPtr - *saveValue;
+    if (*outPtr > bound)
+        *outPtr -= 2 * bound;
+    if (*outPtr < -bound)
+        *outPtr += 2 * bound;
+    inPtr++;
+    outPtr++;
+
+    // Do the next elements scalarly to fill the first vector width:
+    for (unsigned int j = 1; j < ((16 < num_points) ? 16 : num_points); j++) {
+        *outPtr = *(inPtr) - *(inPtr - 1);
+        if (*outPtr > bound)
+            *outPtr -= 2 * bound;
+        if (*outPtr < -bound)
+            *outPtr += 2 * bound;
+        inPtr++;
+        outPtr++;
+    }
+
+    for (unsigned int number = 1; number < sixteenthPoints; number++) {
+        __m512 curr = _mm512_loadu_ps(inPtr);
+        __m512 prev = _mm512_loadu_ps(inPtr - 1);
+        inPtr += 16;
+
+        __m512 diff = _mm512_sub_ps(curr, prev);
+
+        __mmask16 above = _mm512_cmp_ps_mask(diff, upperBound, _CMP_GT_OS);
+        __mmask16 below = _mm512_cmp_ps_mask(diff, lowerBound, _CMP_LT_OS);
+        diff = _mm512_mask_sub_ps(diff, above, diff, twoBound);
+        diff = _mm512_mask_add_ps(diff, below, diff, twoBound);
+
+        _mm512_storeu_ps(outPtr, diff);
+        outPtr += 16;
+    }
+
+    // Tail loop
+    unsigned int processed =
+        (16 > (sixteenthPoints * 16)) ? 16 : (16 * sixteenthPoints);
+    if (processed < num_points) {
+        *saveValue = inputVector[processed - 1];
+        volk_32f_s32f_32f_fm_detect_32f_generic(outputVector + processed,
+                                                 inputVector + processed,
+                                                 bound,
+                                                 saveValue,
+                                                 num_points - processed);
+    } else {
+        *saveValue = inputVector[num_points - 1];
+    }
+}
+#endif /* LV_HAVE_AVX512F */
 
 
 #ifdef LV_HAVE_NEON
@@ -578,5 +729,78 @@ static inline void volk_32f_s32f_32f_fm_detect_32f_a_avx(float* outputVector,
     *saveValue = inputVector[num_points - 1];
 }
 #endif /* LV_HAVE_AVX */
+
+#ifdef LV_HAVE_AVX512F
+#include <immintrin.h>
+
+static inline void volk_32f_s32f_32f_fm_detect_32f_a_avx512f(float* outputVector,
+                                                               const float* inputVector,
+                                                               const float bound,
+                                                               float* saveValue,
+                                                               unsigned int num_points)
+{
+    if (num_points < 1) {
+        return;
+    }
+
+    float* outPtr = outputVector;
+    const float* inPtr = inputVector;
+    const unsigned int sixteenthPoints = (num_points - 1) / 16;
+
+    const __m512 upperBound = _mm512_set1_ps(bound);
+    const __m512 lowerBound = _mm512_set1_ps(-bound);
+    const __m512 twoBound = _mm512_set1_ps(2.0f * bound);
+
+    // Do the first element from saveValue:
+    *outPtr = *inPtr - *saveValue;
+    if (*outPtr > bound)
+        *outPtr -= 2 * bound;
+    if (*outPtr < -bound)
+        *outPtr += 2 * bound;
+    inPtr++;
+    outPtr++;
+
+    // Do the next elements scalarly to fill the first vector width:
+    for (unsigned int j = 1; j < ((16 < num_points) ? 16 : num_points); j++) {
+        *outPtr = *(inPtr) - *(inPtr - 1);
+        if (*outPtr > bound)
+            *outPtr -= 2 * bound;
+        if (*outPtr < -bound)
+            *outPtr += 2 * bound;
+        inPtr++;
+        outPtr++;
+    }
+
+    for (unsigned int number = 1; number < sixteenthPoints; number++) {
+        __m512 prev = _mm512_loadu_ps(inPtr - 1);
+        __m512 curr = _mm512_load_ps(inPtr);
+        inPtr += 16;
+
+        __m512 diff = _mm512_sub_ps(curr, prev);
+
+        __mmask16 above = _mm512_cmp_ps_mask(diff, upperBound, _CMP_GT_OS);
+        __mmask16 below = _mm512_cmp_ps_mask(diff, lowerBound, _CMP_LT_OS);
+        diff = _mm512_mask_sub_ps(diff, above, diff, twoBound);
+        diff = _mm512_mask_add_ps(diff, below, diff, twoBound);
+
+        _mm512_store_ps(outPtr, diff);
+        outPtr += 16;
+    }
+
+    // Tail loop
+    unsigned int processed =
+        (16 > (sixteenthPoints * 16)) ? 16 : (16 * sixteenthPoints);
+    if (processed < num_points) {
+        *saveValue = inputVector[processed - 1];
+        volk_32f_s32f_32f_fm_detect_32f_generic(outputVector + processed,
+                                                 inputVector + processed,
+                                                 bound,
+                                                 saveValue,
+                                                 num_points - processed);
+    } else {
+        *saveValue = inputVector[num_points - 1];
+    }
+}
+#endif /* LV_HAVE_AVX512F */
 
 #endif /* INCLUDED_volk_32f_s32f_32f_fm_detect_32f_a_H */

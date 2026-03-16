@@ -208,6 +208,54 @@ static inline void volk_32fc_x2_multiply_32fc_u_avx2_fma(lv_32fc_t* cVector,
 #endif /* LV_HAVE_AVX2 && LV_HAVE_FMA */
 
 
+#ifdef LV_HAVE_AVX512F
+#include <immintrin.h>
+
+static inline void volk_32fc_x2_multiply_32fc_u_avx512f(lv_32fc_t* cVector,
+                                                         const lv_32fc_t* aVector,
+                                                         const lv_32fc_t* bVector,
+                                                         unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int eighthPoints = num_points / 8;
+
+    lv_32fc_t* c = cVector;
+    const lv_32fc_t* a = aVector;
+    const lv_32fc_t* b = bVector;
+
+    for (; number < eighthPoints; number++) {
+        /* Load 8 complex values (16 floats) from each input */
+        const __m512 x = _mm512_loadu_ps((const float*)a);
+        const __m512 y = _mm512_loadu_ps((const float*)b);
+
+        /* Duplicate real and imag parts of y: [yr,yr,yi,yi,...] */
+        const __m512 yl =
+            _mm512_moveldup_ps(y); // [y0r,y0r,y1r,y1r,y2r,y2r,y3r,y3r,...]
+        const __m512 yh =
+            _mm512_movehdup_ps(y); // [y0i,y0i,y1i,y1i,y2i,y2i,y3i,y3i,...]
+
+        /* Swap real/imag of x: [xi,xr,...] */
+        const __m512 x_swapped = _mm512_permute_ps(x, 0xB1);
+
+        /* x_swapped * yh = [xi*yi, xr*yi, ...] */
+        const __m512 tmp = _mm512_mul_ps(x_swapped, yh);
+
+        /* FMA with addsub: x*yl -/+ tmp = [xr*yr - xi*yi, xr*yi + xi*yr, ...] */
+        const __m512 z = _mm512_fmaddsub_ps(x, yl, tmp);
+
+        _mm512_storeu_ps((float*)c, z);
+
+        a += 8;
+        b += 8;
+        c += 8;
+    }
+
+    number = eighthPoints * 8;
+    volk_32fc_x2_multiply_32fc_generic(c, a, b, num_points - number);
+}
+#endif /* LV_HAVE_AVX512F */
+
+
 #ifdef LV_HAVE_NEON
 #include <arm_neon.h>
 
@@ -534,5 +582,52 @@ static inline void volk_32fc_x2_multiply_32fc_a_avx2_fma(lv_32fc_t* cVector,
     }
 }
 #endif /* LV_HAVE_AVX2 && LV_HAVE_FMA */
+
+#ifdef LV_HAVE_AVX512F
+#include <immintrin.h>
+
+static inline void volk_32fc_x2_multiply_32fc_a_avx512f(lv_32fc_t* cVector,
+                                                         const lv_32fc_t* aVector,
+                                                         const lv_32fc_t* bVector,
+                                                         unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int eighthPoints = num_points / 8;
+
+    lv_32fc_t* c = cVector;
+    const lv_32fc_t* a = aVector;
+    const lv_32fc_t* b = bVector;
+
+    for (; number < eighthPoints; number++) {
+        /* Load 8 complex values (16 floats) from each input */
+        const __m512 x = _mm512_load_ps((const float*)a);
+        const __m512 y = _mm512_load_ps((const float*)b);
+
+        /* Duplicate real and imag parts of y: [yr,yr,yi,yi,...] */
+        const __m512 yl =
+            _mm512_moveldup_ps(y); // [y0r,y0r,y1r,y1r,y2r,y2r,y3r,y3r,...]
+        const __m512 yh =
+            _mm512_movehdup_ps(y); // [y0i,y0i,y1i,y1i,y2i,y2i,y3i,y3i,...]
+
+        /* Swap real/imag of x: [xi,xr,...] */
+        const __m512 x_swapped = _mm512_permute_ps(x, 0xB1);
+
+        /* x_swapped * yh = [xi*yi, xr*yi, ...] */
+        const __m512 tmp = _mm512_mul_ps(x_swapped, yh);
+
+        /* FMA with addsub: x*yl -/+ tmp = [xr*yr - xi*yi, xr*yi + xi*yr, ...] */
+        const __m512 z = _mm512_fmaddsub_ps(x, yl, tmp);
+
+        _mm512_store_ps((float*)c, z);
+
+        a += 8;
+        b += 8;
+        c += 8;
+    }
+
+    number = eighthPoints * 8;
+    volk_32fc_x2_multiply_32fc_generic(c, a, b, num_points - number);
+}
+#endif /* LV_HAVE_AVX512F */
 
 #endif /* INCLUDED_volk_32fc_x2_multiply_32fc_a_H */

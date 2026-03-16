@@ -201,6 +201,37 @@ static inline void volk_32f_convert_64f_rvv(double* outputVector,
 }
 #endif /* LV_HAVE_RVV */
 
+#ifdef LV_HAVE_AVX512F
+#include <immintrin.h>
+
+static inline void volk_32f_convert_64f_u_avx512f(double* outputVector,
+                                                   const float* inputVector,
+                                                   unsigned int num_points)
+{
+    unsigned int number = 0;
+
+    const unsigned int eighthPoints = num_points / 8;
+
+    const float* inputVectorPtr = (const float*)inputVector;
+    double* outputVectorPtr = outputVector;
+
+    for (; number < eighthPoints; number++) {
+        __m256 inputVal = _mm256_loadu_ps(inputVectorPtr);
+        inputVectorPtr += 8;
+
+        __m512d ret = _mm512_cvtps_pd(inputVal);
+        _mm512_storeu_pd(outputVectorPtr, ret);
+
+        outputVectorPtr += 8;
+    }
+
+    number = eighthPoints * 8;
+    volk_32f_convert_64f_generic(
+        outputVector + number, inputVector + number, num_points - number);
+}
+
+#endif /* LV_HAVE_AVX512F */
+
 #endif /* INCLUDED_volk_32f_convert_64f_u_H */
 
 
@@ -282,5 +313,36 @@ static inline void volk_32f_convert_64f_a_avx(double* outputVector,
     }
 }
 #endif /* LV_HAVE_AVX */
+
+#ifdef LV_HAVE_AVX512F
+#include <immintrin.h>
+
+static inline void volk_32f_convert_64f_a_avx512f(double* outputVector,
+                                                   const float* inputVector,
+                                                   unsigned int num_points)
+{
+    unsigned int number = 0;
+
+    const unsigned int eighthPoints = num_points / 8;
+
+    const float* inputVectorPtr = (const float*)inputVector;
+    double* outputVectorPtr = outputVector;
+
+    for (; number < eighthPoints; number++) {
+        __m256 inputVal = _mm256_load_ps(inputVectorPtr);
+        inputVectorPtr += 8;
+
+        __m512d ret = _mm512_cvtps_pd(inputVal);
+        _mm512_store_pd(outputVectorPtr, ret);
+
+        outputVectorPtr += 8;
+    }
+
+    number = eighthPoints * 8;
+    volk_32f_convert_64f_generic(
+        outputVector + number, inputVector + number, num_points - number);
+}
+
+#endif /* LV_HAVE_AVX512F */
 
 #endif /* INCLUDED_volk_32f_convert_64f_a_H */

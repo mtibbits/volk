@@ -90,6 +90,96 @@ static inline void volk_16ic_deinterleave_real_16i_generic(int16_t* iBuffer,
 }
 #endif /* LV_HAVE_GENERIC */
 
+#ifdef LV_HAVE_SSE2
+#include <emmintrin.h>
+
+static inline void volk_16ic_deinterleave_real_16i_u_sse2(int16_t* iBuffer,
+                                                           const lv_16sc_t* complexVector,
+                                                           unsigned int num_points)
+{
+    unsigned int number = 0;
+    const int16_t* complexVectorPtr = (const int16_t*)complexVector;
+    int16_t* iBufferPtr = iBuffer;
+    __m128i complexVal1, complexVal2, iOutputVal;
+    __m128i lowMask = _mm_set_epi32(0x0, 0x0, -1, -1);
+    __m128i highMask = _mm_set_epi32(-1, -1, 0x0, 0x0);
+
+    unsigned int eighthPoints = num_points / 8;
+
+    for (number = 0; number < eighthPoints; number++) {
+        complexVal1 = _mm_loadu_si128((const __m128i*)complexVectorPtr);
+        complexVectorPtr += 8;
+        complexVal2 = _mm_loadu_si128((const __m128i*)complexVectorPtr);
+        complexVectorPtr += 8;
+
+        complexVal1 = _mm_shufflelo_epi16(complexVal1, _MM_SHUFFLE(3, 1, 2, 0));
+
+        complexVal1 = _mm_shufflehi_epi16(complexVal1, _MM_SHUFFLE(3, 1, 2, 0));
+
+        complexVal1 = _mm_shuffle_epi32(complexVal1, _MM_SHUFFLE(3, 1, 2, 0));
+
+        complexVal2 = _mm_shufflelo_epi16(complexVal2, _MM_SHUFFLE(3, 1, 2, 0));
+
+        complexVal2 = _mm_shufflehi_epi16(complexVal2, _MM_SHUFFLE(3, 1, 2, 0));
+
+        complexVal2 = _mm_shuffle_epi32(complexVal2, _MM_SHUFFLE(2, 0, 3, 1));
+
+        iOutputVal = _mm_or_si128(_mm_and_si128(complexVal1, lowMask),
+                                  _mm_and_si128(complexVal2, highMask));
+
+        _mm_storeu_si128((__m128i*)iBufferPtr, iOutputVal);
+
+        iBufferPtr += 8;
+    }
+
+    number = eighthPoints * 8;
+    volk_16ic_deinterleave_real_16i_generic(
+        iBufferPtr, (const lv_16sc_t*)complexVectorPtr, num_points - number);
+}
+#endif /* LV_HAVE_SSE2 */
+
+#ifdef LV_HAVE_SSSE3
+#include <tmmintrin.h>
+
+static inline void volk_16ic_deinterleave_real_16i_u_ssse3(int16_t* iBuffer,
+                                                            const lv_16sc_t* complexVector,
+                                                            unsigned int num_points)
+{
+    unsigned int number = 0;
+    const int16_t* complexVectorPtr = (const int16_t*)complexVector;
+    int16_t* iBufferPtr = iBuffer;
+
+    __m128i iMoveMask1 = _mm_set_epi8(
+        0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 13, 12, 9, 8, 5, 4, 1, 0);
+    __m128i iMoveMask2 = _mm_set_epi8(
+        13, 12, 9, 8, 5, 4, 1, 0, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80);
+
+    __m128i complexVal1, complexVal2, iOutputVal;
+
+    unsigned int eighthPoints = num_points / 8;
+
+    for (number = 0; number < eighthPoints; number++) {
+        complexVal1 = _mm_loadu_si128((const __m128i*)complexVectorPtr);
+        complexVectorPtr += 8;
+        complexVal2 = _mm_loadu_si128((const __m128i*)complexVectorPtr);
+        complexVectorPtr += 8;
+
+        complexVal1 = _mm_shuffle_epi8(complexVal1, iMoveMask1);
+        complexVal2 = _mm_shuffle_epi8(complexVal2, iMoveMask2);
+
+        iOutputVal = _mm_or_si128(complexVal1, complexVal2);
+
+        _mm_storeu_si128((__m128i*)iBufferPtr, iOutputVal);
+
+        iBufferPtr += 8;
+    }
+
+    number = eighthPoints * 8;
+    volk_16ic_deinterleave_real_16i_generic(
+        iBufferPtr, (const lv_16sc_t*)complexVectorPtr, num_points - number);
+}
+#endif /* LV_HAVE_SSSE3 */
+
 #ifdef LV_HAVE_AVX2
 #include <immintrin.h>
 
@@ -194,6 +284,40 @@ static inline void volk_16ic_deinterleave_real_16i_u_avx2(int16_t* iBuffer,
     }
 }
 #endif /* LV_HAVE_AVX2 */
+
+#ifdef LV_HAVE_AVX512F
+#include <immintrin.h>
+
+static inline void volk_16ic_deinterleave_real_16i_u_avx512f(
+    int16_t* iBuffer, const lv_16sc_t* complexVector, unsigned int num_points)
+{
+    unsigned int number = 0;
+    const int16_t* complexVectorPtr = (const int16_t*)complexVector;
+    int16_t* iBufferPtr = iBuffer;
+
+    unsigned int thirtySecondPoints = num_points / 32;
+
+    for (number = 0; number < thirtySecondPoints; number++) {
+        __m512i complexVal1 =
+            _mm512_loadu_si512((const __m512i*)complexVectorPtr);
+        complexVectorPtr += 32;
+        __m512i complexVal2 =
+            _mm512_loadu_si512((const __m512i*)complexVectorPtr);
+        complexVectorPtr += 32;
+
+        _mm256_storeu_si256((__m256i*)iBufferPtr,
+                            _mm512_cvtepi32_epi16(complexVal1));
+        _mm256_storeu_si256((__m256i*)(iBufferPtr + 16),
+                            _mm512_cvtepi32_epi16(complexVal2));
+
+        iBufferPtr += 32;
+    }
+
+    number = thirtySecondPoints * 32;
+    volk_16ic_deinterleave_real_16i_generic(
+        iBufferPtr, (const lv_16sc_t*)complexVectorPtr, num_points - number);
+}
+#endif /* LV_HAVE_AVX512F */
 
 #ifdef LV_HAVE_NEON
 #include <arm_neon.h>
@@ -483,5 +607,39 @@ static inline void volk_16ic_deinterleave_real_16i_a_avx2(int16_t* iBuffer,
     }
 }
 #endif /* LV_HAVE_AVX2 */
+
+#ifdef LV_HAVE_AVX512F
+#include <immintrin.h>
+
+static inline void volk_16ic_deinterleave_real_16i_a_avx512f(
+    int16_t* iBuffer, const lv_16sc_t* complexVector, unsigned int num_points)
+{
+    unsigned int number = 0;
+    const int16_t* complexVectorPtr = (const int16_t*)complexVector;
+    int16_t* iBufferPtr = iBuffer;
+
+    unsigned int thirtySecondPoints = num_points / 32;
+
+    for (number = 0; number < thirtySecondPoints; number++) {
+        __m512i complexVal1 =
+            _mm512_load_si512((const __m512i*)complexVectorPtr);
+        complexVectorPtr += 32;
+        __m512i complexVal2 =
+            _mm512_load_si512((const __m512i*)complexVectorPtr);
+        complexVectorPtr += 32;
+
+        _mm256_store_si256((__m256i*)iBufferPtr,
+                           _mm512_cvtepi32_epi16(complexVal1));
+        _mm256_store_si256((__m256i*)(iBufferPtr + 16),
+                           _mm512_cvtepi32_epi16(complexVal2));
+
+        iBufferPtr += 32;
+    }
+
+    number = thirtySecondPoints * 32;
+    volk_16ic_deinterleave_real_16i_generic(
+        iBufferPtr, (const lv_16sc_t*)complexVectorPtr, num_points - number);
+}
+#endif /* LV_HAVE_AVX512F */
 
 #endif /* INCLUDED_volk_16ic_deinterleave_real_16i_a_H */

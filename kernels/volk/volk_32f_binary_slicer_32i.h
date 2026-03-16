@@ -178,6 +178,33 @@ static inline void volk_32f_binary_slicer_32i_u_avx(int* cVector,
 }
 #endif /* LV_HAVE_AVX */
 
+#ifdef LV_HAVE_AVX512F
+#include <immintrin.h>
+
+static inline void volk_32f_binary_slicer_32i_u_avx512f(int* cVector,
+                                                         const float* aVector,
+                                                         unsigned int num_points)
+{
+    int* cPtr = cVector;
+    const float* aPtr = aVector;
+    unsigned int number = 0;
+
+    const unsigned int sixteenth_points = num_points / 16;
+
+    for (number = 0; number < sixteenth_points; number++) {
+        __m512 a_val = _mm512_loadu_ps(aPtr);
+        __mmask16 mask = _mm512_cmp_ps_mask(a_val, _mm512_setzero_ps(), _CMP_GE_OS);
+        __m512i result = _mm512_maskz_set1_epi32(mask, 1);
+        _mm512_storeu_si512((__m512i*)cPtr, result);
+
+        cPtr += 16;
+        aPtr += 16;
+    }
+
+    volk_32f_binary_slicer_32i_generic(cPtr, aPtr, num_points - sixteenth_points * 16);
+}
+#endif /* LV_HAVE_AVX512F */
+
 #ifdef LV_HAVE_NEON
 #include <arm_neon.h>
 
@@ -349,5 +376,32 @@ static inline void volk_32f_binary_slicer_32i_a_avx(int* cVector,
     }
 }
 #endif /* LV_HAVE_AVX */
+
+#ifdef LV_HAVE_AVX512F
+#include <immintrin.h>
+
+static inline void volk_32f_binary_slicer_32i_a_avx512f(int* cVector,
+                                                         const float* aVector,
+                                                         unsigned int num_points)
+{
+    int* cPtr = cVector;
+    const float* aPtr = aVector;
+    unsigned int number = 0;
+
+    const unsigned int sixteenth_points = num_points / 16;
+
+    for (number = 0; number < sixteenth_points; number++) {
+        __m512 a_val = _mm512_load_ps(aPtr);
+        __mmask16 mask = _mm512_cmp_ps_mask(a_val, _mm512_setzero_ps(), _CMP_GE_OS);
+        __m512i result = _mm512_maskz_set1_epi32(mask, 1);
+        _mm512_store_si512((__m512i*)cPtr, result);
+
+        cPtr += 16;
+        aPtr += 16;
+    }
+
+    volk_32f_binary_slicer_32i_generic(cPtr, aPtr, num_points - sixteenth_points * 16);
+}
+#endif /* LV_HAVE_AVX512F */
 
 #endif /* INCLUDED_volk_32f_binary_slicer_32i_a_H */

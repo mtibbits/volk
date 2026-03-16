@@ -93,6 +93,196 @@ static inline void volk_16ic_magnitude_16i_generic(int16_t* magnitudeVector,
 }
 #endif /* LV_HAVE_GENERIC */
 
+#ifdef LV_HAVE_SSE
+#include <xmmintrin.h>
+
+static inline void volk_16ic_magnitude_16i_u_sse(int16_t* magnitudeVector,
+                                                  const lv_16sc_t* complexVector,
+                                                  unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int quarterPoints = num_points / 4;
+
+    const int16_t* complexVectorPtr = (const int16_t*)complexVector;
+    int16_t* magnitudeVectorPtr = magnitudeVector;
+
+    const float fInvScalar = 1.0f / SHRT_MAX;
+    __m128 vScalar = _mm_set_ps1(SHRT_MAX);
+    __m128 invScalar = _mm_set_ps1(fInvScalar);
+
+    __m128 cplxValue1, cplxValue2, iValue, qValue, result;
+
+    __VOLK_ATTR_ALIGNED(16) float inputFloatBuffer[4];
+    __VOLK_ATTR_ALIGNED(16) float outputFloatBuffer[4];
+
+    for (; number < quarterPoints; number++) {
+
+        inputFloatBuffer[0] = (float)(complexVectorPtr[0]);
+        inputFloatBuffer[1] = (float)(complexVectorPtr[1]);
+        inputFloatBuffer[2] = (float)(complexVectorPtr[2]);
+        inputFloatBuffer[3] = (float)(complexVectorPtr[3]);
+
+        cplxValue1 = _mm_load_ps(inputFloatBuffer);
+        complexVectorPtr += 4;
+
+        inputFloatBuffer[0] = (float)(complexVectorPtr[0]);
+        inputFloatBuffer[1] = (float)(complexVectorPtr[1]);
+        inputFloatBuffer[2] = (float)(complexVectorPtr[2]);
+        inputFloatBuffer[3] = (float)(complexVectorPtr[3]);
+
+        cplxValue2 = _mm_load_ps(inputFloatBuffer);
+        complexVectorPtr += 4;
+
+        cplxValue1 = _mm_mul_ps(cplxValue1, invScalar);
+        cplxValue2 = _mm_mul_ps(cplxValue2, invScalar);
+
+        // Arrange in i1i2i3i4 format
+        iValue = _mm_shuffle_ps(cplxValue1, cplxValue2, _MM_SHUFFLE(2, 0, 2, 0));
+        // Arrange in q1q2q3q4 format
+        qValue = _mm_shuffle_ps(cplxValue1, cplxValue2, _MM_SHUFFLE(3, 1, 3, 1));
+
+        iValue = _mm_mul_ps(iValue, iValue); // Square the I values
+        qValue = _mm_mul_ps(qValue, qValue); // Square the Q Values
+
+        result = _mm_add_ps(iValue, qValue); // Add the I2 and Q2 values
+
+        result = _mm_sqrt_ps(result); // Square root the values
+
+        result = _mm_mul_ps(result, vScalar); // Scale the results
+
+        _mm_store_ps(outputFloatBuffer, result);
+        *magnitudeVectorPtr++ = (int16_t)rintf(outputFloatBuffer[0]);
+        *magnitudeVectorPtr++ = (int16_t)rintf(outputFloatBuffer[1]);
+        *magnitudeVectorPtr++ = (int16_t)rintf(outputFloatBuffer[2]);
+        *magnitudeVectorPtr++ = (int16_t)rintf(outputFloatBuffer[3]);
+    }
+
+    volk_16ic_magnitude_16i_generic(
+        magnitudeVector + quarterPoints * 4,
+        complexVector + quarterPoints * 4,
+        num_points - quarterPoints * 4);
+}
+#endif /* LV_HAVE_SSE */
+
+#ifdef LV_HAVE_SSE2
+#include <emmintrin.h>
+
+static inline void volk_16ic_magnitude_16i_u_sse2(int16_t* magnitudeVector,
+                                                    const lv_16sc_t* complexVector,
+                                                    unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int quarterPoints = num_points / 4;
+
+    const int16_t* complexVectorPtr = (const int16_t*)complexVector;
+    int16_t* magnitudeVectorPtr = magnitudeVector;
+
+    const float fInvScalar = 1.0f / SHRT_MAX;
+    __m128 vScalar = _mm_set_ps1(SHRT_MAX);
+    __m128 invScalar = _mm_set_ps1(fInvScalar);
+
+    for (; number < quarterPoints; number++) {
+        /* Load 4 complex int16 samples = 8 int16 values */
+        __m128i raw = _mm_loadu_si128((const __m128i*)complexVectorPtr);
+        complexVectorPtr += 8;
+
+        /* Sign-extend int16 -> int32 */
+        __m128i lo32 = _mm_srai_epi32(_mm_unpacklo_epi16(raw, raw), 16);
+        __m128i hi32 = _mm_srai_epi32(_mm_unpackhi_epi16(raw, raw), 16);
+
+        /* Convert int32 -> float and scale */
+        __m128 cplxValue1 = _mm_mul_ps(_mm_cvtepi32_ps(lo32), invScalar);
+        __m128 cplxValue2 = _mm_mul_ps(_mm_cvtepi32_ps(hi32), invScalar);
+
+        /* Deinterleave I and Q */
+        __m128 iValue = _mm_shuffle_ps(cplxValue1, cplxValue2, _MM_SHUFFLE(2, 0, 2, 0));
+        __m128 qValue = _mm_shuffle_ps(cplxValue1, cplxValue2, _MM_SHUFFLE(3, 1, 3, 1));
+
+        /* mag = sqrt(I^2 + Q^2) * scalar */
+        iValue = _mm_mul_ps(iValue, iValue);
+        qValue = _mm_mul_ps(qValue, qValue);
+        __m128 result = _mm_sqrt_ps(_mm_add_ps(iValue, qValue));
+        result = _mm_mul_ps(result, vScalar);
+
+        /* Convert float -> int32 -> int16 (saturating) and store */
+        __m128i resultInt = _mm_cvtps_epi32(result);
+        _mm_storel_epi64((__m128i*)magnitudeVectorPtr,
+                         _mm_packs_epi32(resultInt, resultInt));
+        magnitudeVectorPtr += 4;
+    }
+
+    volk_16ic_magnitude_16i_generic(
+        magnitudeVector + quarterPoints * 4,
+        complexVector + quarterPoints * 4,
+        num_points - quarterPoints * 4);
+}
+#endif /* LV_HAVE_SSE2 */
+
+#ifdef LV_HAVE_SSE3
+#include <pmmintrin.h>
+
+static inline void volk_16ic_magnitude_16i_u_sse3(int16_t* magnitudeVector,
+                                                    const lv_16sc_t* complexVector,
+                                                    unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int quarterPoints = num_points / 4;
+
+    const int16_t* complexVectorPtr = (const int16_t*)complexVector;
+    int16_t* magnitudeVectorPtr = magnitudeVector;
+
+    const float fInvScalar = 1.0f / SHRT_MAX;
+    __m128 vScalar = _mm_set_ps1(SHRT_MAX);
+    __m128 invScalar = _mm_set_ps1(fInvScalar);
+
+    __m128 cplxValue1, cplxValue2, result;
+
+    __VOLK_ATTR_ALIGNED(16) float inputFloatBuffer[8];
+    __VOLK_ATTR_ALIGNED(16) float outputFloatBuffer[4];
+
+    for (; number < quarterPoints; number++) {
+
+        inputFloatBuffer[0] = (float)(complexVectorPtr[0]);
+        inputFloatBuffer[1] = (float)(complexVectorPtr[1]);
+        inputFloatBuffer[2] = (float)(complexVectorPtr[2]);
+        inputFloatBuffer[3] = (float)(complexVectorPtr[3]);
+
+        inputFloatBuffer[4] = (float)(complexVectorPtr[4]);
+        inputFloatBuffer[5] = (float)(complexVectorPtr[5]);
+        inputFloatBuffer[6] = (float)(complexVectorPtr[6]);
+        inputFloatBuffer[7] = (float)(complexVectorPtr[7]);
+
+        cplxValue1 = _mm_load_ps(&inputFloatBuffer[0]);
+        cplxValue2 = _mm_load_ps(&inputFloatBuffer[4]);
+
+        complexVectorPtr += 8;
+
+        cplxValue1 = _mm_mul_ps(cplxValue1, invScalar);
+        cplxValue2 = _mm_mul_ps(cplxValue2, invScalar);
+
+        cplxValue1 = _mm_mul_ps(cplxValue1, cplxValue1); // Square the values
+        cplxValue2 = _mm_mul_ps(cplxValue2, cplxValue2); // Square the Values
+
+        result = _mm_hadd_ps(cplxValue1, cplxValue2); // Add the I2 and Q2 values
+
+        result = _mm_sqrt_ps(result); // Square root the values
+
+        result = _mm_mul_ps(result, vScalar); // Scale the results
+
+        _mm_store_ps(outputFloatBuffer, result);
+        *magnitudeVectorPtr++ = (int16_t)rintf(outputFloatBuffer[0]);
+        *magnitudeVectorPtr++ = (int16_t)rintf(outputFloatBuffer[1]);
+        *magnitudeVectorPtr++ = (int16_t)rintf(outputFloatBuffer[2]);
+        *magnitudeVectorPtr++ = (int16_t)rintf(outputFloatBuffer[3]);
+    }
+
+    volk_16ic_magnitude_16i_generic(
+        magnitudeVector + quarterPoints * 4,
+        complexVector + quarterPoints * 4,
+        num_points - quarterPoints * 4);
+}
+#endif /* LV_HAVE_SSE3 */
+
 #ifdef LV_HAVE_AVX2
 #include <immintrin.h>
 
@@ -159,6 +349,75 @@ static inline void volk_16ic_magnitude_16i_u_avx2(int16_t* magnitudeVector,
     }
 }
 #endif /* LV_HAVE_AVX2 */
+
+#ifdef LV_HAVE_AVX512F
+#include <immintrin.h>
+
+static inline void volk_16ic_magnitude_16i_u_avx512f(int16_t* magnitudeVector,
+                                                     const lv_16sc_t* complexVector,
+                                                     unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int sixteenthPoints = num_points / 16;
+
+    const int16_t* complexVectorPtr = (const int16_t*)complexVector;
+    int16_t* magnitudeVectorPtr = magnitudeVector;
+
+    const float fInvScalar = 1.0f / SHRT_MAX;
+    __m512 vInvScalar = _mm512_set1_ps(fInvScalar);
+    __m512 vScalar = _mm512_set1_ps(SHRT_MAX);
+
+    const __m512i idx_re = _mm512_set_epi32(30, 28, 26, 24, 22, 20, 18, 16,
+                                            14, 12, 10, 8, 6, 4, 2, 0);
+    const __m512i idx_im = _mm512_set_epi32(31, 29, 27, 25, 23, 21, 19, 17,
+                                            15, 13, 11, 9, 7, 5, 3, 1);
+
+    for (; number < sixteenthPoints; number++) {
+        /* Load 16 complex int16 samples = 512 bits */
+        __m512i raw = _mm512_loadu_si512((const __m512i*)complexVectorPtr);
+        complexVectorPtr += 32;
+
+        /* Split into two 256-bit halves and widen int16 -> int32 */
+        __m256i lo_half = _mm512_castsi512_si256(raw);
+        __m256i hi_half = _mm512_extracti64x4_epi64(raw, 1);
+        __m512i wide_lo = _mm512_cvtepi16_epi32(lo_half);
+        __m512i wide_hi = _mm512_cvtepi16_epi32(hi_half);
+
+        /* Convert int32 -> float */
+        __m512 flt_lo = _mm512_cvtepi32_ps(wide_lo);
+        __m512 flt_hi = _mm512_cvtepi32_ps(wide_hi);
+
+        /* Scale by 1/SHRT_MAX */
+        flt_lo = _mm512_mul_ps(flt_lo, vInvScalar);
+        flt_hi = _mm512_mul_ps(flt_hi, vInvScalar);
+
+        /* Deinterleave re/im from each 512-bit float vector */
+        __m512 re = _mm512_permutex2var_ps(flt_lo, idx_re, flt_hi);
+        __m512 im = _mm512_permutex2var_ps(flt_lo, idx_im, flt_hi);
+
+        /* mag = sqrt(re^2 + im^2) */
+        __m512 reSquared = _mm512_mul_ps(re, re);
+        __m512 imSquared = _mm512_mul_ps(im, im);
+        __m512 magSquared = _mm512_add_ps(reSquared, imSquared);
+        __m512 mag = _mm512_sqrt_ps(magSquared);
+
+        /* Scale back */
+        mag = _mm512_mul_ps(mag, vScalar);
+
+        /* Convert float -> int32 -> int16 (saturating) */
+        __m512i magInt = _mm512_cvtps_epi32(mag);
+        __m256i magShort = _mm512_cvtsepi32_epi16(magInt);
+
+        _mm256_storeu_si256((__m256i*)magnitudeVectorPtr, magShort);
+        magnitudeVectorPtr += 16;
+    }
+
+    volk_16ic_magnitude_16i_generic(
+        magnitudeVector + sixteenthPoints * 16,
+        complexVector + sixteenthPoints * 16,
+        num_points - sixteenthPoints * 16);
+}
+#endif /* LV_HAVE_AVX512F */
 
 #ifdef LV_HAVE_NEONV7
 #include <arm_neon.h>
@@ -407,6 +666,60 @@ static inline void volk_16ic_magnitude_16i_a_sse(int16_t* magnitudeVector,
 }
 #endif /* LV_HAVE_SSE */
 
+#ifdef LV_HAVE_SSE2
+#include <emmintrin.h>
+
+static inline void volk_16ic_magnitude_16i_a_sse2(int16_t* magnitudeVector,
+                                                    const lv_16sc_t* complexVector,
+                                                    unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int quarterPoints = num_points / 4;
+
+    const int16_t* complexVectorPtr = (const int16_t*)complexVector;
+    int16_t* magnitudeVectorPtr = magnitudeVector;
+
+    const float fInvScalar = 1.0f / SHRT_MAX;
+    __m128 vScalar = _mm_set_ps1(SHRT_MAX);
+    __m128 invScalar = _mm_set_ps1(fInvScalar);
+
+    for (; number < quarterPoints; number++) {
+        /* Load 4 complex int16 samples = 8 int16 values */
+        __m128i raw = _mm_load_si128((const __m128i*)complexVectorPtr);
+        complexVectorPtr += 8;
+
+        /* Sign-extend int16 -> int32 */
+        __m128i lo32 = _mm_srai_epi32(_mm_unpacklo_epi16(raw, raw), 16);
+        __m128i hi32 = _mm_srai_epi32(_mm_unpackhi_epi16(raw, raw), 16);
+
+        /* Convert int32 -> float and scale */
+        __m128 cplxValue1 = _mm_mul_ps(_mm_cvtepi32_ps(lo32), invScalar);
+        __m128 cplxValue2 = _mm_mul_ps(_mm_cvtepi32_ps(hi32), invScalar);
+
+        /* Deinterleave I and Q */
+        __m128 iValue = _mm_shuffle_ps(cplxValue1, cplxValue2, _MM_SHUFFLE(2, 0, 2, 0));
+        __m128 qValue = _mm_shuffle_ps(cplxValue1, cplxValue2, _MM_SHUFFLE(3, 1, 3, 1));
+
+        /* mag = sqrt(I^2 + Q^2) * scalar */
+        iValue = _mm_mul_ps(iValue, iValue);
+        qValue = _mm_mul_ps(qValue, qValue);
+        __m128 result = _mm_sqrt_ps(_mm_add_ps(iValue, qValue));
+        result = _mm_mul_ps(result, vScalar);
+
+        /* Convert float -> int32 -> int16 (saturating) and store */
+        __m128i resultInt = _mm_cvtps_epi32(result);
+        _mm_storel_epi64((__m128i*)magnitudeVectorPtr,
+                         _mm_packs_epi32(resultInt, resultInt));
+        magnitudeVectorPtr += 4;
+    }
+
+    volk_16ic_magnitude_16i_generic(
+        magnitudeVector + quarterPoints * 4,
+        complexVector + quarterPoints * 4,
+        num_points - quarterPoints * 4);
+}
+#endif /* LV_HAVE_SSE2 */
+
 #ifdef LV_HAVE_SSE3
 #include <pmmintrin.h>
 
@@ -544,5 +857,74 @@ static inline void volk_16ic_magnitude_16i_a_avx2(int16_t* magnitudeVector,
     }
 }
 #endif /* LV_HAVE_AVX2 */
+
+#ifdef LV_HAVE_AVX512F
+#include <immintrin.h>
+
+static inline void volk_16ic_magnitude_16i_a_avx512f(int16_t* magnitudeVector,
+                                                     const lv_16sc_t* complexVector,
+                                                     unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int sixteenthPoints = num_points / 16;
+
+    const int16_t* complexVectorPtr = (const int16_t*)complexVector;
+    int16_t* magnitudeVectorPtr = magnitudeVector;
+
+    const float fInvScalar = 1.0f / SHRT_MAX;
+    __m512 vInvScalar = _mm512_set1_ps(fInvScalar);
+    __m512 vScalar = _mm512_set1_ps(SHRT_MAX);
+
+    const __m512i idx_re = _mm512_set_epi32(30, 28, 26, 24, 22, 20, 18, 16,
+                                            14, 12, 10, 8, 6, 4, 2, 0);
+    const __m512i idx_im = _mm512_set_epi32(31, 29, 27, 25, 23, 21, 19, 17,
+                                            15, 13, 11, 9, 7, 5, 3, 1);
+
+    for (; number < sixteenthPoints; number++) {
+        /* Load 16 complex int16 samples = 512 bits */
+        __m512i raw = _mm512_load_si512((const __m512i*)complexVectorPtr);
+        complexVectorPtr += 32;
+
+        /* Split into two 256-bit halves and widen int16 -> int32 */
+        __m256i lo_half = _mm512_castsi512_si256(raw);
+        __m256i hi_half = _mm512_extracti64x4_epi64(raw, 1);
+        __m512i wide_lo = _mm512_cvtepi16_epi32(lo_half);
+        __m512i wide_hi = _mm512_cvtepi16_epi32(hi_half);
+
+        /* Convert int32 -> float */
+        __m512 flt_lo = _mm512_cvtepi32_ps(wide_lo);
+        __m512 flt_hi = _mm512_cvtepi32_ps(wide_hi);
+
+        /* Scale by 1/SHRT_MAX */
+        flt_lo = _mm512_mul_ps(flt_lo, vInvScalar);
+        flt_hi = _mm512_mul_ps(flt_hi, vInvScalar);
+
+        /* Deinterleave re/im from each 512-bit float vector */
+        __m512 re = _mm512_permutex2var_ps(flt_lo, idx_re, flt_hi);
+        __m512 im = _mm512_permutex2var_ps(flt_lo, idx_im, flt_hi);
+
+        /* mag = sqrt(re^2 + im^2) */
+        __m512 reSquared = _mm512_mul_ps(re, re);
+        __m512 imSquared = _mm512_mul_ps(im, im);
+        __m512 magSquared = _mm512_add_ps(reSquared, imSquared);
+        __m512 mag = _mm512_sqrt_ps(magSquared);
+
+        /* Scale back */
+        mag = _mm512_mul_ps(mag, vScalar);
+
+        /* Convert float -> int32 -> int16 (saturating) */
+        __m512i magInt = _mm512_cvtps_epi32(mag);
+        __m256i magShort = _mm512_cvtsepi32_epi16(magInt);
+
+        _mm256_store_si256((__m256i*)magnitudeVectorPtr, magShort);
+        magnitudeVectorPtr += 16;
+    }
+
+    volk_16ic_magnitude_16i_generic(
+        magnitudeVector + sixteenthPoints * 16,
+        complexVector + sixteenthPoints * 16,
+        num_points - sixteenthPoints * 16);
+}
+#endif /* LV_HAVE_AVX512F */
 
 #endif /* INCLUDED_volk_16ic_magnitude_16i_a_H */

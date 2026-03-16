@@ -92,6 +92,167 @@ static inline void volk_32fc_x2_square_dist_32f_generic(float* target,
 
 #endif /*LV_HAVE_GENERIC*/
 
+#ifdef LV_HAVE_SSE
+#include <xmmintrin.h>
+
+static inline void volk_32fc_x2_square_dist_32f_u_sse(float* target,
+                                                       const lv_32fc_t* src0,
+                                                       const lv_32fc_t* points,
+                                                       unsigned int num_points)
+{
+    const unsigned int quarter_points = num_points / 4;
+    unsigned int number = 0;
+
+    __m128 xmm_src = _mm_setzero_ps();
+    xmm_src = _mm_loadl_pi(xmm_src, (const __m64*)src0);
+    xmm_src = _mm_movelh_ps(xmm_src, xmm_src);
+
+    for (; number < quarter_points; ++number) {
+        __m128 pts0 = _mm_loadu_ps((const float*)&points[0]);
+        __m128 pts1 = _mm_loadu_ps((const float*)&points[2]);
+
+        __m128 diff0 = _mm_sub_ps(xmm_src, pts0);
+        __m128 diff1 = _mm_sub_ps(xmm_src, pts1);
+
+        __m128 sq0 = _mm_mul_ps(diff0, diff0);
+        __m128 sq1 = _mm_mul_ps(diff1, diff1);
+
+        /* Swap real²↔imag² within each pair, then add to get squared distances */
+        __m128 shuf0 = _mm_shuffle_ps(sq0, sq0, _MM_SHUFFLE(2, 3, 0, 1));
+        __m128 shuf1 = _mm_shuffle_ps(sq1, sq1, _MM_SHUFFLE(2, 3, 0, 1));
+        __m128 sum0 = _mm_add_ps(sq0, shuf0);
+        __m128 sum1 = _mm_add_ps(sq1, shuf1);
+
+        /* Pack: pick even-index elements from sum0 and sum1 */
+        __m128 result = _mm_shuffle_ps(sum0, sum1, _MM_SHUFFLE(2, 0, 2, 0));
+
+        _mm_storeu_ps(target, result);
+
+        points += 4;
+        target += 4;
+    }
+
+    volk_32fc_x2_square_dist_32f_generic(
+        target, src0, points, num_points - quarter_points * 4);
+}
+
+#endif /*LV_HAVE_SSE*/
+
+#ifdef LV_HAVE_SSE3
+#include <pmmintrin.h>
+#include <xmmintrin.h>
+
+static inline void volk_32fc_x2_square_dist_32f_u_sse3(float* target,
+                                                        const lv_32fc_t* src0,
+                                                        const lv_32fc_t* points,
+                                                        unsigned int num_points)
+{
+    const unsigned int num_bytes = num_points * 8;
+
+    __m128 xmm1, xmm2, xmm3, xmm4, xmm5, xmm6, xmm7;
+
+    int bound = num_bytes >> 5;
+    int i = 0;
+
+    xmm1 = _mm_setzero_ps();
+    xmm1 = _mm_loadl_pi(xmm1, (const __m64*)src0);
+    xmm1 = _mm_movelh_ps(xmm1, xmm1);
+
+    for (; i < bound; ++i) {
+        xmm2 = _mm_loadu_ps((const float*)&points[0]);
+        xmm4 = _mm_sub_ps(xmm1, xmm2);
+        xmm3 = _mm_loadu_ps((const float*)&points[2]);
+        xmm5 = _mm_sub_ps(xmm1, xmm3);
+
+        xmm6 = _mm_mul_ps(xmm4, xmm4);
+        xmm7 = _mm_mul_ps(xmm5, xmm5);
+
+        xmm4 = _mm_hadd_ps(xmm6, xmm7);
+
+        _mm_storeu_ps(target, xmm4);
+
+        points += 4;
+        target += 4;
+    }
+
+    if (num_bytes >> 4 & 1) {
+        xmm2 = _mm_loadu_ps((const float*)&points[0]);
+
+        xmm4 = _mm_sub_ps(xmm1, xmm2);
+
+        points += 2;
+
+        xmm6 = _mm_mul_ps(xmm4, xmm4);
+
+        xmm4 = _mm_hadd_ps(xmm6, xmm6);
+
+        _mm_storeh_pi((__m64*)target, xmm4);
+
+        target += 2;
+    }
+
+    if (num_bytes >> 3 & 1) {
+        volk_32fc_x2_square_dist_32f_generic(target, src0, points, 1);
+    }
+}
+
+#endif /*LV_HAVE_SSE3*/
+
+#ifdef LV_HAVE_AVX
+#include <immintrin.h>
+
+static inline void volk_32fc_x2_square_dist_32f_u_avx(float* target,
+                                                       const lv_32fc_t* src0,
+                                                       const lv_32fc_t* points,
+                                                       unsigned int num_points)
+{
+    const unsigned int eighth_points = num_points / 8;
+    unsigned int number = 0;
+
+    /* Broadcast src0 [real, imag] across 256-bit register */
+    __m128 xmm0 = _mm_setzero_ps();
+    xmm0 = _mm_loadl_pi(xmm0, (const __m64*)src0);
+    xmm0 = _mm_movelh_ps(xmm0, xmm0);
+    __m256 src_vec = _mm256_castps128_ps256(xmm0);
+    src_vec = _mm256_insertf128_ps(src_vec, xmm0, 1);
+
+    for (; number < eighth_points; ++number) {
+        __m256 pts0 = _mm256_loadu_ps((const float*)&points[0]);
+        __m256 pts1 = _mm256_loadu_ps((const float*)&points[4]);
+        points += 8;
+
+        __m256 diff0 = _mm256_sub_ps(src_vec, pts0);
+        __m256 diff1 = _mm256_sub_ps(src_vec, pts1);
+
+        __m256 sq0 = _mm256_mul_ps(diff0, diff0);
+        __m256 sq1 = _mm256_mul_ps(diff1, diff1);
+
+        /* Swap real²↔imag² within each pair, then add */
+        __m256 shuf0 = _mm256_shuffle_ps(sq0, sq0, _MM_SHUFFLE(2, 3, 0, 1));
+        __m256 shuf1 = _mm256_shuffle_ps(sq1, sq1, _MM_SHUFFLE(2, 3, 0, 1));
+        __m256 sum0 = _mm256_add_ps(sq0, shuf0);
+        __m256 sum1 = _mm256_add_ps(sq1, shuf1);
+
+        /* Pack even-index elements (in-lane shuffle) */
+        __m256 packed = _mm256_shuffle_ps(sum0, sum1, _MM_SHUFFLE(2, 0, 2, 0));
+        /* packed = [d0,d1,d4,d5 | d2,d3,d6,d7] — fix cross-lane order */
+        __m128 lo = _mm256_castps256_ps128(packed);
+        __m128 hi = _mm256_extractf128_ps(packed, 1);
+        __m128 out0 = _mm_shuffle_ps(lo, hi, _MM_SHUFFLE(1, 0, 1, 0));
+        __m128 out1 = _mm_shuffle_ps(lo, hi, _MM_SHUFFLE(3, 2, 3, 2));
+
+        _mm_storeu_ps(target, out0);
+        _mm_storeu_ps(target + 4, out1);
+
+        target += 8;
+    }
+
+    volk_32fc_x2_square_dist_32f_generic(
+        target, src0, points, num_points - eighth_points * 8);
+}
+
+#endif /*LV_HAVE_AVX*/
+
 #ifdef LV_HAVE_AVX2
 #include <immintrin.h>
 
@@ -292,6 +453,59 @@ static inline void volk_32fc_x2_square_dist_32f_rvvseg(float* target,
 }
 #endif /*LV_HAVE_RVVSEG*/
 
+
+#ifdef LV_HAVE_AVX512F
+#include <immintrin.h>
+
+static inline void volk_32fc_x2_square_dist_32f_u_avx512f(float* target,
+                                                           const lv_32fc_t* src0,
+                                                           const lv_32fc_t* points,
+                                                           unsigned int num_points)
+{
+    const unsigned int sixteenthPoints = num_points / 16;
+    unsigned int number = 0;
+
+    /* Broadcast src0 real and imag to separate 512-bit vectors */
+    const float src0_real = lv_creal(src0[0]);
+    const float src0_imag = lv_cimag(src0[0]);
+    const __m512 sym_real = _mm512_set1_ps(src0_real);
+    const __m512 sym_imag = _mm512_set1_ps(src0_imag);
+
+    /* Indices for deinterleaving complex float pairs into separate re/im */
+    const __m512i idx_re =
+        _mm512_set_epi32(30, 28, 26, 24, 22, 20, 18, 16, 14, 12, 10, 8, 6, 4, 2, 0);
+    const __m512i idx_im =
+        _mm512_set_epi32(31, 29, 27, 25, 23, 21, 19, 17, 15, 13, 11, 9, 7, 5, 3, 1);
+
+    for (; number < sixteenthPoints; number++) {
+        /* Load 16 complex points (32 floats) */
+        __m512 pts0 = _mm512_loadu_ps((const float*)points);
+        __m512 pts1 = _mm512_loadu_ps((const float*)(points + 8));
+        points += 16;
+
+        /* Deinterleave into real and imaginary */
+        __m512 pts_real = _mm512_permutex2var_ps(pts0, idx_re, pts1);
+        __m512 pts_imag = _mm512_permutex2var_ps(pts0, idx_im, pts1);
+
+        /* Compute difference */
+        __m512 diff_real = _mm512_sub_ps(sym_real, pts_real);
+        __m512 diff_imag = _mm512_sub_ps(sym_imag, pts_imag);
+
+        /* Compute squared distance: real^2 + imag^2 */
+        __m512 dist_sq = _mm512_fmadd_ps(diff_real, diff_real,
+                                          _mm512_mul_ps(diff_imag, diff_imag));
+
+        _mm512_storeu_ps(target, dist_sq);
+        target += 16;
+    }
+
+    volk_32fc_x2_square_dist_32f_generic(
+        target, src0, points, num_points - sixteenthPoints * 16);
+}
+
+#endif /*LV_HAVE_AVX512F*/
+
+
 #endif /*INCLUDED_volk_32fc_x2_square_dist_32f_u_H*/
 
 #ifndef INCLUDED_volk_32fc_x2_square_dist_32f_a_H
@@ -300,6 +514,52 @@ static inline void volk_32fc_x2_square_dist_32f_rvvseg(float* target,
 #include <inttypes.h>
 #include <stdio.h>
 #include <volk/volk_complex.h>
+
+#ifdef LV_HAVE_SSE
+#include <xmmintrin.h>
+
+static inline void volk_32fc_x2_square_dist_32f_a_sse(float* target,
+                                                       const lv_32fc_t* src0,
+                                                       const lv_32fc_t* points,
+                                                       unsigned int num_points)
+{
+    const unsigned int quarter_points = num_points / 4;
+    unsigned int number = 0;
+
+    __m128 xmm_src = _mm_setzero_ps();
+    xmm_src = _mm_loadl_pi(xmm_src, (const __m64*)src0);
+    xmm_src = _mm_movelh_ps(xmm_src, xmm_src);
+
+    for (; number < quarter_points; ++number) {
+        __m128 pts0 = _mm_load_ps((const float*)&points[0]);
+        __m128 pts1 = _mm_load_ps((const float*)&points[2]);
+
+        __m128 diff0 = _mm_sub_ps(xmm_src, pts0);
+        __m128 diff1 = _mm_sub_ps(xmm_src, pts1);
+
+        __m128 sq0 = _mm_mul_ps(diff0, diff0);
+        __m128 sq1 = _mm_mul_ps(diff1, diff1);
+
+        /* Swap real²↔imag² within each pair, then add to get squared distances */
+        __m128 shuf0 = _mm_shuffle_ps(sq0, sq0, _MM_SHUFFLE(2, 3, 0, 1));
+        __m128 shuf1 = _mm_shuffle_ps(sq1, sq1, _MM_SHUFFLE(2, 3, 0, 1));
+        __m128 sum0 = _mm_add_ps(sq0, shuf0);
+        __m128 sum1 = _mm_add_ps(sq1, shuf1);
+
+        /* Pack: pick even-index elements from sum0 and sum1 */
+        __m128 result = _mm_shuffle_ps(sum0, sum1, _MM_SHUFFLE(2, 0, 2, 0));
+
+        _mm_store_ps(target, result);
+
+        points += 4;
+        target += 4;
+    }
+
+    volk_32fc_x2_square_dist_32f_generic(
+        target, src0, points, num_points - quarter_points * 4);
+}
+
+#endif /*LV_HAVE_SSE*/
 
 #ifdef LV_HAVE_SSE3
 #include <pmmintrin.h>
@@ -368,6 +628,61 @@ static inline void volk_32fc_x2_square_dist_32f_a_sse3(float* target,
 }
 
 #endif /*LV_HAVE_SSE3*/
+
+#ifdef LV_HAVE_AVX
+#include <immintrin.h>
+
+static inline void volk_32fc_x2_square_dist_32f_a_avx(float* target,
+                                                       const lv_32fc_t* src0,
+                                                       const lv_32fc_t* points,
+                                                       unsigned int num_points)
+{
+    const unsigned int eighth_points = num_points / 8;
+    unsigned int number = 0;
+
+    /* Broadcast src0 [real, imag] across 256-bit register */
+    __m128 xmm0 = _mm_setzero_ps();
+    xmm0 = _mm_loadl_pi(xmm0, (const __m64*)src0);
+    xmm0 = _mm_movelh_ps(xmm0, xmm0);
+    __m256 src_vec = _mm256_castps128_ps256(xmm0);
+    src_vec = _mm256_insertf128_ps(src_vec, xmm0, 1);
+
+    for (; number < eighth_points; ++number) {
+        __m256 pts0 = _mm256_load_ps((const float*)&points[0]);
+        __m256 pts1 = _mm256_load_ps((const float*)&points[4]);
+        points += 8;
+
+        __m256 diff0 = _mm256_sub_ps(src_vec, pts0);
+        __m256 diff1 = _mm256_sub_ps(src_vec, pts1);
+
+        __m256 sq0 = _mm256_mul_ps(diff0, diff0);
+        __m256 sq1 = _mm256_mul_ps(diff1, diff1);
+
+        /* Swap real²↔imag² within each pair, then add */
+        __m256 shuf0 = _mm256_shuffle_ps(sq0, sq0, _MM_SHUFFLE(2, 3, 0, 1));
+        __m256 shuf1 = _mm256_shuffle_ps(sq1, sq1, _MM_SHUFFLE(2, 3, 0, 1));
+        __m256 sum0 = _mm256_add_ps(sq0, shuf0);
+        __m256 sum1 = _mm256_add_ps(sq1, shuf1);
+
+        /* Pack even-index elements (in-lane shuffle) */
+        __m256 packed = _mm256_shuffle_ps(sum0, sum1, _MM_SHUFFLE(2, 0, 2, 0));
+        /* packed = [d0,d1,d4,d5 | d2,d3,d6,d7] — fix cross-lane order */
+        __m128 lo = _mm256_castps256_ps128(packed);
+        __m128 hi = _mm256_extractf128_ps(packed, 1);
+        __m128 out0 = _mm_shuffle_ps(lo, hi, _MM_SHUFFLE(1, 0, 1, 0));
+        __m128 out1 = _mm_shuffle_ps(lo, hi, _MM_SHUFFLE(3, 2, 3, 2));
+
+        _mm_store_ps(target, out0);
+        _mm_store_ps(target + 4, out1);
+
+        target += 8;
+    }
+
+    volk_32fc_x2_square_dist_32f_generic(
+        target, src0, points, num_points - eighth_points * 8);
+}
+
+#endif /*LV_HAVE_AVX*/
 
 #ifdef LV_HAVE_AVX2
 #include <immintrin.h>
@@ -460,5 +775,58 @@ static inline void volk_32fc_x2_square_dist_32f_a_avx2(float* target,
 }
 
 #endif /*LV_HAVE_AVX2*/
+
+
+#ifdef LV_HAVE_AVX512F
+#include <immintrin.h>
+
+static inline void volk_32fc_x2_square_dist_32f_a_avx512f(float* target,
+                                                           const lv_32fc_t* src0,
+                                                           const lv_32fc_t* points,
+                                                           unsigned int num_points)
+{
+    const unsigned int sixteenthPoints = num_points / 16;
+    unsigned int number = 0;
+
+    /* Broadcast src0 real and imag to separate 512-bit vectors */
+    const float src0_real = lv_creal(src0[0]);
+    const float src0_imag = lv_cimag(src0[0]);
+    const __m512 sym_real = _mm512_set1_ps(src0_real);
+    const __m512 sym_imag = _mm512_set1_ps(src0_imag);
+
+    /* Indices for deinterleaving complex float pairs into separate re/im */
+    const __m512i idx_re =
+        _mm512_set_epi32(30, 28, 26, 24, 22, 20, 18, 16, 14, 12, 10, 8, 6, 4, 2, 0);
+    const __m512i idx_im =
+        _mm512_set_epi32(31, 29, 27, 25, 23, 21, 19, 17, 15, 13, 11, 9, 7, 5, 3, 1);
+
+    for (; number < sixteenthPoints; number++) {
+        /* Load 16 complex points (32 floats) */
+        __m512 pts0 = _mm512_load_ps((const float*)points);
+        __m512 pts1 = _mm512_load_ps((const float*)(points + 8));
+        points += 16;
+
+        /* Deinterleave into real and imaginary */
+        __m512 pts_real = _mm512_permutex2var_ps(pts0, idx_re, pts1);
+        __m512 pts_imag = _mm512_permutex2var_ps(pts0, idx_im, pts1);
+
+        /* Compute difference */
+        __m512 diff_real = _mm512_sub_ps(sym_real, pts_real);
+        __m512 diff_imag = _mm512_sub_ps(sym_imag, pts_imag);
+
+        /* Compute squared distance: real^2 + imag^2 */
+        __m512 dist_sq = _mm512_fmadd_ps(diff_real, diff_real,
+                                          _mm512_mul_ps(diff_imag, diff_imag));
+
+        _mm512_store_ps(target, dist_sq);
+        target += 16;
+    }
+
+    volk_32fc_x2_square_dist_32f_generic(
+        target, src0, points, num_points - sixteenthPoints * 16);
+}
+
+#endif /*LV_HAVE_AVX512F*/
+
 
 #endif /*INCLUDED_volk_32fc_x2_square_dist_32f_a_H*/

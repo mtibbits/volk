@@ -97,6 +97,156 @@ static inline void volk_32fc_32f_multiply_32fc_generic(lv_32fc_t* cVector,
 #endif /* LV_HAVE_GENERIC */
 
 
+#ifdef LV_HAVE_SSE
+#include <xmmintrin.h>
+
+static inline void volk_32fc_32f_multiply_32fc_u_sse(lv_32fc_t* cVector,
+                                                      const lv_32fc_t* aVector,
+                                                      const float* bVector,
+                                                      unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int quarterPoints = num_points / 4;
+
+    lv_32fc_t* cPtr = cVector;
+    const lv_32fc_t* aPtr = aVector;
+    const float* bPtr = bVector;
+
+    __m128 aVal1, aVal2, bVal, bVal1, bVal2, cVal;
+    for (; number < quarterPoints; number++) {
+
+        aVal1 = _mm_loadu_ps((const float*)aPtr);
+        aPtr += 2;
+
+        aVal2 = _mm_loadu_ps((const float*)aPtr);
+        aPtr += 2;
+
+        bVal = _mm_loadu_ps(bPtr);
+        bPtr += 4;
+
+        bVal1 = _mm_shuffle_ps(bVal, bVal, _MM_SHUFFLE(1, 1, 0, 0));
+        bVal2 = _mm_shuffle_ps(bVal, bVal, _MM_SHUFFLE(3, 3, 2, 2));
+
+        cVal = _mm_mul_ps(aVal1, bVal1);
+
+        _mm_storeu_ps((float*)cPtr, cVal);
+        cPtr += 2;
+
+        cVal = _mm_mul_ps(aVal2, bVal2);
+
+        _mm_storeu_ps((float*)cPtr, cVal);
+
+        cPtr += 2;
+    }
+
+    volk_32fc_32f_multiply_32fc_generic(
+        cPtr, aPtr, bPtr, num_points - quarterPoints * 4);
+}
+#endif /* LV_HAVE_SSE */
+
+
+#ifdef LV_HAVE_AVX
+#include <immintrin.h>
+
+static inline void volk_32fc_32f_multiply_32fc_u_avx(lv_32fc_t* cVector,
+                                                      const lv_32fc_t* aVector,
+                                                      const float* bVector,
+                                                      unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int eighthPoints = num_points / 8;
+
+    lv_32fc_t* cPtr = cVector;
+    const lv_32fc_t* aPtr = aVector;
+    const float* bPtr = bVector;
+
+    __m256 aVal1, aVal2, bVal, bVal1, bVal2, cVal1, cVal2;
+
+    __m256i permute_mask = _mm256_set_epi32(3, 3, 2, 2, 1, 1, 0, 0);
+
+    for (; number < eighthPoints; number++) {
+
+        aVal1 = _mm256_loadu_ps((const float*)aPtr);
+        aPtr += 4;
+
+        aVal2 = _mm256_loadu_ps((const float*)aPtr);
+        aPtr += 4;
+
+        bVal = _mm256_loadu_ps(bPtr); // b0|b1|b2|b3|b4|b5|b6|b7
+        bPtr += 8;
+
+        bVal1 = _mm256_permute2f128_ps(bVal, bVal, 0x00); // b0|b1|b2|b3|b0|b1|b2|b3
+        bVal2 = _mm256_permute2f128_ps(bVal, bVal, 0x11); // b4|b5|b6|b7|b4|b5|b6|b7
+
+        bVal1 = _mm256_permutevar_ps(bVal1, permute_mask); // b0|b0|b1|b1|b2|b2|b3|b3
+        bVal2 = _mm256_permutevar_ps(bVal2, permute_mask); // b4|b4|b5|b5|b6|b6|b7|b7
+
+        cVal1 = _mm256_mul_ps(aVal1, bVal1);
+        cVal2 = _mm256_mul_ps(aVal2, bVal2);
+
+        _mm256_storeu_ps((float*)cPtr, cVal1);
+        cPtr += 4;
+
+        _mm256_storeu_ps((float*)cPtr, cVal2);
+        cPtr += 4;
+    }
+
+    volk_32fc_32f_multiply_32fc_generic(
+        cPtr, aPtr, bPtr, num_points - eighthPoints * 8);
+}
+#endif /* LV_HAVE_AVX */
+
+
+#ifdef LV_HAVE_AVX512F
+#include <immintrin.h>
+
+static inline void volk_32fc_32f_multiply_32fc_u_avx512f(lv_32fc_t* cVector,
+                                                          const lv_32fc_t* aVector,
+                                                          const float* bVector,
+                                                          unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int sixteenthPoints = num_points / 16;
+
+    lv_32fc_t* cPtr = cVector;
+    const lv_32fc_t* aPtr = aVector;
+    const float* bPtr = bVector;
+
+    /* Permute index to duplicate each float: [b8,b8,b9,b9,...,b15,b15] */
+    const __m512i permute_mask = _mm512_set_epi32(15, 15, 14, 14, 13, 13, 12, 12,
+                                                  11, 11, 10, 10, 9, 9, 8, 8);
+
+    for (; number < sixteenthPoints; number++) {
+        /* Load 16 complex values (32 floats) in two 512-bit loads */
+        const __m512 aVal1 = _mm512_loadu_ps((const float*)aPtr);
+        const __m512 aVal2 = _mm512_loadu_ps((const float*)(aPtr + 8));
+
+        /* Load 16 real values */
+        const __m512 bVal = _mm512_loadu_ps(bPtr);
+
+        /* Duplicate lower 8 reals: [b0,b0,b1,b1,...,b7,b7] */
+        const __m512 bVal1 = _mm512_permutexvar_ps(
+            _mm512_set_epi32(7, 7, 6, 6, 5, 5, 4, 4, 3, 3, 2, 2, 1, 1, 0, 0), bVal);
+        /* Duplicate upper 8 reals: [b8,b8,b9,b9,...,b15,b15] */
+        const __m512 bVal2 = _mm512_permutexvar_ps(permute_mask, bVal);
+
+        const __m512 cVal1 = _mm512_mul_ps(aVal1, bVal1);
+        const __m512 cVal2 = _mm512_mul_ps(aVal2, bVal2);
+
+        _mm512_storeu_ps((float*)cPtr, cVal1);
+        _mm512_storeu_ps((float*)(cPtr + 8), cVal2);
+
+        aPtr += 16;
+        bPtr += 16;
+        cPtr += 16;
+    }
+
+    volk_32fc_32f_multiply_32fc_generic(
+        cPtr, aPtr, bPtr, num_points - sixteenthPoints * 16);
+}
+#endif /* LV_HAVE_AVX512F */
+
+
 #ifdef LV_HAVE_NEON
 #include <arm_neon.h>
 
@@ -342,5 +492,55 @@ static inline void volk_32fc_32f_multiply_32fc_a_avx(lv_32fc_t* cVector,
     }
 }
 #endif /* LV_HAVE_AVX */
+
+
+#ifdef LV_HAVE_AVX512F
+#include <immintrin.h>
+
+static inline void volk_32fc_32f_multiply_32fc_a_avx512f(lv_32fc_t* cVector,
+                                                          const lv_32fc_t* aVector,
+                                                          const float* bVector,
+                                                          unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int sixteenthPoints = num_points / 16;
+
+    lv_32fc_t* cPtr = cVector;
+    const lv_32fc_t* aPtr = aVector;
+    const float* bPtr = bVector;
+
+    /* Permute index to duplicate each float: [b8,b8,b9,b9,...,b15,b15] */
+    const __m512i permute_mask = _mm512_set_epi32(15, 15, 14, 14, 13, 13, 12, 12,
+                                                  11, 11, 10, 10, 9, 9, 8, 8);
+
+    for (; number < sixteenthPoints; number++) {
+        /* Load 16 complex values (32 floats) in two 512-bit loads */
+        const __m512 aVal1 = _mm512_load_ps((const float*)aPtr);
+        const __m512 aVal2 = _mm512_load_ps((const float*)(aPtr + 8));
+
+        /* Load 16 real values */
+        const __m512 bVal = _mm512_load_ps(bPtr);
+
+        /* Duplicate lower 8 reals: [b0,b0,b1,b1,...,b7,b7] */
+        const __m512 bVal1 = _mm512_permutexvar_ps(
+            _mm512_set_epi32(7, 7, 6, 6, 5, 5, 4, 4, 3, 3, 2, 2, 1, 1, 0, 0), bVal);
+        /* Duplicate upper 8 reals: [b8,b8,b9,b9,...,b15,b15] */
+        const __m512 bVal2 = _mm512_permutexvar_ps(permute_mask, bVal);
+
+        const __m512 cVal1 = _mm512_mul_ps(aVal1, bVal1);
+        const __m512 cVal2 = _mm512_mul_ps(aVal2, bVal2);
+
+        _mm512_store_ps((float*)cPtr, cVal1);
+        _mm512_store_ps((float*)(cPtr + 8), cVal2);
+
+        aPtr += 16;
+        bPtr += 16;
+        cPtr += 16;
+    }
+
+    volk_32fc_32f_multiply_32fc_generic(
+        cPtr, aPtr, bPtr, num_points - sixteenthPoints * 16);
+}
+#endif /* LV_HAVE_AVX512F */
 
 #endif /* INCLUDED_volk_32fc_32f_multiply_32fc_a_H */

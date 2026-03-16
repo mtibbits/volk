@@ -699,6 +699,129 @@ static inline void volk_32fc_x2_dot_prod_32fc_rvvseg(lv_32fc_t* result,
 }
 #endif /*LV_HAVE_RVVSEG*/
 
+#ifdef LV_HAVE_AVX512F
+#include <immintrin.h>
+
+static inline void volk_32fc_x2_dot_prod_32fc_u_avx512f(lv_32fc_t* result,
+                                                          const lv_32fc_t* input,
+                                                          const lv_32fc_t* taps,
+                                                          unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int eighthPoints = num_points / 8;
+    unsigned int isodd = num_points & 7;
+
+    const lv_32fc_t* a = input;
+    const lv_32fc_t* b = taps;
+
+    lv_32fc_t dotProduct;
+    memset(&dotProduct, 0x0, 2 * sizeof(float));
+
+    /* Use 4 independent accumulators to hide FMA latency */
+    __m512 dotProdVal0 = _mm512_setzero_ps();
+    __m512 dotProdVal1 = _mm512_setzero_ps();
+    __m512 dotProdVal2 = _mm512_setzero_ps();
+    __m512 dotProdVal3 = _mm512_setzero_ps();
+
+    /* Process 32 complex points (4x8) per iteration */
+    const unsigned int quarterEighthPoints = eighthPoints / 4;
+    for (; number < quarterEighthPoints; number++) {
+        __m512 x0 = _mm512_loadu_ps((const float*)a);
+        __m512 y0 = _mm512_loadu_ps((const float*)b);
+        __m512 x1 = _mm512_loadu_ps((const float*)(a + 8));
+        __m512 y1 = _mm512_loadu_ps((const float*)(b + 8));
+        __m512 x2 = _mm512_loadu_ps((const float*)(a + 16));
+        __m512 y2 = _mm512_loadu_ps((const float*)(b + 16));
+        __m512 x3 = _mm512_loadu_ps((const float*)(a + 24));
+        __m512 y3 = _mm512_loadu_ps((const float*)(b + 24));
+
+        __m512 yl0 = _mm512_moveldup_ps(y0);
+        __m512 yh0 = _mm512_movehdup_ps(y0);
+        __m512 yl1 = _mm512_moveldup_ps(y1);
+        __m512 yh1 = _mm512_movehdup_ps(y1);
+        __m512 yl2 = _mm512_moveldup_ps(y2);
+        __m512 yh2 = _mm512_movehdup_ps(y2);
+        __m512 yl3 = _mm512_moveldup_ps(y3);
+        __m512 yh3 = _mm512_movehdup_ps(y3);
+
+        __m512 tmp0 = x0;
+        __m512 tmp1 = x1;
+        __m512 tmp2 = x2;
+        __m512 tmp3 = x3;
+
+        x0 = _mm512_shuffle_ps(x0, x0, 0xB1);
+        x1 = _mm512_shuffle_ps(x1, x1, 0xB1);
+        x2 = _mm512_shuffle_ps(x2, x2, 0xB1);
+        x3 = _mm512_shuffle_ps(x3, x3, 0xB1);
+
+        __m512 prod0 = _mm512_mul_ps(x0, yh0);
+        __m512 prod1 = _mm512_mul_ps(x1, yh1);
+        __m512 prod2 = _mm512_mul_ps(x2, yh2);
+        __m512 prod3 = _mm512_mul_ps(x3, yh3);
+
+        dotProdVal0 =
+            _mm512_add_ps(dotProdVal0, _mm512_fmaddsub_ps(tmp0, yl0, prod0));
+        dotProdVal1 =
+            _mm512_add_ps(dotProdVal1, _mm512_fmaddsub_ps(tmp1, yl1, prod1));
+        dotProdVal2 =
+            _mm512_add_ps(dotProdVal2, _mm512_fmaddsub_ps(tmp2, yl2, prod2));
+        dotProdVal3 =
+            _mm512_add_ps(dotProdVal3, _mm512_fmaddsub_ps(tmp3, yl3, prod3));
+
+        a += 32;
+        b += 32;
+    }
+
+    /* Handle remaining groups of 8 */
+    unsigned int remaining8 = eighthPoints - quarterEighthPoints * 4;
+    unsigned int i;
+    for (i = 0; i < remaining8; i++) {
+        __m512 x = _mm512_loadu_ps((const float*)a);
+        __m512 y = _mm512_loadu_ps((const float*)b);
+
+        __m512 yl = _mm512_moveldup_ps(y);
+        __m512 yh = _mm512_movehdup_ps(y);
+
+        __m512 tmp = x;
+        x = _mm512_shuffle_ps(x, x, 0xB1);
+        __m512 prod = _mm512_mul_ps(x, yh);
+
+        dotProdVal0 = _mm512_add_ps(dotProdVal0, _mm512_fmaddsub_ps(tmp, yl, prod));
+
+        a += 8;
+        b += 8;
+    }
+
+    /* Combine the 4 accumulators */
+    dotProdVal0 = _mm512_add_ps(dotProdVal0, dotProdVal1);
+    dotProdVal2 = _mm512_add_ps(dotProdVal2, dotProdVal3);
+    dotProdVal0 = _mm512_add_ps(dotProdVal0, dotProdVal2);
+
+    /* Horizontal reduction: 512 -> 256 -> 128 -> scalar */
+    __m256 lo = _mm512_castps512_ps256(dotProdVal0);
+    __m256 hi = _mm256_castpd_ps(_mm512_extractf64x4_pd(_mm512_castps_pd(dotProdVal0), 1));
+    __m256 sum256 = _mm256_add_ps(lo, hi);
+
+    __m128 sum128_lo = _mm256_castps256_ps128(sum256);
+    __m128 sum128_hi = _mm256_extractf128_ps(sum256, 1);
+    __m128 sum128 = _mm_add_ps(sum128_lo, sum128_hi);
+
+    __VOLK_ATTR_ALIGNED(16) lv_32fc_t dotProductVector[2];
+    _mm_storeu_ps((float*)dotProductVector, sum128);
+
+    dotProduct += (dotProductVector[0] + dotProductVector[1]);
+
+    if (isodd) {
+        lv_32fc_t tail_result;
+        volk_32fc_x2_dot_prod_32fc_generic(&tail_result, a, b, isodd);
+        dotProduct += tail_result;
+    }
+
+    *result = dotProduct;
+}
+
+#endif /*LV_HAVE_AVX512F*/
+
 #endif /*INCLUDED_volk_32fc_x2_dot_prod_32fc_u_H*/
 
 #ifndef INCLUDED_volk_32fc_x2_dot_prod_32fc_a_H
@@ -906,5 +1029,128 @@ static inline void volk_32fc_x2_dot_prod_32fc_a_avx_fma(lv_32fc_t* result,
 }
 
 #endif /*LV_HAVE_AVX && LV_HAVE_FMA*/
+
+#ifdef LV_HAVE_AVX512F
+#include <immintrin.h>
+
+static inline void volk_32fc_x2_dot_prod_32fc_a_avx512f(lv_32fc_t* result,
+                                                          const lv_32fc_t* input,
+                                                          const lv_32fc_t* taps,
+                                                          unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int eighthPoints = num_points / 8;
+    unsigned int isodd = num_points & 7;
+
+    const lv_32fc_t* a = input;
+    const lv_32fc_t* b = taps;
+
+    lv_32fc_t dotProduct;
+    memset(&dotProduct, 0x0, 2 * sizeof(float));
+
+    /* Use 4 independent accumulators to hide FMA latency */
+    __m512 dotProdVal0 = _mm512_setzero_ps();
+    __m512 dotProdVal1 = _mm512_setzero_ps();
+    __m512 dotProdVal2 = _mm512_setzero_ps();
+    __m512 dotProdVal3 = _mm512_setzero_ps();
+
+    /* Process 32 complex points (4x8) per iteration */
+    const unsigned int quarterEighthPoints = eighthPoints / 4;
+    for (; number < quarterEighthPoints; number++) {
+        __m512 x0 = _mm512_load_ps((const float*)a);
+        __m512 y0 = _mm512_load_ps((const float*)b);
+        __m512 x1 = _mm512_load_ps((const float*)(a + 8));
+        __m512 y1 = _mm512_load_ps((const float*)(b + 8));
+        __m512 x2 = _mm512_load_ps((const float*)(a + 16));
+        __m512 y2 = _mm512_load_ps((const float*)(b + 16));
+        __m512 x3 = _mm512_load_ps((const float*)(a + 24));
+        __m512 y3 = _mm512_load_ps((const float*)(b + 24));
+
+        __m512 yl0 = _mm512_moveldup_ps(y0);
+        __m512 yh0 = _mm512_movehdup_ps(y0);
+        __m512 yl1 = _mm512_moveldup_ps(y1);
+        __m512 yh1 = _mm512_movehdup_ps(y1);
+        __m512 yl2 = _mm512_moveldup_ps(y2);
+        __m512 yh2 = _mm512_movehdup_ps(y2);
+        __m512 yl3 = _mm512_moveldup_ps(y3);
+        __m512 yh3 = _mm512_movehdup_ps(y3);
+
+        __m512 tmp0 = x0;
+        __m512 tmp1 = x1;
+        __m512 tmp2 = x2;
+        __m512 tmp3 = x3;
+
+        x0 = _mm512_shuffle_ps(x0, x0, 0xB1);
+        x1 = _mm512_shuffle_ps(x1, x1, 0xB1);
+        x2 = _mm512_shuffle_ps(x2, x2, 0xB1);
+        x3 = _mm512_shuffle_ps(x3, x3, 0xB1);
+
+        __m512 prod0 = _mm512_mul_ps(x0, yh0);
+        __m512 prod1 = _mm512_mul_ps(x1, yh1);
+        __m512 prod2 = _mm512_mul_ps(x2, yh2);
+        __m512 prod3 = _mm512_mul_ps(x3, yh3);
+
+        dotProdVal0 =
+            _mm512_add_ps(dotProdVal0, _mm512_fmaddsub_ps(tmp0, yl0, prod0));
+        dotProdVal1 =
+            _mm512_add_ps(dotProdVal1, _mm512_fmaddsub_ps(tmp1, yl1, prod1));
+        dotProdVal2 =
+            _mm512_add_ps(dotProdVal2, _mm512_fmaddsub_ps(tmp2, yl2, prod2));
+        dotProdVal3 =
+            _mm512_add_ps(dotProdVal3, _mm512_fmaddsub_ps(tmp3, yl3, prod3));
+
+        a += 32;
+        b += 32;
+    }
+
+    /* Handle remaining groups of 8 */
+    unsigned int remaining8 = eighthPoints - quarterEighthPoints * 4;
+    unsigned int i;
+    for (i = 0; i < remaining8; i++) {
+        __m512 x = _mm512_load_ps((const float*)a);
+        __m512 y = _mm512_load_ps((const float*)b);
+
+        __m512 yl = _mm512_moveldup_ps(y);
+        __m512 yh = _mm512_movehdup_ps(y);
+
+        __m512 tmp = x;
+        x = _mm512_shuffle_ps(x, x, 0xB1);
+        __m512 prod = _mm512_mul_ps(x, yh);
+
+        dotProdVal0 = _mm512_add_ps(dotProdVal0, _mm512_fmaddsub_ps(tmp, yl, prod));
+
+        a += 8;
+        b += 8;
+    }
+
+    /* Combine the 4 accumulators */
+    dotProdVal0 = _mm512_add_ps(dotProdVal0, dotProdVal1);
+    dotProdVal2 = _mm512_add_ps(dotProdVal2, dotProdVal3);
+    dotProdVal0 = _mm512_add_ps(dotProdVal0, dotProdVal2);
+
+    /* Horizontal reduction: 512 -> 256 -> 128 -> scalar */
+    __m256 lo = _mm512_castps512_ps256(dotProdVal0);
+    __m256 hi = _mm256_castpd_ps(_mm512_extractf64x4_pd(_mm512_castps_pd(dotProdVal0), 1));
+    __m256 sum256 = _mm256_add_ps(lo, hi);
+
+    __m128 sum128_lo = _mm256_castps256_ps128(sum256);
+    __m128 sum128_hi = _mm256_extractf128_ps(sum256, 1);
+    __m128 sum128 = _mm_add_ps(sum128_lo, sum128_hi);
+
+    __VOLK_ATTR_ALIGNED(16) lv_32fc_t dotProductVector[2];
+    _mm_store_ps((float*)dotProductVector, sum128);
+
+    dotProduct += (dotProductVector[0] + dotProductVector[1]);
+
+    if (isodd) {
+        lv_32fc_t tail_result;
+        volk_32fc_x2_dot_prod_32fc_generic(&tail_result, a, b, isodd);
+        dotProduct += tail_result;
+    }
+
+    *result = dotProduct;
+}
+
+#endif /*LV_HAVE_AVX512F*/
 
 #endif /*INCLUDED_volk_32fc_x2_dot_prod_32fc_a_H*/

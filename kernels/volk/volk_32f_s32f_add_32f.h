@@ -141,6 +141,33 @@ static inline void volk_32f_s32f_add_32f_u_avx(float* cVector,
 }
 #endif /* LV_HAVE_AVX */
 
+#ifdef LV_HAVE_AVX512F
+#include <immintrin.h>
+
+static inline void volk_32f_s32f_add_32f_u_avx512f(float* cVector,
+                                                    const float* aVector,
+                                                    const float scalar,
+                                                    unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int sixteenthPoints = num_points / 16;
+
+    float* cPtr = cVector;
+    const float* aPtr = aVector;
+
+    const __m512 bVal = _mm512_set1_ps(scalar);
+    for (; number < sixteenthPoints; number++) {
+        __m512 aVal = _mm512_loadu_ps(aPtr);
+        _mm512_storeu_ps(cPtr, _mm512_add_ps(aVal, bVal));
+        aPtr += 16;
+        cPtr += 16;
+    }
+
+    number = sixteenthPoints * 16;
+    volk_32f_s32f_add_32f_generic(cPtr, aPtr, scalar, num_points - number);
+}
+#endif /* LV_HAVE_AVX512F */
+
 #ifdef LV_HAVE_NEON
 #include <arm_neon.h>
 
@@ -305,5 +332,32 @@ static inline void volk_32f_s32f_add_32f_a_avx(float* cVector,
     volk_32f_s32f_add_32f_generic(cPtr, aPtr, scalar, num_points - number);
 }
 #endif /* LV_HAVE_AVX */
+
+#ifdef LV_HAVE_AVX512F
+#include <immintrin.h>
+
+static inline void volk_32f_s32f_add_32f_a_avx512f(float* cVector,
+                                                    const float* aVector,
+                                                    const float scalar,
+                                                    unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int sixteenthPoints = num_points / 16;
+
+    float* cPtr = cVector;
+    const float* aPtr = aVector;
+
+    const __m512 bVal = _mm512_set1_ps(scalar);
+    for (; number < sixteenthPoints; number++) {
+        __m512 aVal = _mm512_load_ps(aPtr);
+        _mm512_store_ps(cPtr, _mm512_add_ps(aVal, bVal));
+        aPtr += 16;
+        cPtr += 16;
+    }
+
+    number = sixteenthPoints * 16;
+    volk_32f_s32f_add_32f_generic(cPtr, aPtr, scalar, num_points - number);
+}
+#endif /* LV_HAVE_AVX512F */
 
 #endif /* INCLUDED_volk_32f_s32f_add_32f_a_H */

@@ -119,6 +119,115 @@ volk_32f_s32f_calc_spectral_noise_floor_32f_generic(float* noiseFloorAmplitude,
 }
 #endif /* LV_HAVE_GENERIC */
 
+#ifdef LV_HAVE_SSE
+#include <xmmintrin.h>
+
+static inline void
+volk_32f_s32f_calc_spectral_noise_floor_32f_u_sse(float* noiseFloorAmplitude,
+                                                   const float* realDataPoints,
+                                                   const float spectralExclusionValue,
+                                                   const unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int quarterPoints = num_points / 4;
+
+    const float* dataPointsPtr = realDataPoints;
+    __VOLK_ATTR_ALIGNED(16) float avgPointsVector[4];
+
+    __m128 dataPointsVal;
+    __m128 avgPointsVal = _mm_setzero_ps();
+    // Calculate the sum (for mean) for all points
+    for (; number < quarterPoints; number++) {
+
+        dataPointsVal = _mm_loadu_ps(dataPointsPtr);
+
+        dataPointsPtr += 4;
+
+        avgPointsVal = _mm_add_ps(avgPointsVal, dataPointsVal);
+    }
+
+    _mm_store_ps(avgPointsVector, avgPointsVal);
+
+    float sumMean = 0.0;
+    sumMean += avgPointsVector[0];
+    sumMean += avgPointsVector[1];
+    sumMean += avgPointsVector[2];
+    sumMean += avgPointsVector[3];
+
+    number = quarterPoints * 4;
+    for (; number < num_points; number++) {
+        sumMean += realDataPoints[number];
+    }
+
+    // calculate the spectral mean
+    // +20 because for the comparison below we only want to throw out bins
+    // that are significantly higher (and would, thus, affect the mean more
+    const float meanAmplitude = (sumMean / ((float)num_points)) + spectralExclusionValue;
+
+    dataPointsPtr = realDataPoints; // Reset the dataPointsPtr
+    __m128 vMeanAmplitudeVector = _mm_set_ps1(meanAmplitude);
+    __m128 vOnesVector = _mm_set_ps1(1.0f);
+    __m128 vValidBinCount = _mm_setzero_ps();
+    avgPointsVal = _mm_setzero_ps();
+    __m128 compareMask;
+    number = 0;
+    // Calculate the sum (for mean) for any points which do NOT exceed the mean amplitude
+    for (; number < quarterPoints; number++) {
+
+        dataPointsVal = _mm_loadu_ps(dataPointsPtr);
+
+        dataPointsPtr += 4;
+
+        // Identify which items do not exceed the mean amplitude
+        compareMask = _mm_cmple_ps(dataPointsVal, vMeanAmplitudeVector);
+
+        // Mask off the items that exceed the mean amplitude and add the avg Points that
+        // do not exceed the mean amplitude
+        avgPointsVal = _mm_add_ps(avgPointsVal, _mm_and_ps(compareMask, dataPointsVal));
+
+        // Count the number of bins which do not exceed the mean amplitude
+        vValidBinCount = _mm_add_ps(vValidBinCount, _mm_and_ps(compareMask, vOnesVector));
+    }
+
+    // Calculate the mean from the remaining data points
+    _mm_store_ps(avgPointsVector, avgPointsVal);
+
+    sumMean = 0.0;
+    sumMean += avgPointsVector[0];
+    sumMean += avgPointsVector[1];
+    sumMean += avgPointsVector[2];
+    sumMean += avgPointsVector[3];
+
+    // Calculate the number of valid bins from the remaining count
+    __VOLK_ATTR_ALIGNED(16) float validBinCountVector[4];
+    _mm_store_ps(validBinCountVector, vValidBinCount);
+
+    float validBinCount = 0;
+    validBinCount += validBinCountVector[0];
+    validBinCount += validBinCountVector[1];
+    validBinCount += validBinCountVector[2];
+    validBinCount += validBinCountVector[3];
+
+    number = quarterPoints * 4;
+    for (; number < num_points; number++) {
+        if (realDataPoints[number] <= meanAmplitude) {
+            sumMean += realDataPoints[number];
+            validBinCount += 1.0f;
+        }
+    }
+
+    float localNoiseFloorAmplitude = 0;
+    if (validBinCount > 0.0f) {
+        localNoiseFloorAmplitude = sumMean / validBinCount;
+    } else {
+        localNoiseFloorAmplitude =
+            meanAmplitude; // For the odd case that all the amplitudes are equal...
+    }
+
+    *noiseFloorAmplitude = localNoiseFloorAmplitude;
+}
+#endif /* LV_HAVE_SSE */
+
 #ifdef LV_HAVE_AVX
 #include <immintrin.h>
 
@@ -170,7 +279,7 @@ volk_32f_s32f_calc_spectral_noise_floor_32f_u_avx(float* noiseFloorAmplitude,
 
     dataPointsPtr = realDataPoints; // Reset the dataPointsPtr
     __m256 vMeanAmplitudeVector = _mm256_set1_ps(meanAmplitude);
-    __m256 vOnesVector = _mm256_set1_ps(1.0);
+    __m256 vOnesVector = _mm256_set1_ps(1.0f);
     __m256 vValidBinCount = _mm256_setzero_ps();
     avgPointsVal = _mm256_setzero_ps();
     __m256 compareMask;
@@ -226,7 +335,7 @@ volk_32f_s32f_calc_spectral_noise_floor_32f_u_avx(float* noiseFloorAmplitude,
     for (; number < num_points; number++) {
         if (realDataPoints[number] <= meanAmplitude) {
             sumMean += realDataPoints[number];
-            validBinCount += 1.0;
+            validBinCount += 1.0f;
         }
     }
 
@@ -241,6 +350,85 @@ volk_32f_s32f_calc_spectral_noise_floor_32f_u_avx(float* noiseFloorAmplitude,
     *noiseFloorAmplitude = localNoiseFloorAmplitude;
 }
 #endif /* LV_HAVE_AVX */
+
+#ifdef LV_HAVE_AVX512F
+#include <immintrin.h>
+
+static inline void
+volk_32f_s32f_calc_spectral_noise_floor_32f_u_avx512f(float* noiseFloorAmplitude,
+                                                       const float* realDataPoints,
+                                                       const float spectralExclusionValue,
+                                                       const unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int sixteenthPoints = num_points / 16;
+
+    const float* dataPointsPtr = realDataPoints;
+
+    __m512 dataPointsVal;
+    __m512 avgPointsVal = _mm512_setzero_ps();
+    // Calculate the sum (for mean) for all points
+    for (; number < sixteenthPoints; number++) {
+        dataPointsVal = _mm512_loadu_ps(dataPointsPtr);
+        dataPointsPtr += 16;
+        avgPointsVal = _mm512_add_ps(avgPointsVal, dataPointsVal);
+    }
+
+    float sumMean = _mm512_reduce_add_ps(avgPointsVal);
+
+    number = sixteenthPoints * 16;
+    for (; number < num_points; number++) {
+        sumMean += realDataPoints[number];
+    }
+
+    // calculate the spectral mean
+    const float meanAmplitude = (sumMean / ((float)num_points)) + spectralExclusionValue;
+
+    dataPointsPtr = realDataPoints; // Reset the dataPointsPtr
+    __m512 vMeanAmplitudeVector = _mm512_set1_ps(meanAmplitude);
+    __m512 vOnesVector = _mm512_set1_ps(1.0f);
+    __m512 vValidBinCount = _mm512_setzero_ps();
+    avgPointsVal = _mm512_setzero_ps();
+    number = 0;
+    // Calculate the sum (for mean) for any points which do NOT exceed the mean amplitude
+    for (; number < sixteenthPoints; number++) {
+        dataPointsVal = _mm512_loadu_ps(dataPointsPtr);
+        dataPointsPtr += 16;
+
+        // Identify which items do not exceed the mean amplitude
+        __mmask16 compareMask =
+            _mm512_cmp_ps_mask(dataPointsVal, vMeanAmplitudeVector, _CMP_LE_OQ);
+
+        // Accumulate only values that do not exceed the mean amplitude
+        avgPointsVal = _mm512_mask_add_ps(avgPointsVal, compareMask, avgPointsVal, dataPointsVal);
+
+        // Count the number of bins which do not exceed the mean amplitude
+        vValidBinCount =
+            _mm512_mask_add_ps(vValidBinCount, compareMask, vValidBinCount, vOnesVector);
+    }
+
+    sumMean = _mm512_reduce_add_ps(avgPointsVal);
+    float validBinCount = _mm512_reduce_add_ps(vValidBinCount);
+
+    number = sixteenthPoints * 16;
+    for (; number < num_points; number++) {
+        if (realDataPoints[number] <= meanAmplitude) {
+            sumMean += realDataPoints[number];
+            validBinCount += 1.0f;
+        }
+    }
+
+    float localNoiseFloorAmplitude = 0;
+    if (validBinCount > 0.0f) {
+        localNoiseFloorAmplitude = sumMean / validBinCount;
+    } else {
+        localNoiseFloorAmplitude =
+            meanAmplitude; // For the odd case that all the amplitudes are equal...
+    }
+
+    *noiseFloorAmplitude = localNoiseFloorAmplitude;
+}
+#endif /* LV_HAVE_AVX512F */
 
 #ifdef LV_HAVE_NEON
 #include <arm_neon.h>
@@ -514,7 +702,7 @@ volk_32f_s32f_calc_spectral_noise_floor_32f_a_sse(float* noiseFloorAmplitude,
 
     dataPointsPtr = realDataPoints; // Reset the dataPointsPtr
     __m128 vMeanAmplitudeVector = _mm_set_ps1(meanAmplitude);
-    __m128 vOnesVector = _mm_set_ps1(1.0);
+    __m128 vOnesVector = _mm_set_ps1(1.0f);
     __m128 vValidBinCount = _mm_setzero_ps();
     avgPointsVal = _mm_setzero_ps();
     __m128 compareMask;
@@ -560,7 +748,7 @@ volk_32f_s32f_calc_spectral_noise_floor_32f_a_sse(float* noiseFloorAmplitude,
     for (; number < num_points; number++) {
         if (realDataPoints[number] <= meanAmplitude) {
             sumMean += realDataPoints[number];
-            validBinCount += 1.0;
+            validBinCount += 1.0f;
         }
     }
 
@@ -627,7 +815,7 @@ volk_32f_s32f_calc_spectral_noise_floor_32f_a_avx(float* noiseFloorAmplitude,
 
     dataPointsPtr = realDataPoints; // Reset the dataPointsPtr
     __m256 vMeanAmplitudeVector = _mm256_set1_ps(meanAmplitude);
-    __m256 vOnesVector = _mm256_set1_ps(1.0);
+    __m256 vOnesVector = _mm256_set1_ps(1.0f);
     __m256 vValidBinCount = _mm256_setzero_ps();
     avgPointsVal = _mm256_setzero_ps();
     __m256 compareMask;
@@ -683,7 +871,7 @@ volk_32f_s32f_calc_spectral_noise_floor_32f_a_avx(float* noiseFloorAmplitude,
     for (; number < num_points; number++) {
         if (realDataPoints[number] <= meanAmplitude) {
             sumMean += realDataPoints[number];
-            validBinCount += 1.0;
+            validBinCount += 1.0f;
         }
     }
 
@@ -698,5 +886,84 @@ volk_32f_s32f_calc_spectral_noise_floor_32f_a_avx(float* noiseFloorAmplitude,
     *noiseFloorAmplitude = localNoiseFloorAmplitude;
 }
 #endif /* LV_HAVE_AVX */
+
+#ifdef LV_HAVE_AVX512F
+#include <immintrin.h>
+
+static inline void
+volk_32f_s32f_calc_spectral_noise_floor_32f_a_avx512f(float* noiseFloorAmplitude,
+                                                       const float* realDataPoints,
+                                                       const float spectralExclusionValue,
+                                                       const unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int sixteenthPoints = num_points / 16;
+
+    const float* dataPointsPtr = realDataPoints;
+
+    __m512 dataPointsVal;
+    __m512 avgPointsVal = _mm512_setzero_ps();
+    // Calculate the sum (for mean) for all points
+    for (; number < sixteenthPoints; number++) {
+        dataPointsVal = _mm512_load_ps(dataPointsPtr);
+        dataPointsPtr += 16;
+        avgPointsVal = _mm512_add_ps(avgPointsVal, dataPointsVal);
+    }
+
+    float sumMean = _mm512_reduce_add_ps(avgPointsVal);
+
+    number = sixteenthPoints * 16;
+    for (; number < num_points; number++) {
+        sumMean += realDataPoints[number];
+    }
+
+    // calculate the spectral mean
+    const float meanAmplitude = (sumMean / ((float)num_points)) + spectralExclusionValue;
+
+    dataPointsPtr = realDataPoints; // Reset the dataPointsPtr
+    __m512 vMeanAmplitudeVector = _mm512_set1_ps(meanAmplitude);
+    __m512 vOnesVector = _mm512_set1_ps(1.0f);
+    __m512 vValidBinCount = _mm512_setzero_ps();
+    avgPointsVal = _mm512_setzero_ps();
+    number = 0;
+    // Calculate the sum (for mean) for any points which do NOT exceed the mean amplitude
+    for (; number < sixteenthPoints; number++) {
+        dataPointsVal = _mm512_load_ps(dataPointsPtr);
+        dataPointsPtr += 16;
+
+        // Identify which items do not exceed the mean amplitude
+        __mmask16 compareMask =
+            _mm512_cmp_ps_mask(dataPointsVal, vMeanAmplitudeVector, _CMP_LE_OQ);
+
+        // Accumulate only values that do not exceed the mean amplitude
+        avgPointsVal = _mm512_mask_add_ps(avgPointsVal, compareMask, avgPointsVal, dataPointsVal);
+
+        // Count the number of bins which do not exceed the mean amplitude
+        vValidBinCount =
+            _mm512_mask_add_ps(vValidBinCount, compareMask, vValidBinCount, vOnesVector);
+    }
+
+    sumMean = _mm512_reduce_add_ps(avgPointsVal);
+    float validBinCount = _mm512_reduce_add_ps(vValidBinCount);
+
+    number = sixteenthPoints * 16;
+    for (; number < num_points; number++) {
+        if (realDataPoints[number] <= meanAmplitude) {
+            sumMean += realDataPoints[number];
+            validBinCount += 1.0f;
+        }
+    }
+
+    float localNoiseFloorAmplitude = 0;
+    if (validBinCount > 0.0f) {
+        localNoiseFloorAmplitude = sumMean / validBinCount;
+    } else {
+        localNoiseFloorAmplitude =
+            meanAmplitude; // For the odd case that all the amplitudes are equal...
+    }
+
+    *noiseFloorAmplitude = localNoiseFloorAmplitude;
+}
+#endif /* LV_HAVE_AVX512F */
 
 #endif /* INCLUDED_volk_32f_s32f_calc_spectral_noise_floor_32f_a_H */

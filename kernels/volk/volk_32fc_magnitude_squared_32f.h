@@ -191,6 +191,48 @@ static inline void volk_32fc_magnitude_squared_32f_u_avx(float* magnitudeVector,
 #endif /* LV_HAVE_AVX */
 
 
+#ifdef LV_HAVE_AVX512F
+#include <immintrin.h>
+
+static inline void volk_32fc_magnitude_squared_32f_u_avx512f(float* magnitudeVector,
+                                                              const lv_32fc_t* complexVector,
+                                                              unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int sixteenthPoints = num_points / 16;
+
+    const float* complexVectorPtr = (const float*)complexVector;
+    float* magnitudeVectorPtr = magnitudeVector;
+
+    const __m512i idx_re = _mm512_set_epi32(30, 28, 26, 24, 22, 20, 18, 16,
+                                            14, 12, 10, 8, 6, 4, 2, 0);
+    const __m512i idx_im = _mm512_set_epi32(31, 29, 27, 25, 23, 21, 19, 17,
+                                            15, 13, 11, 9, 7, 5, 3, 1);
+
+    for (; number < sixteenthPoints; number++) {
+        __m512 cplxValue1 = _mm512_loadu_ps(complexVectorPtr);
+        __m512 cplxValue2 = _mm512_loadu_ps(complexVectorPtr + 16);
+
+        __m512 re = _mm512_permutex2var_ps(cplxValue1, idx_re, cplxValue2);
+        __m512 im = _mm512_permutex2var_ps(cplxValue1, idx_im, cplxValue2);
+
+        __m512 reSquared = _mm512_mul_ps(re, re);
+        __m512 imSquared = _mm512_mul_ps(im, im);
+        __m512 result = _mm512_add_ps(reSquared, imSquared);
+
+        _mm512_storeu_ps(magnitudeVectorPtr, result);
+
+        complexVectorPtr += 32;
+        magnitudeVectorPtr += 16;
+    }
+
+    number = sixteenthPoints * 16;
+    volk_32fc_magnitude_squared_32f_generic(
+        magnitudeVectorPtr, (const lv_32fc_t*)complexVectorPtr, num_points - number);
+}
+#endif /* LV_HAVE_AVX512F */
+
+
 #ifdef LV_HAVE_NEON
 #include <arm_neon.h>
 
@@ -445,6 +487,48 @@ static inline void volk_32fc_magnitude_squared_32f_a_avx(float* magnitudeVector,
     }
 }
 #endif /* LV_HAVE_AVX */
+
+
+#ifdef LV_HAVE_AVX512F
+#include <immintrin.h>
+
+static inline void volk_32fc_magnitude_squared_32f_a_avx512f(float* magnitudeVector,
+                                                              const lv_32fc_t* complexVector,
+                                                              unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int sixteenthPoints = num_points / 16;
+
+    const float* complexVectorPtr = (const float*)complexVector;
+    float* magnitudeVectorPtr = magnitudeVector;
+
+    const __m512i idx_re = _mm512_set_epi32(30, 28, 26, 24, 22, 20, 18, 16,
+                                            14, 12, 10, 8, 6, 4, 2, 0);
+    const __m512i idx_im = _mm512_set_epi32(31, 29, 27, 25, 23, 21, 19, 17,
+                                            15, 13, 11, 9, 7, 5, 3, 1);
+
+    for (; number < sixteenthPoints; number++) {
+        __m512 cplxValue1 = _mm512_load_ps(complexVectorPtr);
+        __m512 cplxValue2 = _mm512_load_ps(complexVectorPtr + 16);
+
+        __m512 re = _mm512_permutex2var_ps(cplxValue1, idx_re, cplxValue2);
+        __m512 im = _mm512_permutex2var_ps(cplxValue1, idx_im, cplxValue2);
+
+        __m512 reSquared = _mm512_mul_ps(re, re);
+        __m512 imSquared = _mm512_mul_ps(im, im);
+        __m512 result = _mm512_add_ps(reSquared, imSquared);
+
+        _mm512_store_ps(magnitudeVectorPtr, result);
+
+        complexVectorPtr += 32;
+        magnitudeVectorPtr += 16;
+    }
+
+    number = sixteenthPoints * 16;
+    volk_32fc_magnitude_squared_32f_generic(
+        magnitudeVectorPtr, (const lv_32fc_t*)complexVectorPtr, num_points - number);
+}
+#endif /* LV_HAVE_AVX512F */
 
 
 #endif /* INCLUDED_volk_32fc_magnitude_squared_32f_a_H */

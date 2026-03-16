@@ -108,6 +108,143 @@ static inline void volk_16i_x4_quad_max_star_16i_generic(short* target,
 
 #endif /* LV_HAVE_GENERIC */
 
+#ifdef LV_HAVE_SSE2
+#include <emmintrin.h>
+
+static inline void volk_16i_x4_quad_max_star_16i_u_sse2(short* target,
+                                                         const short* src0,
+                                                         const short* src1,
+                                                         const short* src2,
+                                                         const short* src3,
+                                                         unsigned int num_points)
+{
+    const unsigned int eighthPoints = num_points / 8;
+    int leftovers = num_points - eighthPoints * 8;
+
+    const __m128i* p_src0 = (const __m128i*)src0;
+    const __m128i* p_src1 = (const __m128i*)src1;
+    const __m128i* p_src2 = (const __m128i*)src2;
+    const __m128i* p_src3 = (const __m128i*)src3;
+    __m128i* p_target = (__m128i*)target;
+
+    for (unsigned int i = 0; i < eighthPoints; ++i) {
+        __m128i xmm1 = _mm_loadu_si128(p_src0);
+        __m128i xmm2 = _mm_loadu_si128(p_src1);
+        __m128i xmm3 = _mm_loadu_si128(p_src2);
+        __m128i xmm4 = _mm_loadu_si128(p_src3);
+
+        xmm1 = _mm_max_epi16(xmm1, xmm2);
+        xmm3 = _mm_max_epi16(xmm3, xmm4);
+        xmm1 = _mm_max_epi16(xmm1, xmm3);
+
+        _mm_storeu_si128(p_target, xmm1);
+
+        p_src0 += 1;
+        p_src1 += 1;
+        p_src2 += 1;
+        p_src3 += 1;
+        p_target += 1;
+    }
+
+    volk_16i_x4_quad_max_star_16i_generic(
+        target + eighthPoints * 8, src0 + eighthPoints * 8, src1 + eighthPoints * 8,
+        src2 + eighthPoints * 8, src3 + eighthPoints * 8, leftovers);
+}
+#endif /* LV_HAVE_SSE2 */
+
+
+#ifdef LV_HAVE_AVX2
+#include <immintrin.h>
+
+static inline void volk_16i_x4_quad_max_star_16i_u_avx2(short* target,
+                                                          const short* src0,
+                                                          const short* src1,
+                                                          const short* src2,
+                                                          const short* src3,
+                                                          unsigned int num_points)
+{
+    const unsigned int sixteenthPoints = num_points / 16;
+    int leftovers = num_points - sixteenthPoints * 16;
+
+    const __m256i* p_src0 = (const __m256i*)src0;
+    const __m256i* p_src1 = (const __m256i*)src1;
+    const __m256i* p_src2 = (const __m256i*)src2;
+    const __m256i* p_src3 = (const __m256i*)src3;
+    __m256i* p_target = (__m256i*)target;
+
+    for (unsigned int i = 0; i < sixteenthPoints; ++i) {
+        __m256i xmm1 = _mm256_loadu_si256(p_src0);
+        __m256i xmm2 = _mm256_loadu_si256(p_src1);
+        __m256i xmm3 = _mm256_loadu_si256(p_src2);
+        __m256i xmm4 = _mm256_loadu_si256(p_src3);
+
+        xmm1 = _mm256_max_epi16(xmm1, xmm2);
+        xmm3 = _mm256_max_epi16(xmm3, xmm4);
+        xmm1 = _mm256_max_epi16(xmm1, xmm3);
+
+        _mm256_storeu_si256(p_target, xmm1);
+
+        p_src0 += 1;
+        p_src1 += 1;
+        p_src2 += 1;
+        p_src3 += 1;
+        p_target += 1;
+    }
+
+    volk_16i_x4_quad_max_star_16i_generic(
+        target + sixteenthPoints * 16, src0 + sixteenthPoints * 16,
+        src1 + sixteenthPoints * 16, src2 + sixteenthPoints * 16,
+        src3 + sixteenthPoints * 16, leftovers);
+}
+#endif /* LV_HAVE_AVX2 */
+
+
+#ifdef LV_HAVE_AVX512BW
+#include <immintrin.h>
+
+static inline void volk_16i_x4_quad_max_star_16i_u_avx512bw(short* target,
+                                                              const short* src0,
+                                                              const short* src1,
+                                                              const short* src2,
+                                                              const short* src3,
+                                                              unsigned int num_points)
+{
+    const unsigned int thirtysecondPoints = num_points / 32;
+    int leftovers = num_points - thirtysecondPoints * 32;
+
+    const __m512i* p_src0 = (const __m512i*)src0;
+    const __m512i* p_src1 = (const __m512i*)src1;
+    const __m512i* p_src2 = (const __m512i*)src2;
+    const __m512i* p_src3 = (const __m512i*)src3;
+    __m512i* p_target = (__m512i*)target;
+
+    for (unsigned int i = 0; i < thirtysecondPoints; ++i) {
+        __m512i xmm1 = _mm512_loadu_si512(p_src0);
+        __m512i xmm2 = _mm512_loadu_si512(p_src1);
+        __m512i xmm3 = _mm512_loadu_si512(p_src2);
+        __m512i xmm4 = _mm512_loadu_si512(p_src3);
+
+        xmm1 = _mm512_max_epi16(xmm1, xmm2);
+        xmm3 = _mm512_max_epi16(xmm3, xmm4);
+        xmm1 = _mm512_max_epi16(xmm1, xmm3);
+
+        _mm512_storeu_si512(p_target, xmm1);
+
+        p_src0 += 1;
+        p_src1 += 1;
+        p_src2 += 1;
+        p_src3 += 1;
+        p_target += 1;
+    }
+
+    volk_16i_x4_quad_max_star_16i_generic(
+        target + thirtysecondPoints * 32, src0 + thirtysecondPoints * 32,
+        src1 + thirtysecondPoints * 32, src2 + thirtysecondPoints * 32,
+        src3 + thirtysecondPoints * 32, leftovers);
+}
+#endif /* LV_HAVE_AVX512BW */
+
+
 #ifdef LV_HAVE_NEON
 
 #include <arm_neon.h>
@@ -223,5 +360,97 @@ static inline void volk_16i_x4_quad_max_star_16i_a_sse2(short* target,
 }
 
 #endif /* LV_HAVE_SSE2 */
+
+
+#ifdef LV_HAVE_AVX2
+#include <immintrin.h>
+
+static inline void volk_16i_x4_quad_max_star_16i_a_avx2(short* target,
+                                                          const short* src0,
+                                                          const short* src1,
+                                                          const short* src2,
+                                                          const short* src3,
+                                                          unsigned int num_points)
+{
+    const unsigned int sixteenthPoints = num_points / 16;
+    int leftovers = num_points - sixteenthPoints * 16;
+
+    const __m256i* p_src0 = (const __m256i*)src0;
+    const __m256i* p_src1 = (const __m256i*)src1;
+    const __m256i* p_src2 = (const __m256i*)src2;
+    const __m256i* p_src3 = (const __m256i*)src3;
+    __m256i* p_target = (__m256i*)target;
+
+    for (unsigned int i = 0; i < sixteenthPoints; ++i) {
+        __m256i xmm1 = _mm256_load_si256(p_src0);
+        __m256i xmm2 = _mm256_load_si256(p_src1);
+        __m256i xmm3 = _mm256_load_si256(p_src2);
+        __m256i xmm4 = _mm256_load_si256(p_src3);
+
+        xmm1 = _mm256_max_epi16(xmm1, xmm2);
+        xmm3 = _mm256_max_epi16(xmm3, xmm4);
+        xmm1 = _mm256_max_epi16(xmm1, xmm3);
+
+        _mm256_store_si256(p_target, xmm1);
+
+        p_src0 += 1;
+        p_src1 += 1;
+        p_src2 += 1;
+        p_src3 += 1;
+        p_target += 1;
+    }
+
+    volk_16i_x4_quad_max_star_16i_generic(
+        target + sixteenthPoints * 16, src0 + sixteenthPoints * 16,
+        src1 + sixteenthPoints * 16, src2 + sixteenthPoints * 16,
+        src3 + sixteenthPoints * 16, leftovers);
+}
+#endif /* LV_HAVE_AVX2 */
+
+
+#ifdef LV_HAVE_AVX512BW
+#include <immintrin.h>
+
+static inline void volk_16i_x4_quad_max_star_16i_a_avx512bw(short* target,
+                                                              const short* src0,
+                                                              const short* src1,
+                                                              const short* src2,
+                                                              const short* src3,
+                                                              unsigned int num_points)
+{
+    const unsigned int thirtysecondPoints = num_points / 32;
+    int leftovers = num_points - thirtysecondPoints * 32;
+
+    const __m512i* p_src0 = (const __m512i*)src0;
+    const __m512i* p_src1 = (const __m512i*)src1;
+    const __m512i* p_src2 = (const __m512i*)src2;
+    const __m512i* p_src3 = (const __m512i*)src3;
+    __m512i* p_target = (__m512i*)target;
+
+    for (unsigned int i = 0; i < thirtysecondPoints; ++i) {
+        __m512i xmm1 = _mm512_load_si512(p_src0);
+        __m512i xmm2 = _mm512_load_si512(p_src1);
+        __m512i xmm3 = _mm512_load_si512(p_src2);
+        __m512i xmm4 = _mm512_load_si512(p_src3);
+
+        xmm1 = _mm512_max_epi16(xmm1, xmm2);
+        xmm3 = _mm512_max_epi16(xmm3, xmm4);
+        xmm1 = _mm512_max_epi16(xmm1, xmm3);
+
+        _mm512_store_si512(p_target, xmm1);
+
+        p_src0 += 1;
+        p_src1 += 1;
+        p_src2 += 1;
+        p_src3 += 1;
+        p_target += 1;
+    }
+
+    volk_16i_x4_quad_max_star_16i_generic(
+        target + thirtysecondPoints * 32, src0 + thirtysecondPoints * 32,
+        src1 + thirtysecondPoints * 32, src2 + thirtysecondPoints * 32,
+        src3 + thirtysecondPoints * 32, leftovers);
+}
+#endif /* LV_HAVE_AVX512BW */
 
 #endif /* INCLUDED_volk_16i_x4_quad_max_star_16i_a_H */

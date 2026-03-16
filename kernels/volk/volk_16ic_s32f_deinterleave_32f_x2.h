@@ -81,6 +81,170 @@ volk_16ic_s32f_deinterleave_32f_x2_generic(float* iBuffer,
 }
 #endif /* LV_HAVE_GENERIC */
 
+#ifdef LV_HAVE_SSE
+#include <xmmintrin.h>
+
+static inline void
+volk_16ic_s32f_deinterleave_32f_x2_u_sse(float* iBuffer,
+                                         float* qBuffer,
+                                         const lv_16sc_t* complexVector,
+                                         const float scalar,
+                                         unsigned int num_points)
+{
+    float* iBufferPtr = iBuffer;
+    float* qBufferPtr = qBuffer;
+
+    uint64_t number = 0;
+    const uint64_t quarterPoints = num_points / 4;
+    __m128 cplxValue1, cplxValue2, iValue, qValue;
+
+    const float invScalar_f = 1.0f / scalar;
+    __m128 invScalar = _mm_set_ps1(invScalar_f);
+    const int16_t* complexVectorPtr = (const int16_t*)complexVector;
+
+    __VOLK_ATTR_ALIGNED(16) float floatBuffer[8];
+
+    for (; number < quarterPoints; number++) {
+
+        floatBuffer[0] = (float)(complexVectorPtr[0]);
+        floatBuffer[1] = (float)(complexVectorPtr[1]);
+        floatBuffer[2] = (float)(complexVectorPtr[2]);
+        floatBuffer[3] = (float)(complexVectorPtr[3]);
+
+        floatBuffer[4] = (float)(complexVectorPtr[4]);
+        floatBuffer[5] = (float)(complexVectorPtr[5]);
+        floatBuffer[6] = (float)(complexVectorPtr[6]);
+        floatBuffer[7] = (float)(complexVectorPtr[7]);
+
+        cplxValue1 = _mm_load_ps(&floatBuffer[0]);
+        cplxValue2 = _mm_load_ps(&floatBuffer[4]);
+
+        complexVectorPtr += 8;
+
+        cplxValue1 = _mm_mul_ps(cplxValue1, invScalar);
+        cplxValue2 = _mm_mul_ps(cplxValue2, invScalar);
+
+        // Arrange in i1i2i3i4 format
+        iValue = _mm_shuffle_ps(cplxValue1, cplxValue2, _MM_SHUFFLE(2, 0, 2, 0));
+        // Arrange in q1q2q3q4 format
+        qValue = _mm_shuffle_ps(cplxValue1, cplxValue2, _MM_SHUFFLE(3, 1, 3, 1));
+
+        _mm_storeu_ps(iBufferPtr, iValue);
+        _mm_storeu_ps(qBufferPtr, qValue);
+
+        iBufferPtr += 4;
+        qBufferPtr += 4;
+    }
+
+    number = quarterPoints * 4;
+    volk_16ic_s32f_deinterleave_32f_x2_generic(
+        iBufferPtr, qBufferPtr, &complexVector[number], scalar, num_points - number);
+}
+#endif /* LV_HAVE_SSE */
+
+#ifdef LV_HAVE_SSE2
+#include <emmintrin.h>
+
+static inline void
+volk_16ic_s32f_deinterleave_32f_x2_u_sse2(float* iBuffer,
+                                          float* qBuffer,
+                                          const lv_16sc_t* complexVector,
+                                          const float scalar,
+                                          unsigned int num_points)
+{
+    float* iBufferPtr = iBuffer;
+    float* qBufferPtr = qBuffer;
+
+    uint64_t number = 0;
+    const uint64_t quarterPoints = num_points / 4;
+
+    const float invScalar_f = 1.0f / scalar;
+    __m128 invScalar = _mm_set_ps1(invScalar_f);
+    const int16_t* complexVectorPtr = (const int16_t*)complexVector;
+
+    for (; number < quarterPoints; number++) {
+        __m128i cplxInt = _mm_loadu_si128((const __m128i*)complexVectorPtr);
+        complexVectorPtr += 8;
+
+        __m128i sign = _mm_srai_epi16(cplxInt, 15);
+        __m128i lo32 = _mm_unpacklo_epi16(cplxInt, sign);
+        __m128i hi32 = _mm_unpackhi_epi16(cplxInt, sign);
+
+        __m128 cplxValue1 = _mm_cvtepi32_ps(lo32);
+        __m128 cplxValue2 = _mm_cvtepi32_ps(hi32);
+
+        cplxValue1 = _mm_mul_ps(cplxValue1, invScalar);
+        cplxValue2 = _mm_mul_ps(cplxValue2, invScalar);
+
+        __m128 iValue =
+            _mm_shuffle_ps(cplxValue1, cplxValue2, _MM_SHUFFLE(2, 0, 2, 0));
+        __m128 qValue =
+            _mm_shuffle_ps(cplxValue1, cplxValue2, _MM_SHUFFLE(3, 1, 3, 1));
+
+        _mm_storeu_ps(iBufferPtr, iValue);
+        _mm_storeu_ps(qBufferPtr, qValue);
+
+        iBufferPtr += 4;
+        qBufferPtr += 4;
+    }
+
+    number = quarterPoints * 4;
+    volk_16ic_s32f_deinterleave_32f_x2_generic(
+        iBufferPtr, qBufferPtr, &complexVector[number], scalar, num_points - number);
+}
+#endif /* LV_HAVE_SSE2 */
+
+#ifdef LV_HAVE_SSE4_1
+#include <smmintrin.h>
+
+static inline void
+volk_16ic_s32f_deinterleave_32f_x2_u_sse4_1(float* iBuffer,
+                                            float* qBuffer,
+                                            const lv_16sc_t* complexVector,
+                                            const float scalar,
+                                            unsigned int num_points)
+{
+    float* iBufferPtr = iBuffer;
+    float* qBufferPtr = qBuffer;
+
+    uint64_t number = 0;
+    const uint64_t quarterPoints = num_points / 4;
+
+    const float invScalar_f = 1.0f / scalar;
+    __m128 invScalar = _mm_set_ps1(invScalar_f);
+    const int16_t* complexVectorPtr = (const int16_t*)complexVector;
+
+    for (; number < quarterPoints; number++) {
+        __m128i cplxInt = _mm_loadu_si128((const __m128i*)complexVectorPtr);
+        complexVectorPtr += 8;
+
+        __m128i lo32 = _mm_cvtepi16_epi32(cplxInt);
+        __m128i hi32 = _mm_cvtepi16_epi32(_mm_srli_si128(cplxInt, 8));
+
+        __m128 cplxValue1 = _mm_cvtepi32_ps(lo32);
+        __m128 cplxValue2 = _mm_cvtepi32_ps(hi32);
+
+        cplxValue1 = _mm_mul_ps(cplxValue1, invScalar);
+        cplxValue2 = _mm_mul_ps(cplxValue2, invScalar);
+
+        __m128 iValue =
+            _mm_shuffle_ps(cplxValue1, cplxValue2, _MM_SHUFFLE(2, 0, 2, 0));
+        __m128 qValue =
+            _mm_shuffle_ps(cplxValue1, cplxValue2, _MM_SHUFFLE(3, 1, 3, 1));
+
+        _mm_storeu_ps(iBufferPtr, iValue);
+        _mm_storeu_ps(qBufferPtr, qValue);
+
+        iBufferPtr += 4;
+        qBufferPtr += 4;
+    }
+
+    number = quarterPoints * 4;
+    volk_16ic_s32f_deinterleave_32f_x2_generic(
+        iBufferPtr, qBufferPtr, &complexVector[number], scalar, num_points - number);
+}
+#endif /* LV_HAVE_SSE4_1 */
+
 #ifdef LV_HAVE_AVX2
 #include <immintrin.h>
 
@@ -143,6 +307,60 @@ volk_16ic_s32f_deinterleave_32f_x2_u_avx2(float* iBuffer,
     }
 }
 #endif /* LV_HAVE_AVX2 */
+
+#ifdef LV_HAVE_AVX512F
+#include <immintrin.h>
+
+static inline void
+volk_16ic_s32f_deinterleave_32f_x2_u_avx512f(float* iBuffer,
+                                              float* qBuffer,
+                                              const lv_16sc_t* complexVector,
+                                              const float scalar,
+                                              unsigned int num_points)
+{
+    float* iBufferPtr = iBuffer;
+    float* qBufferPtr = qBuffer;
+
+    uint64_t number = 0;
+    const uint64_t sixteenthPoints = num_points / 16;
+
+    const float invScalar_f = 1.0f / scalar;
+    __m512 invScalar = _mm512_set1_ps(invScalar_f);
+    const int16_t* complexVectorPtr = (const int16_t*)complexVector;
+
+    __m512i idx_i =
+        _mm512_set_epi32(30, 28, 26, 24, 22, 20, 18, 16, 14, 12, 10, 8, 6, 4, 2, 0);
+    __m512i idx_q =
+        _mm512_set_epi32(31, 29, 27, 25, 23, 21, 19, 17, 15, 13, 11, 9, 7, 5, 3, 1);
+
+    for (; number < sixteenthPoints; number++) {
+        __m512i cplxInt = _mm512_loadu_si512((const __m512i*)complexVectorPtr);
+        complexVectorPtr += 32;
+
+        __m256i lo256 = _mm512_castsi512_si256(cplxInt);
+        __m256i hi256 = _mm512_extracti64x4_epi64(cplxInt, 1);
+
+        __m512 cplxValue1 = _mm512_cvtepi32_ps(_mm512_cvtepi16_epi32(lo256));
+        __m512 cplxValue2 = _mm512_cvtepi32_ps(_mm512_cvtepi16_epi32(hi256));
+
+        cplxValue1 = _mm512_mul_ps(cplxValue1, invScalar);
+        cplxValue2 = _mm512_mul_ps(cplxValue2, invScalar);
+
+        __m512 iValue = _mm512_permutex2var_ps(cplxValue1, idx_i, cplxValue2);
+        __m512 qValue = _mm512_permutex2var_ps(cplxValue1, idx_q, cplxValue2);
+
+        _mm512_storeu_ps(iBufferPtr, iValue);
+        _mm512_storeu_ps(qBufferPtr, qValue);
+
+        iBufferPtr += 16;
+        qBufferPtr += 16;
+    }
+
+    number = sixteenthPoints * 16;
+    volk_16ic_s32f_deinterleave_32f_x2_generic(
+        iBufferPtr, qBufferPtr, &complexVector[number], scalar, num_points - number);
+}
+#endif /* LV_HAVE_AVX512F */
 
 #ifdef LV_HAVE_NEON
 #include <arm_neon.h>
@@ -377,6 +595,109 @@ volk_16ic_s32f_deinterleave_32f_x2_a_sse(float* iBuffer,
 }
 #endif /* LV_HAVE_SSE */
 
+#ifdef LV_HAVE_SSE2
+#include <emmintrin.h>
+
+static inline void
+volk_16ic_s32f_deinterleave_32f_x2_a_sse2(float* iBuffer,
+                                          float* qBuffer,
+                                          const lv_16sc_t* complexVector,
+                                          const float scalar,
+                                          unsigned int num_points)
+{
+    float* iBufferPtr = iBuffer;
+    float* qBufferPtr = qBuffer;
+
+    uint64_t number = 0;
+    const uint64_t quarterPoints = num_points / 4;
+
+    const float invScalar_f = 1.0f / scalar;
+    __m128 invScalar = _mm_set_ps1(invScalar_f);
+    const int16_t* complexVectorPtr = (const int16_t*)complexVector;
+
+    for (; number < quarterPoints; number++) {
+        __m128i cplxInt = _mm_load_si128((const __m128i*)complexVectorPtr);
+        complexVectorPtr += 8;
+
+        __m128i sign = _mm_srai_epi16(cplxInt, 15);
+        __m128i lo32 = _mm_unpacklo_epi16(cplxInt, sign);
+        __m128i hi32 = _mm_unpackhi_epi16(cplxInt, sign);
+
+        __m128 cplxValue1 = _mm_cvtepi32_ps(lo32);
+        __m128 cplxValue2 = _mm_cvtepi32_ps(hi32);
+
+        cplxValue1 = _mm_mul_ps(cplxValue1, invScalar);
+        cplxValue2 = _mm_mul_ps(cplxValue2, invScalar);
+
+        __m128 iValue =
+            _mm_shuffle_ps(cplxValue1, cplxValue2, _MM_SHUFFLE(2, 0, 2, 0));
+        __m128 qValue =
+            _mm_shuffle_ps(cplxValue1, cplxValue2, _MM_SHUFFLE(3, 1, 3, 1));
+
+        _mm_store_ps(iBufferPtr, iValue);
+        _mm_store_ps(qBufferPtr, qValue);
+
+        iBufferPtr += 4;
+        qBufferPtr += 4;
+    }
+
+    number = quarterPoints * 4;
+    volk_16ic_s32f_deinterleave_32f_x2_generic(
+        iBufferPtr, qBufferPtr, &complexVector[number], scalar, num_points - number);
+}
+#endif /* LV_HAVE_SSE2 */
+
+#ifdef LV_HAVE_SSE4_1
+#include <smmintrin.h>
+
+static inline void
+volk_16ic_s32f_deinterleave_32f_x2_a_sse4_1(float* iBuffer,
+                                            float* qBuffer,
+                                            const lv_16sc_t* complexVector,
+                                            const float scalar,
+                                            unsigned int num_points)
+{
+    float* iBufferPtr = iBuffer;
+    float* qBufferPtr = qBuffer;
+
+    uint64_t number = 0;
+    const uint64_t quarterPoints = num_points / 4;
+
+    const float invScalar_f = 1.0f / scalar;
+    __m128 invScalar = _mm_set_ps1(invScalar_f);
+    const int16_t* complexVectorPtr = (const int16_t*)complexVector;
+
+    for (; number < quarterPoints; number++) {
+        __m128i cplxInt = _mm_load_si128((const __m128i*)complexVectorPtr);
+        complexVectorPtr += 8;
+
+        __m128i lo32 = _mm_cvtepi16_epi32(cplxInt);
+        __m128i hi32 = _mm_cvtepi16_epi32(_mm_srli_si128(cplxInt, 8));
+
+        __m128 cplxValue1 = _mm_cvtepi32_ps(lo32);
+        __m128 cplxValue2 = _mm_cvtepi32_ps(hi32);
+
+        cplxValue1 = _mm_mul_ps(cplxValue1, invScalar);
+        cplxValue2 = _mm_mul_ps(cplxValue2, invScalar);
+
+        __m128 iValue =
+            _mm_shuffle_ps(cplxValue1, cplxValue2, _MM_SHUFFLE(2, 0, 2, 0));
+        __m128 qValue =
+            _mm_shuffle_ps(cplxValue1, cplxValue2, _MM_SHUFFLE(3, 1, 3, 1));
+
+        _mm_store_ps(iBufferPtr, iValue);
+        _mm_store_ps(qBufferPtr, qValue);
+
+        iBufferPtr += 4;
+        qBufferPtr += 4;
+    }
+
+    number = quarterPoints * 4;
+    volk_16ic_s32f_deinterleave_32f_x2_generic(
+        iBufferPtr, qBufferPtr, &complexVector[number], scalar, num_points - number);
+}
+#endif /* LV_HAVE_SSE4_1 */
+
 #ifdef LV_HAVE_AVX2
 #include <immintrin.h>
 
@@ -439,5 +760,59 @@ volk_16ic_s32f_deinterleave_32f_x2_a_avx2(float* iBuffer,
     }
 }
 #endif /* LV_HAVE_AVX2 */
+
+#ifdef LV_HAVE_AVX512F
+#include <immintrin.h>
+
+static inline void
+volk_16ic_s32f_deinterleave_32f_x2_a_avx512f(float* iBuffer,
+                                              float* qBuffer,
+                                              const lv_16sc_t* complexVector,
+                                              const float scalar,
+                                              unsigned int num_points)
+{
+    float* iBufferPtr = iBuffer;
+    float* qBufferPtr = qBuffer;
+
+    uint64_t number = 0;
+    const uint64_t sixteenthPoints = num_points / 16;
+
+    const float invScalar_f = 1.0f / scalar;
+    __m512 invScalar = _mm512_set1_ps(invScalar_f);
+    const int16_t* complexVectorPtr = (const int16_t*)complexVector;
+
+    __m512i idx_i =
+        _mm512_set_epi32(30, 28, 26, 24, 22, 20, 18, 16, 14, 12, 10, 8, 6, 4, 2, 0);
+    __m512i idx_q =
+        _mm512_set_epi32(31, 29, 27, 25, 23, 21, 19, 17, 15, 13, 11, 9, 7, 5, 3, 1);
+
+    for (; number < sixteenthPoints; number++) {
+        __m512i cplxInt = _mm512_load_si512((const __m512i*)complexVectorPtr);
+        complexVectorPtr += 32;
+
+        __m256i lo256 = _mm512_castsi512_si256(cplxInt);
+        __m256i hi256 = _mm512_extracti64x4_epi64(cplxInt, 1);
+
+        __m512 cplxValue1 = _mm512_cvtepi32_ps(_mm512_cvtepi16_epi32(lo256));
+        __m512 cplxValue2 = _mm512_cvtepi32_ps(_mm512_cvtepi16_epi32(hi256));
+
+        cplxValue1 = _mm512_mul_ps(cplxValue1, invScalar);
+        cplxValue2 = _mm512_mul_ps(cplxValue2, invScalar);
+
+        __m512 iValue = _mm512_permutex2var_ps(cplxValue1, idx_i, cplxValue2);
+        __m512 qValue = _mm512_permutex2var_ps(cplxValue1, idx_q, cplxValue2);
+
+        _mm512_store_ps(iBufferPtr, iValue);
+        _mm512_store_ps(qBufferPtr, qValue);
+
+        iBufferPtr += 16;
+        qBufferPtr += 16;
+    }
+
+    number = sixteenthPoints * 16;
+    volk_16ic_s32f_deinterleave_32f_x2_generic(
+        iBufferPtr, qBufferPtr, &complexVector[number], scalar, num_points - number);
+}
+#endif /* LV_HAVE_AVX512F */
 
 #endif /* INCLUDED_volk_16ic_s32f_deinterleave_32f_x2_a_H */

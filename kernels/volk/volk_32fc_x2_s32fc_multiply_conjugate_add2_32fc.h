@@ -190,6 +190,96 @@ volk_32fc_x2_s32fc_multiply_conjugate_add2_32fc_u_avx(lv_32fc_t* cVector,
 #endif /* LV_HAVE_AVX */
 
 
+#if LV_HAVE_AVX2 && LV_HAVE_FMA
+#include <immintrin.h>
+#include <volk/volk_avx_intrinsics.h>
+
+static inline void
+volk_32fc_x2_s32fc_multiply_conjugate_add2_32fc_u_avx2_fma(lv_32fc_t* cVector,
+                                                            const lv_32fc_t* aVector,
+                                                            const lv_32fc_t* bVector,
+                                                            const lv_32fc_t* scalar,
+                                                            unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int quarterPoints = num_points / 4;
+
+    const lv_32fc_t* a = aVector;
+    const lv_32fc_t* b = bVector;
+    lv_32fc_t* c = cVector;
+
+    lv_32fc_t v_scalar[4] = { *scalar, *scalar, *scalar, *scalar };
+    const __m256 s = _mm256_loadu_ps((const float*)v_scalar);
+
+    /* Precompute scalar components for FMA-based complex conjugate multiply */
+    const __m256 s_swap = _mm256_permute_ps(s, 0xB1);
+    const __m256 conjugator =
+        _mm256_setr_ps(0, -0.f, 0, -0.f, 0, -0.f, 0, -0.f);
+    const __m256 s_swap_conj = _mm256_xor_ps(s_swap, conjugator);
+
+    for (; number < quarterPoints; number++) {
+        const __m256 x = _mm256_loadu_ps((const float*)b);
+        const __m256 y = _mm256_loadu_ps((const float*)a);
+        const __m256 breal = _mm256_moveldup_ps(x);
+        const __m256 bimag = _mm256_movehdup_ps(x);
+
+        /* conj(b) * scalar using FMA: s*breal + s_swap_conj*bimag */
+        __m256 z = _mm256_mul_ps(s, breal);
+        z = _mm256_fmadd_ps(s_swap_conj, bimag, z);
+        z = _mm256_add_ps(y, z);
+        _mm256_storeu_ps((float*)c, z);
+
+        a += 4;
+        b += 4;
+        c += 4;
+    }
+
+    volk_32fc_x2_s32fc_multiply_conjugate_add2_32fc_generic(
+        c, a, b, scalar, num_points - quarterPoints * 4);
+}
+#endif /* LV_HAVE_AVX2 && LV_HAVE_FMA */
+
+
+#ifdef LV_HAVE_AVX512F
+#include <immintrin.h>
+#include <volk/volk_avx512_intrinsics.h>
+
+static inline void
+volk_32fc_x2_s32fc_multiply_conjugate_add2_32fc_u_avx512f(lv_32fc_t* cVector,
+                                                           const lv_32fc_t* aVector,
+                                                           const lv_32fc_t* bVector,
+                                                           const lv_32fc_t* scalar,
+                                                           unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int eighthPoints = num_points / 8;
+
+    const lv_32fc_t* a = aVector;
+    const lv_32fc_t* b = bVector;
+    lv_32fc_t* c = cVector;
+
+    lv_32fc_t v_scalar[8] = { *scalar, *scalar, *scalar, *scalar,
+                               *scalar, *scalar, *scalar, *scalar };
+    const __m512 s = _mm512_loadu_ps((const float*)v_scalar);
+
+    for (; number < eighthPoints; number++) {
+        const __m512 x = _mm512_loadu_ps((const float*)b);
+        const __m512 y = _mm512_loadu_ps((const float*)a);
+        __m512 z = _mm512_complexconjugatemul_ps(s, x);
+        z = _mm512_add_ps(y, z);
+        _mm512_storeu_ps((float*)c, z);
+
+        a += 8;
+        b += 8;
+        c += 8;
+    }
+
+    volk_32fc_x2_s32fc_multiply_conjugate_add2_32fc_generic(
+        c, a, b, scalar, num_points - eighthPoints * 8);
+}
+#endif /* LV_HAVE_AVX512F */
+
+
 #ifdef LV_HAVE_NEON
 #include <arm_neon.h>
 
@@ -451,5 +541,94 @@ volk_32fc_x2_s32fc_multiply_conjugate_add2_32fc_a_avx(lv_32fc_t* cVector,
     }
 }
 #endif /* LV_HAVE_AVX */
+
+#if LV_HAVE_AVX2 && LV_HAVE_FMA
+#include <immintrin.h>
+#include <volk/volk_avx_intrinsics.h>
+
+static inline void
+volk_32fc_x2_s32fc_multiply_conjugate_add2_32fc_a_avx2_fma(lv_32fc_t* cVector,
+                                                            const lv_32fc_t* aVector,
+                                                            const lv_32fc_t* bVector,
+                                                            const lv_32fc_t* scalar,
+                                                            unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int quarterPoints = num_points / 4;
+
+    const lv_32fc_t* a = aVector;
+    const lv_32fc_t* b = bVector;
+    lv_32fc_t* c = cVector;
+
+    lv_32fc_t v_scalar[4] = { *scalar, *scalar, *scalar, *scalar };
+    const __m256 s = _mm256_loadu_ps((const float*)v_scalar);
+
+    /* Precompute scalar components for FMA-based complex conjugate multiply */
+    const __m256 s_swap = _mm256_permute_ps(s, 0xB1);
+    const __m256 conjugator =
+        _mm256_setr_ps(0, -0.f, 0, -0.f, 0, -0.f, 0, -0.f);
+    const __m256 s_swap_conj = _mm256_xor_ps(s_swap, conjugator);
+
+    for (; number < quarterPoints; number++) {
+        const __m256 x = _mm256_load_ps((const float*)b);
+        const __m256 y = _mm256_load_ps((const float*)a);
+        const __m256 breal = _mm256_moveldup_ps(x);
+        const __m256 bimag = _mm256_movehdup_ps(x);
+
+        /* conj(b) * scalar using FMA: s*breal + s_swap_conj*bimag */
+        __m256 z = _mm256_mul_ps(s, breal);
+        z = _mm256_fmadd_ps(s_swap_conj, bimag, z);
+        z = _mm256_add_ps(y, z);
+        _mm256_store_ps((float*)c, z);
+
+        a += 4;
+        b += 4;
+        c += 4;
+    }
+
+    volk_32fc_x2_s32fc_multiply_conjugate_add2_32fc_generic(
+        c, a, b, scalar, num_points - quarterPoints * 4);
+}
+#endif /* LV_HAVE_AVX2 && LV_HAVE_FMA */
+
+
+#ifdef LV_HAVE_AVX512F
+#include <immintrin.h>
+#include <volk/volk_avx512_intrinsics.h>
+
+static inline void
+volk_32fc_x2_s32fc_multiply_conjugate_add2_32fc_a_avx512f(lv_32fc_t* cVector,
+                                                           const lv_32fc_t* aVector,
+                                                           const lv_32fc_t* bVector,
+                                                           const lv_32fc_t* scalar,
+                                                           unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int eighthPoints = num_points / 8;
+
+    const lv_32fc_t* a = aVector;
+    const lv_32fc_t* b = bVector;
+    lv_32fc_t* c = cVector;
+
+    lv_32fc_t v_scalar[8] = { *scalar, *scalar, *scalar, *scalar,
+                               *scalar, *scalar, *scalar, *scalar };
+    const __m512 s = _mm512_loadu_ps((const float*)v_scalar);
+
+    for (; number < eighthPoints; number++) {
+        const __m512 x = _mm512_load_ps((const float*)b);
+        const __m512 y = _mm512_load_ps((const float*)a);
+        __m512 z = _mm512_complexconjugatemul_ps(s, x);
+        z = _mm512_add_ps(y, z);
+        _mm512_store_ps((float*)c, z);
+
+        a += 8;
+        b += 8;
+        c += 8;
+    }
+
+    volk_32fc_x2_s32fc_multiply_conjugate_add2_32fc_generic(
+        c, a, b, scalar, num_points - eighthPoints * 8);
+}
+#endif /* LV_HAVE_AVX512F */
 
 #endif /* INCLUDED_volk_32fc_x2_s32fc_multiply_conjugate_add2_32fc_a_H */

@@ -262,6 +262,53 @@ volk_32f_tanh_32f_u_avx_fma(float* cVector, const float* aVector, unsigned int n
 }
 #endif /* LV_HAVE_AVX && LV_HAVE_FMA */
 
+#ifdef LV_HAVE_AVX512F
+#include <immintrin.h>
+
+static inline void
+volk_32f_tanh_32f_u_avx512f(float* cVector, const float* aVector, unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int sixteenthPoints = num_points / 16;
+
+    float* cPtr = cVector;
+    const float* aPtr = aVector;
+
+    __m512 aVal, cVal, x2, a, b;
+    __m512 const1, const2, const3, const4, const5, const6;
+    const1 = _mm512_set1_ps(135135.0f);
+    const2 = _mm512_set1_ps(17325.0f);
+    const3 = _mm512_set1_ps(378.0f);
+    const4 = _mm512_set1_ps(62370.0f);
+    const5 = _mm512_set1_ps(3150.0f);
+    const6 = _mm512_set1_ps(28.0f);
+    __m512 clamp_hi = _mm512_set1_ps(4.97f);
+    __m512 clamp_lo = _mm512_set1_ps(-4.97f);
+    for (; number < sixteenthPoints; number++) {
+
+        aVal = _mm512_loadu_ps(aPtr);
+        aVal = _mm512_min_ps(_mm512_max_ps(aVal, clamp_lo), clamp_hi);
+        x2 = _mm512_mul_ps(aVal, aVal);
+        a = _mm512_mul_ps(
+            aVal,
+            _mm512_fmadd_ps(
+                x2, _mm512_fmadd_ps(x2, _mm512_add_ps(const3, x2), const2), const1));
+        b = _mm512_fmadd_ps(
+            x2, _mm512_fmadd_ps(x2, _mm512_fmadd_ps(x2, const6, const5), const4), const1);
+
+        cVal = _mm512_div_ps(a, b);
+
+        _mm512_storeu_ps(cPtr, cVal);
+
+        aPtr += 16;
+        cPtr += 16;
+    }
+
+    number = sixteenthPoints * 16;
+    volk_32f_tanh_32f_generic(cPtr, aPtr, num_points - number);
+}
+#endif /* LV_HAVE_AVX512F */
+
 #ifdef LV_HAVE_NEON
 #include <arm_neon.h>
 
@@ -588,5 +635,52 @@ volk_32f_tanh_32f_a_avx_fma(float* cVector, const float* aVector, unsigned int n
     volk_32f_tanh_32f_series(cPtr, aPtr, num_points - number);
 }
 #endif /* LV_HAVE_AVX && LV_HAVE_FMA */
+
+#ifdef LV_HAVE_AVX512F
+#include <immintrin.h>
+
+static inline void
+volk_32f_tanh_32f_a_avx512f(float* cVector, const float* aVector, unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int sixteenthPoints = num_points / 16;
+
+    float* cPtr = cVector;
+    const float* aPtr = aVector;
+
+    __m512 aVal, cVal, x2, a, b;
+    __m512 const1, const2, const3, const4, const5, const6;
+    const1 = _mm512_set1_ps(135135.0f);
+    const2 = _mm512_set1_ps(17325.0f);
+    const3 = _mm512_set1_ps(378.0f);
+    const4 = _mm512_set1_ps(62370.0f);
+    const5 = _mm512_set1_ps(3150.0f);
+    const6 = _mm512_set1_ps(28.0f);
+    __m512 clamp_hi = _mm512_set1_ps(4.97f);
+    __m512 clamp_lo = _mm512_set1_ps(-4.97f);
+    for (; number < sixteenthPoints; number++) {
+
+        aVal = _mm512_load_ps(aPtr);
+        aVal = _mm512_min_ps(_mm512_max_ps(aVal, clamp_lo), clamp_hi);
+        x2 = _mm512_mul_ps(aVal, aVal);
+        a = _mm512_mul_ps(
+            aVal,
+            _mm512_fmadd_ps(
+                x2, _mm512_fmadd_ps(x2, _mm512_add_ps(const3, x2), const2), const1));
+        b = _mm512_fmadd_ps(
+            x2, _mm512_fmadd_ps(x2, _mm512_fmadd_ps(x2, const6, const5), const4), const1);
+
+        cVal = _mm512_div_ps(a, b);
+
+        _mm512_store_ps(cPtr, cVal);
+
+        aPtr += 16;
+        cPtr += 16;
+    }
+
+    number = sixteenthPoints * 16;
+    volk_32f_tanh_32f_generic(cPtr, aPtr, num_points - number);
+}
+#endif /* LV_HAVE_AVX512F */
 
 #endif /* INCLUDED_volk_32f_tanh_32f_a_H */

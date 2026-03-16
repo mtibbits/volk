@@ -87,6 +87,41 @@ static inline void volk_8i_convert_16i_generic(int16_t* outputVector,
 #endif /* LV_HAVE_GENERIC */
 
 
+#ifdef LV_HAVE_SSE2
+#include <emmintrin.h>
+
+static inline void volk_8i_convert_16i_u_sse2(int16_t* outputVector,
+                                               const int8_t* inputVector,
+                                               unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int sixteenthPoints = num_points / 16;
+
+    const __m128i* inputVectorPtr = (const __m128i*)inputVector;
+    __m128i* outputVectorPtr = (__m128i*)outputVector;
+    const __m128i zero = _mm_setzero_si128();
+    __m128i inputVal;
+
+    for (; number < sixteenthPoints; number++) {
+        inputVal = _mm_loadu_si128(inputVectorPtr);
+
+        /* unpack with zero in low byte position: [0,b_i] as int16 = b_i << 8 */
+        _mm_storeu_si128(outputVectorPtr, _mm_unpacklo_epi8(zero, inputVal));
+        outputVectorPtr++;
+
+        _mm_storeu_si128(outputVectorPtr, _mm_unpackhi_epi8(zero, inputVal));
+        outputVectorPtr++;
+
+        inputVectorPtr++;
+    }
+
+    number = sixteenthPoints * 16;
+    volk_8i_convert_16i_generic(
+        outputVector + number, inputVector + number, num_points - number);
+}
+#endif /* LV_HAVE_SSE2 */
+
+
 #ifdef LV_HAVE_SSE4_1
 #include <smmintrin.h>
 
@@ -297,6 +332,41 @@ static inline void volk_8i_convert_16i_u_orc(int16_t* outputVector,
 
 #include <inttypes.h>
 #include <stdio.h>
+
+#ifdef LV_HAVE_SSE2
+#include <emmintrin.h>
+
+static inline void volk_8i_convert_16i_a_sse2(int16_t* outputVector,
+                                               const int8_t* inputVector,
+                                               unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int sixteenthPoints = num_points / 16;
+
+    const __m128i* inputVectorPtr = (const __m128i*)inputVector;
+    __m128i* outputVectorPtr = (__m128i*)outputVector;
+    const __m128i zero = _mm_setzero_si128();
+    __m128i inputVal;
+
+    for (; number < sixteenthPoints; number++) {
+        inputVal = _mm_load_si128(inputVectorPtr);
+
+        /* unpack with zero in low byte position: [0,b_i] as int16 = b_i << 8 */
+        _mm_store_si128(outputVectorPtr, _mm_unpacklo_epi8(zero, inputVal));
+        outputVectorPtr++;
+
+        _mm_store_si128(outputVectorPtr, _mm_unpackhi_epi8(zero, inputVal));
+        outputVectorPtr++;
+
+        inputVectorPtr++;
+    }
+
+    number = sixteenthPoints * 16;
+    volk_8i_convert_16i_generic(
+        outputVector + number, inputVector + number, num_points - number);
+}
+#endif /* LV_HAVE_SSE2 */
+
 
 #ifdef LV_HAVE_SSE4_1
 #include <smmintrin.h>

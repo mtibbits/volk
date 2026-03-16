@@ -89,6 +89,136 @@ volk_16ic_s32f_deinterleave_real_32f_generic(float* iBuffer,
 }
 #endif /* LV_HAVE_GENERIC */
 
+#ifdef LV_HAVE_SSE
+#include <xmmintrin.h>
+
+static inline void
+volk_16ic_s32f_deinterleave_real_32f_u_sse(float* iBuffer,
+                                           const lv_16sc_t* complexVector,
+                                           const float scalar,
+                                           unsigned int num_points)
+{
+    float* iBufferPtr = iBuffer;
+
+    unsigned int number = 0;
+    const unsigned int quarterPoints = num_points / 4;
+    __m128 iValue;
+
+    const float iScalar = 1.0f / scalar;
+    __m128 invScalar = _mm_set_ps1(iScalar);
+    const int16_t* complexVectorPtr = (const int16_t*)complexVector;
+
+    __VOLK_ATTR_ALIGNED(16) float floatBuffer[4];
+
+    for (; number < quarterPoints; number++) {
+        floatBuffer[0] = (float)(*complexVectorPtr);
+        complexVectorPtr += 2;
+        floatBuffer[1] = (float)(*complexVectorPtr);
+        complexVectorPtr += 2;
+        floatBuffer[2] = (float)(*complexVectorPtr);
+        complexVectorPtr += 2;
+        floatBuffer[3] = (float)(*complexVectorPtr);
+        complexVectorPtr += 2;
+
+        iValue = _mm_load_ps(floatBuffer);
+
+        iValue = _mm_mul_ps(iValue, invScalar);
+
+        _mm_storeu_ps(iBufferPtr, iValue);
+
+        iBufferPtr += 4;
+    }
+
+    number = quarterPoints * 4;
+    volk_16ic_s32f_deinterleave_real_32f_generic(
+        iBufferPtr, complexVector + number, scalar, num_points - number);
+}
+#endif /* LV_HAVE_SSE */
+
+#ifdef LV_HAVE_SSE2
+#include <emmintrin.h>
+
+static inline void
+volk_16ic_s32f_deinterleave_real_32f_u_sse2(float* iBuffer,
+                                            const lv_16sc_t* complexVector,
+                                            const float scalar,
+                                            unsigned int num_points)
+{
+    float* iBufferPtr = iBuffer;
+
+    unsigned int number = 0;
+    const unsigned int quarterPoints = num_points / 4;
+
+    const float iScalar = 1.0f / scalar;
+    __m128 invScalar = _mm_set1_ps(iScalar);
+    const int32_t* complexVectorPtr = (const int32_t*)complexVector;
+
+    for (; number < quarterPoints; number++) {
+        __m128i complexVal = _mm_loadu_si128((const __m128i*)complexVectorPtr);
+        complexVectorPtr += 4;
+
+        /* Extract real (lower 16 bits of each 32-bit element) with sign extension */
+        __m128i iIntVal = _mm_srai_epi32(_mm_slli_epi32(complexVal, 16), 16);
+        __m128 iFloatValue = _mm_cvtepi32_ps(iIntVal);
+
+        iFloatValue = _mm_mul_ps(iFloatValue, invScalar);
+
+        _mm_storeu_ps(iBufferPtr, iFloatValue);
+
+        iBufferPtr += 4;
+    }
+
+    number = quarterPoints * 4;
+    volk_16ic_s32f_deinterleave_real_32f_generic(
+        iBufferPtr, complexVector + number, scalar, num_points - number);
+}
+#endif /* LV_HAVE_SSE2 */
+
+#ifdef LV_HAVE_SSE4_1
+#include <smmintrin.h>
+
+static inline void
+volk_16ic_s32f_deinterleave_real_32f_u_sse4_1(float* iBuffer,
+                                              const lv_16sc_t* complexVector,
+                                              const float scalar,
+                                              unsigned int num_points)
+{
+    float* iBufferPtr = iBuffer;
+
+    unsigned int number = 0;
+    const unsigned int quarterPoints = num_points / 4;
+
+    __m128 iFloatValue;
+
+    const float iScalar = 1.0f / scalar;
+    __m128 invScalar = _mm_set_ps1(iScalar);
+    __m128i complexVal, iIntVal;
+    const int8_t* complexVectorPtr = (const int8_t*)complexVector;
+
+    __m128i moveMask = _mm_set_epi8(
+        0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 13, 12, 9, 8, 5, 4, 1, 0);
+
+    for (; number < quarterPoints; number++) {
+        complexVal = _mm_loadu_si128((const __m128i*)complexVectorPtr);
+        complexVectorPtr += 16;
+        complexVal = _mm_shuffle_epi8(complexVal, moveMask);
+
+        iIntVal = _mm_cvtepi16_epi32(complexVal);
+        iFloatValue = _mm_cvtepi32_ps(iIntVal);
+
+        iFloatValue = _mm_mul_ps(iFloatValue, invScalar);
+
+        _mm_storeu_ps(iBufferPtr, iFloatValue);
+
+        iBufferPtr += 4;
+    }
+
+    number = quarterPoints * 4;
+    volk_16ic_s32f_deinterleave_real_32f_generic(
+        iBufferPtr, complexVector + number, scalar, num_points - number);
+}
+#endif /* LV_HAVE_SSE4_1 */
+
 #ifdef LV_HAVE_AVX2
 #include <immintrin.h>
 
@@ -169,6 +299,45 @@ volk_16ic_s32f_deinterleave_real_32f_u_avx2(float* iBuffer,
     }
 }
 #endif /* LV_HAVE_AVX2 */
+
+#ifdef LV_HAVE_AVX512F
+#include <immintrin.h>
+
+static inline void
+volk_16ic_s32f_deinterleave_real_32f_u_avx512f(float* iBuffer,
+                                               const lv_16sc_t* complexVector,
+                                               const float scalar,
+                                               unsigned int num_points)
+{
+    float* iBufferPtr = iBuffer;
+
+    unsigned int number = 0;
+    const unsigned int sixteenthPoints = num_points / 16;
+
+    const float iScalar = 1.0f / scalar;
+    __m512 invScalar = _mm512_set1_ps(iScalar);
+    const int32_t* complexVectorPtr = (const int32_t*)complexVector;
+
+    for (; number < sixteenthPoints; number++) {
+        __m512i complexVal = _mm512_loadu_si512((const __m512i*)complexVectorPtr);
+        complexVectorPtr += 16;
+
+        /* Extract real (lower 16 bits of each 32-bit element) with sign extension */
+        __m512i iIntVal = _mm512_srai_epi32(_mm512_slli_epi32(complexVal, 16), 16);
+        __m512 iFloatValue = _mm512_cvtepi32_ps(iIntVal);
+
+        iFloatValue = _mm512_mul_ps(iFloatValue, invScalar);
+
+        _mm512_storeu_ps(iBufferPtr, iFloatValue);
+
+        iBufferPtr += 16;
+    }
+
+    number = sixteenthPoints * 16;
+    volk_16ic_s32f_deinterleave_real_32f_generic(
+        iBufferPtr, complexVector + number, scalar, num_points - number);
+}
+#endif /* LV_HAVE_AVX512F */
 
 #ifdef LV_HAVE_NEON
 #include <arm_neon.h>
@@ -285,6 +454,45 @@ volk_16ic_s32f_deinterleave_real_32f_a_sse(float* iBuffer,
     }
 }
 #endif /* LV_HAVE_SSE */
+
+#ifdef LV_HAVE_SSE2
+#include <emmintrin.h>
+
+static inline void
+volk_16ic_s32f_deinterleave_real_32f_a_sse2(float* iBuffer,
+                                            const lv_16sc_t* complexVector,
+                                            const float scalar,
+                                            unsigned int num_points)
+{
+    float* iBufferPtr = iBuffer;
+
+    unsigned int number = 0;
+    const unsigned int quarterPoints = num_points / 4;
+
+    const float iScalar = 1.0f / scalar;
+    __m128 invScalar = _mm_set1_ps(iScalar);
+    const int32_t* complexVectorPtr = (const int32_t*)complexVector;
+
+    for (; number < quarterPoints; number++) {
+        __m128i complexVal = _mm_load_si128((const __m128i*)complexVectorPtr);
+        complexVectorPtr += 4;
+
+        /* Extract real (lower 16 bits of each 32-bit element) with sign extension */
+        __m128i iIntVal = _mm_srai_epi32(_mm_slli_epi32(complexVal, 16), 16);
+        __m128 iFloatValue = _mm_cvtepi32_ps(iIntVal);
+
+        iFloatValue = _mm_mul_ps(iFloatValue, invScalar);
+
+        _mm_store_ps(iBufferPtr, iFloatValue);
+
+        iBufferPtr += 4;
+    }
+
+    number = quarterPoints * 4;
+    volk_16ic_s32f_deinterleave_real_32f_generic(
+        iBufferPtr, complexVector + number, scalar, num_points - number);
+}
+#endif /* LV_HAVE_SSE2 */
 
 #ifdef LV_HAVE_SSE4_1
 #include <smmintrin.h>
@@ -414,5 +622,44 @@ volk_16ic_s32f_deinterleave_real_32f_a_avx2(float* iBuffer,
     }
 }
 #endif /* LV_HAVE_AVX2 */
+
+#ifdef LV_HAVE_AVX512F
+#include <immintrin.h>
+
+static inline void
+volk_16ic_s32f_deinterleave_real_32f_a_avx512f(float* iBuffer,
+                                               const lv_16sc_t* complexVector,
+                                               const float scalar,
+                                               unsigned int num_points)
+{
+    float* iBufferPtr = iBuffer;
+
+    unsigned int number = 0;
+    const unsigned int sixteenthPoints = num_points / 16;
+
+    const float iScalar = 1.0f / scalar;
+    __m512 invScalar = _mm512_set1_ps(iScalar);
+    const int32_t* complexVectorPtr = (const int32_t*)complexVector;
+
+    for (; number < sixteenthPoints; number++) {
+        __m512i complexVal = _mm512_load_si512((const __m512i*)complexVectorPtr);
+        complexVectorPtr += 16;
+
+        /* Extract real (lower 16 bits of each 32-bit element) with sign extension */
+        __m512i iIntVal = _mm512_srai_epi32(_mm512_slli_epi32(complexVal, 16), 16);
+        __m512 iFloatValue = _mm512_cvtepi32_ps(iIntVal);
+
+        iFloatValue = _mm512_mul_ps(iFloatValue, invScalar);
+
+        _mm512_store_ps(iBufferPtr, iFloatValue);
+
+        iBufferPtr += 16;
+    }
+
+    number = sixteenthPoints * 16;
+    volk_16ic_s32f_deinterleave_real_32f_generic(
+        iBufferPtr, complexVector + number, scalar, num_points - number);
+}
+#endif /* LV_HAVE_AVX512F */
 
 #endif /* INCLUDED_volk_16ic_s32f_deinterleave_real_32f_a_H */

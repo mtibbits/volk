@@ -90,6 +90,59 @@ static inline void volk_8i_s32f_convert_32f_generic(float* outputVector,
 }
 #endif /* LV_HAVE_GENERIC */
 
+#ifdef LV_HAVE_SSE2
+#include <emmintrin.h>
+
+static inline void volk_8i_s32f_convert_32f_u_sse2(float* outputVector,
+                                                    const int8_t* inputVector,
+                                                    const float scalar,
+                                                    unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int sixteenthPoints = num_points / 16;
+
+    float* outputVectorPtr = outputVector;
+    const float iScalar = 1.0f / scalar;
+    const __m128 invScalar = _mm_set_ps1(iScalar);
+    const int8_t* inputVectorPtr = inputVector;
+    const __m128i zero = _mm_setzero_si128();
+
+    for (; number < sixteenthPoints; number++) {
+        const __m128i inputVal = _mm_loadu_si128((const __m128i*)inputVectorPtr);
+
+        /* Sign-extend int8 to int16 */
+        const __m128i sign8 = _mm_cmpgt_epi8(zero, inputVal);
+        const __m128i lo16 = _mm_unpacklo_epi8(inputVal, sign8);
+        const __m128i hi16 = _mm_unpackhi_epi8(inputVal, sign8);
+
+        /* Sign-extend int16 to int32, convert to float, multiply */
+        __m128i sign16 = _mm_cmpgt_epi16(zero, lo16);
+        __m128 ret = _mm_mul_ps(_mm_cvtepi32_ps(_mm_unpacklo_epi16(lo16, sign16)), invScalar);
+        _mm_storeu_ps(outputVectorPtr, ret);
+        outputVectorPtr += 4;
+
+        ret = _mm_mul_ps(_mm_cvtepi32_ps(_mm_unpackhi_epi16(lo16, sign16)), invScalar);
+        _mm_storeu_ps(outputVectorPtr, ret);
+        outputVectorPtr += 4;
+
+        sign16 = _mm_cmpgt_epi16(zero, hi16);
+        ret = _mm_mul_ps(_mm_cvtepi32_ps(_mm_unpacklo_epi16(hi16, sign16)), invScalar);
+        _mm_storeu_ps(outputVectorPtr, ret);
+        outputVectorPtr += 4;
+
+        ret = _mm_mul_ps(_mm_cvtepi32_ps(_mm_unpackhi_epi16(hi16, sign16)), invScalar);
+        _mm_storeu_ps(outputVectorPtr, ret);
+        outputVectorPtr += 4;
+
+        inputVectorPtr += 16;
+    }
+
+    number = sixteenthPoints * 16;
+    volk_8i_s32f_convert_32f_generic(
+        outputVector + number, inputVector + number, scalar, num_points - number);
+}
+#endif /* LV_HAVE_SSE2 */
+
 #ifdef LV_HAVE_SSE4_1
 #include <smmintrin.h>
 
@@ -379,6 +432,59 @@ static inline void volk_8i_s32f_convert_32f_u_orc(float* outputVector,
 
 #include <inttypes.h>
 #include <stdio.h>
+
+#ifdef LV_HAVE_SSE2
+#include <emmintrin.h>
+
+static inline void volk_8i_s32f_convert_32f_a_sse2(float* outputVector,
+                                                    const int8_t* inputVector,
+                                                    const float scalar,
+                                                    unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int sixteenthPoints = num_points / 16;
+
+    float* outputVectorPtr = outputVector;
+    const float iScalar = 1.0f / scalar;
+    const __m128 invScalar = _mm_set_ps1(iScalar);
+    const int8_t* inputVectorPtr = inputVector;
+    const __m128i zero = _mm_setzero_si128();
+
+    for (; number < sixteenthPoints; number++) {
+        const __m128i inputVal = _mm_load_si128((const __m128i*)inputVectorPtr);
+
+        /* Sign-extend int8 to int16 */
+        const __m128i sign8 = _mm_cmpgt_epi8(zero, inputVal);
+        const __m128i lo16 = _mm_unpacklo_epi8(inputVal, sign8);
+        const __m128i hi16 = _mm_unpackhi_epi8(inputVal, sign8);
+
+        /* Sign-extend int16 to int32, convert to float, multiply */
+        __m128i sign16 = _mm_cmpgt_epi16(zero, lo16);
+        __m128 ret = _mm_mul_ps(_mm_cvtepi32_ps(_mm_unpacklo_epi16(lo16, sign16)), invScalar);
+        _mm_store_ps(outputVectorPtr, ret);
+        outputVectorPtr += 4;
+
+        ret = _mm_mul_ps(_mm_cvtepi32_ps(_mm_unpackhi_epi16(lo16, sign16)), invScalar);
+        _mm_store_ps(outputVectorPtr, ret);
+        outputVectorPtr += 4;
+
+        sign16 = _mm_cmpgt_epi16(zero, hi16);
+        ret = _mm_mul_ps(_mm_cvtepi32_ps(_mm_unpacklo_epi16(hi16, sign16)), invScalar);
+        _mm_store_ps(outputVectorPtr, ret);
+        outputVectorPtr += 4;
+
+        ret = _mm_mul_ps(_mm_cvtepi32_ps(_mm_unpackhi_epi16(hi16, sign16)), invScalar);
+        _mm_store_ps(outputVectorPtr, ret);
+        outputVectorPtr += 4;
+
+        inputVectorPtr += 16;
+    }
+
+    number = sixteenthPoints * 16;
+    volk_8i_s32f_convert_32f_generic(
+        outputVector + number, inputVector + number, scalar, num_points - number);
+}
+#endif /* LV_HAVE_SSE2 */
 
 #ifdef LV_HAVE_SSE4_1
 #include <smmintrin.h>

@@ -73,6 +73,38 @@ static inline void volk_32f_s32f_normalize_generic(float* vecBuffer,
 }
 #endif /* LV_HAVE_GENERIC */
 
+#ifdef LV_HAVE_SSE
+#include <xmmintrin.h>
+
+static inline void volk_32f_s32f_normalize_u_sse(float* vecBuffer,
+                                                 const float scalar,
+                                                 unsigned int num_points)
+{
+    unsigned int number = 0;
+    float* inputPtr = vecBuffer;
+
+    const float invScalar = 1.0f / scalar;
+    __m128 vecScalar = _mm_set_ps1(invScalar);
+
+    __m128 input1;
+
+    const uint64_t quarterPoints = num_points / 4;
+    for (; number < quarterPoints; number++) {
+
+        input1 = _mm_loadu_ps(inputPtr);
+
+        input1 = _mm_mul_ps(input1, vecScalar);
+
+        _mm_storeu_ps(inputPtr, input1);
+
+        inputPtr += 4;
+    }
+
+    number = quarterPoints * 4;
+    volk_32f_s32f_normalize_generic(inputPtr, scalar, num_points - number);
+}
+#endif /* LV_HAVE_SSE */
+
 #ifdef LV_HAVE_AVX
 #include <immintrin.h>
 
@@ -107,6 +139,38 @@ static inline void volk_32f_s32f_normalize_u_avx(float* vecBuffer,
     }
 }
 #endif /* LV_HAVE_AVX */
+
+#ifdef LV_HAVE_AVX512F
+#include <immintrin.h>
+
+static inline void volk_32f_s32f_normalize_u_avx512f(float* vecBuffer,
+                                                     const float scalar,
+                                                     unsigned int num_points)
+{
+    unsigned int number = 0;
+    float* inputPtr = vecBuffer;
+
+    const float invScalar = 1.0f / scalar;
+    __m512 vecScalar = _mm512_set1_ps(invScalar);
+
+    __m512 input1;
+
+    const uint64_t sixteenthPoints = num_points / 16;
+    for (; number < sixteenthPoints; number++) {
+
+        input1 = _mm512_loadu_ps(inputPtr);
+
+        input1 = _mm512_mul_ps(input1, vecScalar);
+
+        _mm512_storeu_ps(inputPtr, input1);
+
+        inputPtr += 16;
+    }
+
+    number = sixteenthPoints * 16;
+    volk_32f_s32f_normalize_generic(inputPtr, scalar, num_points - number);
+}
+#endif /* LV_HAVE_AVX512F */
 
 #ifdef LV_HAVE_NEON
 #include <arm_neon.h>
@@ -275,5 +339,37 @@ static inline void volk_32f_s32f_normalize_a_avx(float* vecBuffer,
     }
 }
 #endif /* LV_HAVE_AVX */
+
+#ifdef LV_HAVE_AVX512F
+#include <immintrin.h>
+
+static inline void volk_32f_s32f_normalize_a_avx512f(float* vecBuffer,
+                                                     const float scalar,
+                                                     unsigned int num_points)
+{
+    unsigned int number = 0;
+    float* inputPtr = vecBuffer;
+
+    const float invScalar = 1.0f / scalar;
+    __m512 vecScalar = _mm512_set1_ps(invScalar);
+
+    __m512 input1;
+
+    const uint64_t sixteenthPoints = num_points / 16;
+    for (; number < sixteenthPoints; number++) {
+
+        input1 = _mm512_load_ps(inputPtr);
+
+        input1 = _mm512_mul_ps(input1, vecScalar);
+
+        _mm512_store_ps(inputPtr, input1);
+
+        inputPtr += 16;
+    }
+
+    number = sixteenthPoints * 16;
+    volk_32f_s32f_normalize_generic(inputPtr, scalar, num_points - number);
+}
+#endif /* LV_HAVE_AVX512F */
 
 #endif /* INCLUDED_volk_32f_s32f_normalize_a_H */

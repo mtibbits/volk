@@ -209,6 +209,59 @@ static inline void volk_32f_s32f_s32f_mod_range_32f_u_avx(float* outputVector,
 #endif /* LV_HAVE_AVX */
 
 
+#ifdef LV_HAVE_AVX512F
+#include <immintrin.h>
+
+static inline void volk_32f_s32f_s32f_mod_range_32f_u_avx512f(float* outputVector,
+                                                               const float* inputVector,
+                                                               const float lower_bound,
+                                                               const float upper_bound,
+                                                               unsigned int num_points)
+{
+    const __m512 lower = _mm512_set1_ps(lower_bound);
+    const __m512 upper = _mm512_set1_ps(upper_bound);
+    const __m512 distance = _mm512_sub_ps(upper, lower);
+    const __m512 one = _mm512_set1_ps(1.0f);
+    const __m512 minus_one = _mm512_set1_ps(-1.0f);
+
+    const float* inPtr = inputVector;
+    float* outPtr = outputVector;
+    const size_t sixteen_points = num_points / 16;
+    for (size_t counter = 0; counter < sixteen_points; counter++) {
+        __m512 input = _mm512_loadu_ps(inPtr);
+
+        __mmask16 is_smaller = _mm512_cmp_ps_mask(input, lower, _CMP_LT_OQ);
+        __mmask16 is_bigger = _mm512_cmp_ps_mask(input, upper, _CMP_GT_OQ);
+
+        // Find excess (positive values for both cases)
+        __m512 excess = _mm512_setzero_ps();
+        excess = _mm512_mask_mov_ps(excess, is_smaller, _mm512_sub_ps(lower, input));
+        excess = _mm512_mask_mov_ps(excess, is_bigger, _mm512_sub_ps(input, upper));
+
+        // count = int(excess / distance) + 1
+        excess = _mm512_div_ps(excess, distance);
+        excess = _mm512_cvtepi32_ps(_mm512_cvttps_epi32(excess));
+        excess = _mm512_add_ps(excess, one);
+
+        // Sign adjustment: +1 for smaller, -1 for bigger
+        __m512 adj = _mm512_setzero_ps();
+        adj = _mm512_mask_mov_ps(adj, is_smaller, one);
+        adj = _mm512_mask_mov_ps(adj, is_bigger, minus_one);
+
+        // Scale by distance and sign, add to input
+        excess = _mm512_mul_ps(_mm512_mul_ps(excess, adj), distance);
+        __m512 output = _mm512_add_ps(input, excess);
+        _mm512_storeu_ps(outPtr, output);
+        inPtr += 16;
+        outPtr += 16;
+    }
+
+    volk_32f_s32f_s32f_mod_range_32f_generic(
+        outPtr, inPtr, lower_bound, upper_bound, num_points - sixteen_points * 16);
+}
+#endif /* LV_HAVE_AVX512F */
+
+
 #ifdef LV_HAVE_NEON
 #include <arm_neon.h>
 
@@ -493,5 +546,58 @@ static inline void volk_32f_s32f_s32f_mod_range_32f_a_avx(float* outputVector,
         outPtr, inPtr, lower_bound, upper_bound, num_points - eight_points * 8);
 }
 #endif /* LV_HAVE_AVX */
+
+
+#ifdef LV_HAVE_AVX512F
+#include <immintrin.h>
+
+static inline void volk_32f_s32f_s32f_mod_range_32f_a_avx512f(float* outputVector,
+                                                               const float* inputVector,
+                                                               const float lower_bound,
+                                                               const float upper_bound,
+                                                               unsigned int num_points)
+{
+    const __m512 lower = _mm512_set1_ps(lower_bound);
+    const __m512 upper = _mm512_set1_ps(upper_bound);
+    const __m512 distance = _mm512_sub_ps(upper, lower);
+    const __m512 one = _mm512_set1_ps(1.0f);
+    const __m512 minus_one = _mm512_set1_ps(-1.0f);
+
+    const float* inPtr = inputVector;
+    float* outPtr = outputVector;
+    const size_t sixteen_points = num_points / 16;
+    for (size_t counter = 0; counter < sixteen_points; counter++) {
+        __m512 input = _mm512_load_ps(inPtr);
+
+        __mmask16 is_smaller = _mm512_cmp_ps_mask(input, lower, _CMP_LT_OQ);
+        __mmask16 is_bigger = _mm512_cmp_ps_mask(input, upper, _CMP_GT_OQ);
+
+        // Find excess (positive values for both cases)
+        __m512 excess = _mm512_setzero_ps();
+        excess = _mm512_mask_mov_ps(excess, is_smaller, _mm512_sub_ps(lower, input));
+        excess = _mm512_mask_mov_ps(excess, is_bigger, _mm512_sub_ps(input, upper));
+
+        // count = int(excess / distance) + 1
+        excess = _mm512_div_ps(excess, distance);
+        excess = _mm512_cvtepi32_ps(_mm512_cvttps_epi32(excess));
+        excess = _mm512_add_ps(excess, one);
+
+        // Sign adjustment: +1 for smaller, -1 for bigger
+        __m512 adj = _mm512_setzero_ps();
+        adj = _mm512_mask_mov_ps(adj, is_smaller, one);
+        adj = _mm512_mask_mov_ps(adj, is_bigger, minus_one);
+
+        // Scale by distance and sign, add to input
+        excess = _mm512_mul_ps(_mm512_mul_ps(excess, adj), distance);
+        __m512 output = _mm512_add_ps(input, excess);
+        _mm512_store_ps(outPtr, output);
+        inPtr += 16;
+        outPtr += 16;
+    }
+
+    volk_32f_s32f_s32f_mod_range_32f_generic(
+        outPtr, inPtr, lower_bound, upper_bound, num_points - sixteen_points * 16);
+}
+#endif /* LV_HAVE_AVX512F */
 
 #endif /* INCLUDED_volk_32f_s32f_s32f_mod_range_32f_a_H */

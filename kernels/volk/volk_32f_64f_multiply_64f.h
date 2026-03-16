@@ -81,6 +81,50 @@ static inline void volk_32f_64f_multiply_64f_generic(double* cVector,
 #endif /* LV_HAVE_GENERIC */
 
 
+#ifdef LV_HAVE_SSE2
+
+#include <emmintrin.h>
+#include <xmmintrin.h>
+
+static inline void volk_32f_64f_multiply_64f_u_sse2(double* cVector,
+                                                     const float* aVector,
+                                                     const double* bVector,
+                                                     unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int quarter_points = num_points / 4;
+
+    double* cPtr = cVector;
+    const float* aPtr = aVector;
+    const double* bPtr = bVector;
+
+    __m128 aVal;
+    __m128d aDbl1, aDbl2, bVal1, bVal2, cVal1, cVal2;
+    for (; number < quarter_points; number++) {
+
+        aVal = _mm_loadu_ps(aPtr);
+        bVal1 = _mm_loadu_pd(bPtr);
+        bVal2 = _mm_loadu_pd(bPtr + 2);
+
+        aDbl1 = _mm_cvtps_pd(aVal);
+        aDbl2 = _mm_cvtps_pd(_mm_movehl_ps(aVal, aVal));
+
+        cVal1 = _mm_mul_pd(aDbl1, bVal1);
+        cVal2 = _mm_mul_pd(aDbl2, bVal2);
+
+        _mm_storeu_pd(cPtr, cVal1);
+        _mm_storeu_pd(cPtr + 2, cVal2);
+
+        aPtr += 4;
+        bPtr += 4;
+        cPtr += 4;
+    }
+
+    volk_32f_64f_multiply_64f_generic(cPtr, aPtr, bPtr, num_points - quarter_points * 4);
+}
+
+#endif /* LV_HAVE_SSE2 */
+
 #ifdef LV_HAVE_AVX
 
 #include <immintrin.h>
@@ -131,6 +175,50 @@ static inline void volk_32f_64f_multiply_64f_u_avx(double* cVector,
 }
 
 #endif /* LV_HAVE_AVX */
+
+#ifdef LV_HAVE_AVX512F
+
+#include <immintrin.h>
+
+static inline void volk_32f_64f_multiply_64f_u_avx512f(double* cVector,
+                                                        const float* aVector,
+                                                        const double* bVector,
+                                                        unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int sixteenth_points = num_points / 16;
+
+    double* cPtr = cVector;
+    const float* aPtr = aVector;
+    const double* bPtr = bVector;
+
+    for (; number < sixteenth_points; number++) {
+
+        __m256 aVal1 = _mm256_loadu_ps(aPtr);
+        __m256 aVal2 = _mm256_loadu_ps(aPtr + 8);
+
+        __m512d aDbl1 = _mm512_cvtps_pd(aVal1);
+        __m512d aDbl2 = _mm512_cvtps_pd(aVal2);
+
+        __m512d bVal1 = _mm512_loadu_pd(bPtr);
+        __m512d bVal2 = _mm512_loadu_pd(bPtr + 8);
+
+        __m512d cVal1 = _mm512_mul_pd(aDbl1, bVal1);
+        __m512d cVal2 = _mm512_mul_pd(aDbl2, bVal2);
+
+        _mm512_storeu_pd(cPtr, cVal1);
+        _mm512_storeu_pd(cPtr + 8, cVal2);
+
+        aPtr += 16;
+        bPtr += 16;
+        cPtr += 16;
+    }
+
+    volk_32f_64f_multiply_64f_generic(
+        cPtr, aPtr, bPtr, num_points - sixteenth_points * 16);
+}
+
+#endif /* LV_HAVE_AVX512F */
 
 #ifdef LV_HAVE_NEONV8
 #include <arm_neon.h>
@@ -208,6 +296,50 @@ static inline void volk_32f_64f_multiply_64f_rvv(double* cVector,
 #ifndef INCLUDED_volk_32f_64f_multiply_64f_a_H
 #define INCLUDED_volk_32f_64f_multiply_64f_a_H
 
+#ifdef LV_HAVE_SSE2
+
+#include <emmintrin.h>
+#include <xmmintrin.h>
+
+static inline void volk_32f_64f_multiply_64f_a_sse2(double* cVector,
+                                                     const float* aVector,
+                                                     const double* bVector,
+                                                     unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int quarter_points = num_points / 4;
+
+    double* cPtr = cVector;
+    const float* aPtr = aVector;
+    const double* bPtr = bVector;
+
+    __m128 aVal;
+    __m128d aDbl1, aDbl2, bVal1, bVal2, cVal1, cVal2;
+    for (; number < quarter_points; number++) {
+
+        aVal = _mm_load_ps(aPtr);
+        bVal1 = _mm_load_pd(bPtr);
+        bVal2 = _mm_load_pd(bPtr + 2);
+
+        aDbl1 = _mm_cvtps_pd(aVal);
+        aDbl2 = _mm_cvtps_pd(_mm_movehl_ps(aVal, aVal));
+
+        cVal1 = _mm_mul_pd(aDbl1, bVal1);
+        cVal2 = _mm_mul_pd(aDbl2, bVal2);
+
+        _mm_store_pd(cPtr, cVal1);
+        _mm_store_pd(cPtr + 2, cVal2);
+
+        aPtr += 4;
+        bPtr += 4;
+        cPtr += 4;
+    }
+
+    volk_32f_64f_multiply_64f_generic(cPtr, aPtr, bPtr, num_points - quarter_points * 4);
+}
+
+#endif /* LV_HAVE_SSE2 */
+
 #ifdef LV_HAVE_AVX
 
 #include <immintrin.h>
@@ -258,5 +390,49 @@ static inline void volk_32f_64f_multiply_64f_a_avx(double* cVector,
 }
 
 #endif /* LV_HAVE_AVX */
+
+#ifdef LV_HAVE_AVX512F
+
+#include <immintrin.h>
+
+static inline void volk_32f_64f_multiply_64f_a_avx512f(double* cVector,
+                                                        const float* aVector,
+                                                        const double* bVector,
+                                                        unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int sixteenth_points = num_points / 16;
+
+    double* cPtr = cVector;
+    const float* aPtr = aVector;
+    const double* bPtr = bVector;
+
+    for (; number < sixteenth_points; number++) {
+
+        __m256 aVal1 = _mm256_load_ps(aPtr);
+        __m256 aVal2 = _mm256_load_ps(aPtr + 8);
+
+        __m512d aDbl1 = _mm512_cvtps_pd(aVal1);
+        __m512d aDbl2 = _mm512_cvtps_pd(aVal2);
+
+        __m512d bVal1 = _mm512_load_pd(bPtr);
+        __m512d bVal2 = _mm512_load_pd(bPtr + 8);
+
+        __m512d cVal1 = _mm512_mul_pd(aDbl1, bVal1);
+        __m512d cVal2 = _mm512_mul_pd(aDbl2, bVal2);
+
+        _mm512_store_pd(cPtr, cVal1);
+        _mm512_store_pd(cPtr + 8, cVal2);
+
+        aPtr += 16;
+        bPtr += 16;
+        cPtr += 16;
+    }
+
+    volk_32f_64f_multiply_64f_generic(
+        cPtr, aPtr, bPtr, num_points - sixteenth_points * 16);
+}
+
+#endif /* LV_HAVE_AVX512F */
 
 #endif /* INCLUDED_volk_32f_64f_multiply_64f_a_H */

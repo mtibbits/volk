@@ -102,6 +102,75 @@ volk_32f_log2_32f_generic(float* bVector, const float* aVector, unsigned int num
 }
 #endif /* LV_HAVE_GENERIC */
 
+#ifdef LV_HAVE_SSE2
+#include <emmintrin.h>
+#include <volk/volk_sse_intrinsics.h>
+
+static inline void
+volk_32f_log2_32f_u_sse2(float* bVector, const float* aVector, unsigned int num_points)
+{
+    float* bPtr = bVector;
+    const float* aPtr = aVector;
+
+    unsigned int number = 0;
+    const unsigned int quarterPoints = num_points / 4;
+
+    const __m128i exp_mask = _mm_set1_epi32(0x7f800000);
+    const __m128i mant_mask = _mm_set1_epi32(0x007fffff);
+    const __m128i one_bits = _mm_set1_epi32(0x3f800000);
+    const __m128i exp_bias = _mm_set1_epi32(127);
+    const __m128 one = _mm_set1_ps(1.0f);
+
+    for (; number < quarterPoints; number++) {
+        __m128 aVal = _mm_loadu_ps(aPtr);
+
+        // Check for special values
+        __m128 zero_mask = _mm_cmpeq_ps(aVal, _mm_setzero_ps());
+        __m128 neg_mask = _mm_cmplt_ps(aVal, _mm_setzero_ps());
+        __m128 inf_mask = _mm_cmpeq_ps(aVal, _mm_set1_ps(INFINITY));
+        __m128 nan_mask = _mm_cmpunord_ps(aVal, aVal);
+        __m128 invalid_mask = _mm_or_ps(neg_mask, nan_mask);
+
+        __m128i aVal_i = _mm_castps_si128(aVal);
+
+        // Extract exponent: (aVal_i & exp_mask) >> 23 - bias
+        __m128i exp_i = _mm_srli_epi32(_mm_and_si128(aVal_i, exp_mask), 23);
+        exp_i = _mm_sub_epi32(exp_i, exp_bias);
+        __m128 exp_f = _mm_cvtepi32_ps(exp_i);
+
+        // Extract mantissa as float in [1, 2)
+        __m128 frac =
+            _mm_castsi128_ps(_mm_or_si128(_mm_and_si128(aVal_i, mant_mask), one_bits));
+
+        // Evaluate degree-6 polynomial
+        __m128 poly = _mm_log2_poly_sse(frac);
+
+        // result = exp + poly * (frac - 1)
+        __m128 bVal = _mm_add_ps(exp_f, _mm_mul_ps(poly, _mm_sub_ps(frac, one)));
+
+        // Replace special values using SSE2 mask ops (no _mm_blendv_ps)
+        // zero → -127
+        bVal = _mm_or_ps(_mm_andnot_ps(zero_mask, bVal),
+                         _mm_and_ps(zero_mask, _mm_set1_ps(-127.0f)));
+        // inf → 127
+        bVal = _mm_or_ps(_mm_andnot_ps(inf_mask, bVal),
+                         _mm_and_ps(inf_mask, _mm_set1_ps(127.0f)));
+        // neg/NaN → NaN
+        bVal = _mm_or_ps(_mm_andnot_ps(invalid_mask, bVal),
+                         _mm_and_ps(invalid_mask, _mm_set1_ps(NAN)));
+
+        _mm_storeu_ps(bPtr, bVal);
+
+        aPtr += 4;
+        bPtr += 4;
+    }
+
+    number = quarterPoints * 4;
+    volk_32f_log2_32f_generic(bPtr, aPtr, num_points - number);
+}
+
+#endif /* LV_HAVE_SSE2 */
+
 #ifdef LV_HAVE_SSE4_1
 #include <smmintrin.h>
 #include <volk/volk_sse_intrinsics.h>
@@ -612,6 +681,73 @@ volk_32f_log2_32f_rvv(float* bVector, const float* aVector, unsigned int num_poi
 
 #ifndef INCLUDED_volk_32f_log2_32f_a_H
 #define INCLUDED_volk_32f_log2_32f_a_H
+
+#ifdef LV_HAVE_SSE2
+
+static inline void
+volk_32f_log2_32f_a_sse2(float* bVector, const float* aVector, unsigned int num_points)
+{
+    float* bPtr = bVector;
+    const float* aPtr = aVector;
+
+    unsigned int number = 0;
+    const unsigned int quarterPoints = num_points / 4;
+
+    const __m128i exp_mask = _mm_set1_epi32(0x7f800000);
+    const __m128i mant_mask = _mm_set1_epi32(0x007fffff);
+    const __m128i one_bits = _mm_set1_epi32(0x3f800000);
+    const __m128i exp_bias = _mm_set1_epi32(127);
+    const __m128 one = _mm_set1_ps(1.0f);
+
+    for (; number < quarterPoints; number++) {
+        __m128 aVal = _mm_load_ps(aPtr);
+
+        // Check for special values
+        __m128 zero_mask = _mm_cmpeq_ps(aVal, _mm_setzero_ps());
+        __m128 neg_mask = _mm_cmplt_ps(aVal, _mm_setzero_ps());
+        __m128 inf_mask = _mm_cmpeq_ps(aVal, _mm_set1_ps(INFINITY));
+        __m128 nan_mask = _mm_cmpunord_ps(aVal, aVal);
+        __m128 invalid_mask = _mm_or_ps(neg_mask, nan_mask);
+
+        __m128i aVal_i = _mm_castps_si128(aVal);
+
+        // Extract exponent: (aVal_i & exp_mask) >> 23 - bias
+        __m128i exp_i = _mm_srli_epi32(_mm_and_si128(aVal_i, exp_mask), 23);
+        exp_i = _mm_sub_epi32(exp_i, exp_bias);
+        __m128 exp_f = _mm_cvtepi32_ps(exp_i);
+
+        // Extract mantissa as float in [1, 2)
+        __m128 frac =
+            _mm_castsi128_ps(_mm_or_si128(_mm_and_si128(aVal_i, mant_mask), one_bits));
+
+        // Evaluate degree-6 polynomial
+        __m128 poly = _mm_log2_poly_sse(frac);
+
+        // result = exp + poly * (frac - 1)
+        __m128 bVal = _mm_add_ps(exp_f, _mm_mul_ps(poly, _mm_sub_ps(frac, one)));
+
+        // Replace special values using SSE2 mask ops (no _mm_blendv_ps)
+        // zero → -127
+        bVal = _mm_or_ps(_mm_andnot_ps(zero_mask, bVal),
+                         _mm_and_ps(zero_mask, _mm_set1_ps(-127.0f)));
+        // inf → 127
+        bVal = _mm_or_ps(_mm_andnot_ps(inf_mask, bVal),
+                         _mm_and_ps(inf_mask, _mm_set1_ps(127.0f)));
+        // neg/NaN → NaN
+        bVal = _mm_or_ps(_mm_andnot_ps(invalid_mask, bVal),
+                         _mm_and_ps(invalid_mask, _mm_set1_ps(NAN)));
+
+        _mm_store_ps(bPtr, bVal);
+
+        aPtr += 4;
+        bPtr += 4;
+    }
+
+    number = quarterPoints * 4;
+    volk_32f_log2_32f_generic(bPtr, aPtr, num_points - number);
+}
+
+#endif /* LV_HAVE_SSE2 */
 
 #ifdef LV_HAVE_SSE4_1
 

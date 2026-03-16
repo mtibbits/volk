@@ -80,6 +80,43 @@ static inline void volk_32fc_32f_add_32fc_generic(lv_32fc_t* cVector,
 #endif /* LV_HAVE_GENERIC */
 
 
+#ifdef LV_HAVE_SSE
+#include <xmmintrin.h>
+
+static inline void volk_32fc_32f_add_32fc_u_sse(lv_32fc_t* cVector,
+                                                const lv_32fc_t* aVector,
+                                                const float* bVector,
+                                                unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int fourthPoints = num_points / 4;
+
+    lv_32fc_t* cPtr = cVector;
+    const lv_32fc_t* aPtr = aVector;
+    const float* bPtr = bVector;
+
+    __m128 aVal1, aVal2, bVal, bLo, bHi;
+    __m128 zero = _mm_setzero_ps();
+    for (; number < fourthPoints; number++) {
+        aVal1 = _mm_loadu_ps((const float*)aPtr);
+        aVal2 = _mm_loadu_ps((const float*)(aPtr + 2));
+        bVal = _mm_loadu_ps(bPtr);
+
+        bLo = _mm_unpacklo_ps(bVal, zero);
+        bHi = _mm_unpackhi_ps(bVal, zero);
+
+        _mm_storeu_ps((float*)cPtr, _mm_add_ps(aVal1, bLo));
+        _mm_storeu_ps((float*)(cPtr + 2), _mm_add_ps(aVal2, bHi));
+
+        aPtr += 4;
+        bPtr += 4;
+        cPtr += 4;
+    }
+
+    volk_32fc_32f_add_32fc_generic(cPtr, aPtr, bPtr, num_points - fourthPoints * 4);
+}
+#endif /* LV_HAVE_SSE */
+
 #ifdef LV_HAVE_AVX
 #include <immintrin.h>
 
@@ -130,6 +167,39 @@ static inline void volk_32fc_32f_add_32fc_u_avx(lv_32fc_t* cVector,
     }
 }
 #endif /* LV_HAVE_AVX */
+
+#ifdef LV_HAVE_AVX512F
+#include <immintrin.h>
+
+static inline void volk_32fc_32f_add_32fc_u_avx512f(lv_32fc_t* cVector,
+                                                     const lv_32fc_t* aVector,
+                                                     const float* bVector,
+                                                     unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int eighthPoints = num_points / 8;
+
+    const float* aPtr = (const float*)aVector;
+    const float* bPtr = bVector;
+    float* cPtr = (float*)cVector;
+
+    for (; number < eighthPoints; number++) {
+        __m512 aVal = _mm512_loadu_ps(aPtr);
+        __m256i bInt = _mm256_loadu_si256((const __m256i*)bPtr);
+        __m512i bWide = _mm512_cvtepu32_epi64(bInt);
+        __m512 bVal = _mm512_castsi512_ps(bWide);
+
+        _mm512_storeu_ps(cPtr, _mm512_add_ps(aVal, bVal));
+
+        aPtr += 16;
+        bPtr += 8;
+        cPtr += 16;
+    }
+
+    volk_32fc_32f_add_32fc_generic(
+        (lv_32fc_t*)cPtr, (const lv_32fc_t*)aPtr, bPtr, num_points - eighthPoints * 8);
+}
+#endif /* LV_HAVE_AVX512F */
 
 #ifdef LV_HAVE_NEON
 #include <arm_neon.h>
@@ -252,6 +322,43 @@ static inline void volk_32fc_32f_add_32fc_rvv(lv_32fc_t* cVector,
 #ifndef INCLUDED_volk_32fc_32f_add_32fc_a_H
 #define INCLUDED_volk_32fc_32f_add_32fc_a_H
 
+#ifdef LV_HAVE_SSE
+#include <xmmintrin.h>
+
+static inline void volk_32fc_32f_add_32fc_a_sse(lv_32fc_t* cVector,
+                                                const lv_32fc_t* aVector,
+                                                const float* bVector,
+                                                unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int fourthPoints = num_points / 4;
+
+    lv_32fc_t* cPtr = cVector;
+    const lv_32fc_t* aPtr = aVector;
+    const float* bPtr = bVector;
+
+    __m128 aVal1, aVal2, bVal, bLo, bHi;
+    __m128 zero = _mm_setzero_ps();
+    for (; number < fourthPoints; number++) {
+        aVal1 = _mm_load_ps((const float*)aPtr);
+        aVal2 = _mm_load_ps((const float*)(aPtr + 2));
+        bVal = _mm_load_ps(bPtr);
+
+        bLo = _mm_unpacklo_ps(bVal, zero);
+        bHi = _mm_unpackhi_ps(bVal, zero);
+
+        _mm_store_ps((float*)cPtr, _mm_add_ps(aVal1, bLo));
+        _mm_store_ps((float*)(cPtr + 2), _mm_add_ps(aVal2, bHi));
+
+        aPtr += 4;
+        bPtr += 4;
+        cPtr += 4;
+    }
+
+    volk_32fc_32f_add_32fc_generic(cPtr, aPtr, bPtr, num_points - fourthPoints * 4);
+}
+#endif /* LV_HAVE_SSE */
+
 #ifdef LV_HAVE_AVX
 #include <immintrin.h>
 
@@ -302,5 +409,38 @@ static inline void volk_32fc_32f_add_32fc_a_avx(lv_32fc_t* cVector,
     }
 }
 #endif /* LV_HAVE_AVX */
+
+#ifdef LV_HAVE_AVX512F
+#include <immintrin.h>
+
+static inline void volk_32fc_32f_add_32fc_a_avx512f(lv_32fc_t* cVector,
+                                                     const lv_32fc_t* aVector,
+                                                     const float* bVector,
+                                                     unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int eighthPoints = num_points / 8;
+
+    const float* aPtr = (const float*)aVector;
+    const float* bPtr = bVector;
+    float* cPtr = (float*)cVector;
+
+    for (; number < eighthPoints; number++) {
+        __m512 aVal = _mm512_load_ps(aPtr);
+        __m256i bInt = _mm256_load_si256((const __m256i*)bPtr);
+        __m512i bWide = _mm512_cvtepu32_epi64(bInt);
+        __m512 bVal = _mm512_castsi512_ps(bWide);
+
+        _mm512_store_ps(cPtr, _mm512_add_ps(aVal, bVal));
+
+        aPtr += 16;
+        bPtr += 8;
+        cPtr += 16;
+    }
+
+    volk_32fc_32f_add_32fc_generic(
+        (lv_32fc_t*)cPtr, (const lv_32fc_t*)aPtr, bPtr, num_points - eighthPoints * 8);
+}
+#endif /* LV_HAVE_AVX512F */
 
 #endif /* INCLUDED_volk_32fc_32f_add_32fc_a_H */

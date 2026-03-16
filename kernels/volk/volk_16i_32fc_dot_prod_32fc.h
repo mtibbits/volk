@@ -196,6 +196,158 @@ static inline void volk_16i_32fc_dot_prod_32fc_u_sse(lv_32fc_t* result,
 #endif /*LV_HAVE_SSE && LV_HAVE_MMX*/
 
 
+#ifdef LV_HAVE_SSE2
+#include <emmintrin.h>
+
+static inline void volk_16i_32fc_dot_prod_32fc_u_sse2(lv_32fc_t* result,
+                                                       const short* input,
+                                                       const lv_32fc_t* taps,
+                                                       unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int eighthPoints = num_points / 8;
+
+    lv_32fc_t returnValue = lv_cmake(0.0f, 0.0f);
+    const short* aPtr = input;
+    const float* bPtr = (const float*)taps;
+
+    __m128 dotProdVal0 = _mm_setzero_ps();
+    __m128 dotProdVal1 = _mm_setzero_ps();
+    __m128 dotProdVal2 = _mm_setzero_ps();
+    __m128 dotProdVal3 = _mm_setzero_ps();
+
+    for (; number < eighthPoints; number++) {
+        /* Load 8 int16 values */
+        __m128i v = _mm_loadu_si128((const __m128i*)aPtr);
+
+        /* Sign-extend lower 4 int16 to int32 (no SSE4.1 pmovsxwd) */
+        __m128i lo32 = _mm_srai_epi32(_mm_unpacklo_epi16(v, v), 16);
+        /* Sign-extend upper 4 int16 to int32 */
+        __m128i hi32 = _mm_srai_epi32(_mm_unpackhi_epi16(v, v), 16);
+
+        /* Convert int32 to float */
+        __m128 f0 = _mm_cvtepi32_ps(lo32);
+        __m128 f1 = _mm_cvtepi32_ps(hi32);
+
+        /* Duplicate each float for complex multiply:
+         * f0=[s0,s1,s2,s3] -> a0=[s0,s0,s1,s1], a1=[s2,s2,s3,s3] */
+        __m128 a0Val = _mm_unpacklo_ps(f0, f0);
+        __m128 a1Val = _mm_unpackhi_ps(f0, f0);
+        __m128 a2Val = _mm_unpacklo_ps(f1, f1);
+        __m128 a3Val = _mm_unpackhi_ps(f1, f1);
+
+        /* Load 8 complex taps (16 floats) */
+        __m128 b0Val = _mm_loadu_ps(bPtr);
+        __m128 b1Val = _mm_loadu_ps(bPtr + 4);
+        __m128 b2Val = _mm_loadu_ps(bPtr + 8);
+        __m128 b3Val = _mm_loadu_ps(bPtr + 12);
+
+        dotProdVal0 = _mm_add_ps(_mm_mul_ps(a0Val, b0Val), dotProdVal0);
+        dotProdVal1 = _mm_add_ps(_mm_mul_ps(a1Val, b1Val), dotProdVal1);
+        dotProdVal2 = _mm_add_ps(_mm_mul_ps(a2Val, b2Val), dotProdVal2);
+        dotProdVal3 = _mm_add_ps(_mm_mul_ps(a3Val, b3Val), dotProdVal3);
+
+        aPtr += 8;
+        bPtr += 16;
+    }
+
+    dotProdVal0 = _mm_add_ps(dotProdVal0, dotProdVal1);
+    dotProdVal0 = _mm_add_ps(dotProdVal0, dotProdVal2);
+    dotProdVal0 = _mm_add_ps(dotProdVal0, dotProdVal3);
+
+    __VOLK_ATTR_ALIGNED(16) float dotProductVector[4];
+    _mm_store_ps(dotProductVector, dotProdVal0);
+
+    returnValue += lv_cmake(dotProductVector[0], dotProductVector[1]);
+    returnValue += lv_cmake(dotProductVector[2], dotProductVector[3]);
+
+    number = eighthPoints * 8;
+    lv_32fc_t tail_result;
+    volk_16i_32fc_dot_prod_32fc_generic(
+        &tail_result, input + number, taps + number, num_points - number);
+    returnValue += tail_result;
+
+    *result = returnValue;
+}
+
+#endif /*LV_HAVE_SSE2*/
+
+
+#ifdef LV_HAVE_SSE4_1
+#include <smmintrin.h>
+
+static inline void volk_16i_32fc_dot_prod_32fc_u_sse4_1(lv_32fc_t* result,
+                                                          const short* input,
+                                                          const lv_32fc_t* taps,
+                                                          unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int eighthPoints = num_points / 8;
+
+    lv_32fc_t returnValue = lv_cmake(0.0f, 0.0f);
+    const short* aPtr = input;
+    const float* bPtr = (const float*)taps;
+
+    __m128 dotProdVal0 = _mm_setzero_ps();
+    __m128 dotProdVal1 = _mm_setzero_ps();
+    __m128 dotProdVal2 = _mm_setzero_ps();
+    __m128 dotProdVal3 = _mm_setzero_ps();
+
+    for (; number < eighthPoints; number++) {
+        /* Load 8 int16 values */
+        __m128i v = _mm_loadu_si128((const __m128i*)aPtr);
+
+        /* Sign-extend int16 to int32 using SSE4.1 pmovsxwd */
+        __m128i lo32 = _mm_cvtepi16_epi32(v);
+        __m128i hi32 = _mm_cvtepi16_epi32(_mm_srli_si128(v, 8));
+
+        /* Convert int32 to float */
+        __m128 f0 = _mm_cvtepi32_ps(lo32);
+        __m128 f1 = _mm_cvtepi32_ps(hi32);
+
+        /* Duplicate each float for complex multiply */
+        __m128 a0Val = _mm_unpacklo_ps(f0, f0);
+        __m128 a1Val = _mm_unpackhi_ps(f0, f0);
+        __m128 a2Val = _mm_unpacklo_ps(f1, f1);
+        __m128 a3Val = _mm_unpackhi_ps(f1, f1);
+
+        /* Load 8 complex taps (16 floats) */
+        __m128 b0Val = _mm_loadu_ps(bPtr);
+        __m128 b1Val = _mm_loadu_ps(bPtr + 4);
+        __m128 b2Val = _mm_loadu_ps(bPtr + 8);
+        __m128 b3Val = _mm_loadu_ps(bPtr + 12);
+
+        dotProdVal0 = _mm_add_ps(_mm_mul_ps(a0Val, b0Val), dotProdVal0);
+        dotProdVal1 = _mm_add_ps(_mm_mul_ps(a1Val, b1Val), dotProdVal1);
+        dotProdVal2 = _mm_add_ps(_mm_mul_ps(a2Val, b2Val), dotProdVal2);
+        dotProdVal3 = _mm_add_ps(_mm_mul_ps(a3Val, b3Val), dotProdVal3);
+
+        aPtr += 8;
+        bPtr += 16;
+    }
+
+    dotProdVal0 = _mm_add_ps(dotProdVal0, dotProdVal1);
+    dotProdVal0 = _mm_add_ps(dotProdVal0, dotProdVal2);
+    dotProdVal0 = _mm_add_ps(dotProdVal0, dotProdVal3);
+
+    __VOLK_ATTR_ALIGNED(16) float dotProductVector[4];
+    _mm_store_ps(dotProductVector, dotProdVal0);
+
+    returnValue += lv_cmake(dotProductVector[0], dotProductVector[1]);
+    returnValue += lv_cmake(dotProductVector[2], dotProductVector[3]);
+
+    number = eighthPoints * 8;
+    lv_32fc_t tail_result;
+    volk_16i_32fc_dot_prod_32fc_generic(
+        &tail_result, input + number, taps + number, num_points - number);
+    returnValue += tail_result;
+
+    *result = returnValue;
+}
+
+#endif /*LV_HAVE_SSE4_1*/
+
+
 #ifdef LV_HAVE_AVX2
 
 static inline void volk_16i_32fc_dot_prod_32fc_u_avx2(lv_32fc_t* result,
@@ -553,6 +705,92 @@ static inline void volk_16i_32fc_dot_prod_32fc_rvvseg(lv_32fc_t* result,
 }
 #endif /*LV_HAVE_RVVSEG*/
 
+
+#ifdef LV_HAVE_AVX512F
+#include <immintrin.h>
+
+static inline void volk_16i_32fc_dot_prod_32fc_u_avx512f(lv_32fc_t* result,
+                                                          const short* input,
+                                                          const lv_32fc_t* taps,
+                                                          unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int thirtysecondPoints = num_points / 32;
+
+    lv_32fc_t returnValue = lv_cmake(0.0f, 0.0f);
+    const short* aPtr = input;
+    const float* bPtr = (const float*)taps;
+
+    __m512 dotProdVal0 = _mm512_setzero_ps();
+    __m512 dotProdVal1 = _mm512_setzero_ps();
+    __m512 dotProdVal2 = _mm512_setzero_ps();
+    __m512 dotProdVal3 = _mm512_setzero_ps();
+
+    for (; number < thirtysecondPoints; number++) {
+        /* Load 32 int16 values in two groups of 16 */
+        __m256i m0 = _mm256_loadu_si256((const __m256i*)aPtr);
+        __m256i m1 = _mm256_loadu_si256((const __m256i*)(aPtr + 16));
+
+        /* Convert int16 -> int32 -> float */
+        __m512 g0 = _mm512_cvtepi32_ps(_mm512_cvtepi16_epi32(m0));
+        __m512 g1 = _mm512_cvtepi32_ps(_mm512_cvtepi16_epi32(m1));
+
+        /* Duplicate each float for complex multiply:
+         * g0 = [s0,s1,s2,...,s15]
+         * We need [s0,s0,s1,s1,...,s7,s7] and [s8,s8,...,s15,s15]
+         * Use permutexvar to duplicate */
+        const __m512i duplo_idx =
+            _mm512_set_epi32(7, 7, 6, 6, 5, 5, 4, 4, 3, 3, 2, 2, 1, 1, 0, 0);
+        const __m512i duphi_idx =
+            _mm512_set_epi32(15, 15, 14, 14, 13, 13, 12, 12, 11, 11, 10, 10, 9, 9, 8, 8);
+
+        __m512 a0Val = _mm512_permutexvar_ps(duplo_idx, g0);
+        __m512 a1Val = _mm512_permutexvar_ps(duphi_idx, g0);
+        __m512 a2Val = _mm512_permutexvar_ps(duplo_idx, g1);
+        __m512 a3Val = _mm512_permutexvar_ps(duphi_idx, g1);
+
+        /* Load 32 complex taps (64 floats) */
+        __m512 b0Val = _mm512_loadu_ps(bPtr);
+        __m512 b1Val = _mm512_loadu_ps(bPtr + 16);
+        __m512 b2Val = _mm512_loadu_ps(bPtr + 32);
+        __m512 b3Val = _mm512_loadu_ps(bPtr + 48);
+
+        /* FMA: dotProd += a * b */
+        dotProdVal0 = _mm512_fmadd_ps(a0Val, b0Val, dotProdVal0);
+        dotProdVal1 = _mm512_fmadd_ps(a1Val, b1Val, dotProdVal1);
+        dotProdVal2 = _mm512_fmadd_ps(a2Val, b2Val, dotProdVal2);
+        dotProdVal3 = _mm512_fmadd_ps(a3Val, b3Val, dotProdVal3);
+
+        aPtr += 32;
+        bPtr += 64;
+    }
+
+    /* Combine the 4 accumulators */
+    dotProdVal0 = _mm512_add_ps(dotProdVal0, dotProdVal1);
+    dotProdVal2 = _mm512_add_ps(dotProdVal2, dotProdVal3);
+    dotProdVal0 = _mm512_add_ps(dotProdVal0, dotProdVal2);
+
+    /* Horizontal reduction: 16 floats -> 8 complex pairs -> sum */
+    __VOLK_ATTR_ALIGNED(64) float dotProductVector[16];
+    _mm512_store_ps(dotProductVector, dotProdVal0);
+
+    for (int i = 0; i < 16; i += 2) {
+        returnValue += lv_cmake(dotProductVector[i], dotProductVector[i + 1]);
+    }
+
+    /* Handle tail */
+    number = thirtysecondPoints * 32;
+    lv_32fc_t tail_result;
+    volk_16i_32fc_dot_prod_32fc_generic(
+        &tail_result, input + number, taps + number, num_points - number);
+    returnValue += tail_result;
+
+    *result = returnValue;
+}
+
+#endif /*LV_HAVE_AVX512F*/
+
+
 #endif /* INCLUDED_volk_16i_32fc_dot_prod_32fc_u_H */
 
 #ifndef INCLUDED_volk_16i_32fc_dot_prod_32fc_a_H
@@ -643,6 +881,155 @@ static inline void volk_16i_32fc_dot_prod_32fc_a_sse(lv_32fc_t* result,
 }
 
 #endif /*LV_HAVE_SSE && LV_HAVE_MMX*/
+
+#ifdef LV_HAVE_SSE2
+#include <emmintrin.h>
+
+static inline void volk_16i_32fc_dot_prod_32fc_a_sse2(lv_32fc_t* result,
+                                                       const short* input,
+                                                       const lv_32fc_t* taps,
+                                                       unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int eighthPoints = num_points / 8;
+
+    lv_32fc_t returnValue = lv_cmake(0.0f, 0.0f);
+    const short* aPtr = input;
+    const float* bPtr = (const float*)taps;
+
+    __m128 dotProdVal0 = _mm_setzero_ps();
+    __m128 dotProdVal1 = _mm_setzero_ps();
+    __m128 dotProdVal2 = _mm_setzero_ps();
+    __m128 dotProdVal3 = _mm_setzero_ps();
+
+    for (; number < eighthPoints; number++) {
+        /* Load 8 int16 values */
+        __m128i v = _mm_load_si128((const __m128i*)aPtr);
+
+        /* Sign-extend lower 4 int16 to int32 (no SSE4.1 pmovsxwd) */
+        __m128i lo32 = _mm_srai_epi32(_mm_unpacklo_epi16(v, v), 16);
+        /* Sign-extend upper 4 int16 to int32 */
+        __m128i hi32 = _mm_srai_epi32(_mm_unpackhi_epi16(v, v), 16);
+
+        /* Convert int32 to float */
+        __m128 f0 = _mm_cvtepi32_ps(lo32);
+        __m128 f1 = _mm_cvtepi32_ps(hi32);
+
+        /* Duplicate each float for complex multiply */
+        __m128 a0Val = _mm_unpacklo_ps(f0, f0);
+        __m128 a1Val = _mm_unpackhi_ps(f0, f0);
+        __m128 a2Val = _mm_unpacklo_ps(f1, f1);
+        __m128 a3Val = _mm_unpackhi_ps(f1, f1);
+
+        /* Load 8 complex taps (16 floats) */
+        __m128 b0Val = _mm_load_ps(bPtr);
+        __m128 b1Val = _mm_load_ps(bPtr + 4);
+        __m128 b2Val = _mm_load_ps(bPtr + 8);
+        __m128 b3Val = _mm_load_ps(bPtr + 12);
+
+        dotProdVal0 = _mm_add_ps(_mm_mul_ps(a0Val, b0Val), dotProdVal0);
+        dotProdVal1 = _mm_add_ps(_mm_mul_ps(a1Val, b1Val), dotProdVal1);
+        dotProdVal2 = _mm_add_ps(_mm_mul_ps(a2Val, b2Val), dotProdVal2);
+        dotProdVal3 = _mm_add_ps(_mm_mul_ps(a3Val, b3Val), dotProdVal3);
+
+        aPtr += 8;
+        bPtr += 16;
+    }
+
+    dotProdVal0 = _mm_add_ps(dotProdVal0, dotProdVal1);
+    dotProdVal0 = _mm_add_ps(dotProdVal0, dotProdVal2);
+    dotProdVal0 = _mm_add_ps(dotProdVal0, dotProdVal3);
+
+    __VOLK_ATTR_ALIGNED(16) float dotProductVector[4];
+    _mm_store_ps(dotProductVector, dotProdVal0);
+
+    returnValue += lv_cmake(dotProductVector[0], dotProductVector[1]);
+    returnValue += lv_cmake(dotProductVector[2], dotProductVector[3]);
+
+    number = eighthPoints * 8;
+    lv_32fc_t tail_result;
+    volk_16i_32fc_dot_prod_32fc_generic(
+        &tail_result, input + number, taps + number, num_points - number);
+    returnValue += tail_result;
+
+    *result = returnValue;
+}
+
+#endif /*LV_HAVE_SSE2*/
+
+#ifdef LV_HAVE_SSE4_1
+#include <smmintrin.h>
+
+static inline void volk_16i_32fc_dot_prod_32fc_a_sse4_1(lv_32fc_t* result,
+                                                          const short* input,
+                                                          const lv_32fc_t* taps,
+                                                          unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int eighthPoints = num_points / 8;
+
+    lv_32fc_t returnValue = lv_cmake(0.0f, 0.0f);
+    const short* aPtr = input;
+    const float* bPtr = (const float*)taps;
+
+    __m128 dotProdVal0 = _mm_setzero_ps();
+    __m128 dotProdVal1 = _mm_setzero_ps();
+    __m128 dotProdVal2 = _mm_setzero_ps();
+    __m128 dotProdVal3 = _mm_setzero_ps();
+
+    for (; number < eighthPoints; number++) {
+        /* Load 8 int16 values */
+        __m128i v = _mm_load_si128((const __m128i*)aPtr);
+
+        /* Sign-extend int16 to int32 using SSE4.1 pmovsxwd */
+        __m128i lo32 = _mm_cvtepi16_epi32(v);
+        __m128i hi32 = _mm_cvtepi16_epi32(_mm_srli_si128(v, 8));
+
+        /* Convert int32 to float */
+        __m128 f0 = _mm_cvtepi32_ps(lo32);
+        __m128 f1 = _mm_cvtepi32_ps(hi32);
+
+        /* Duplicate each float for complex multiply */
+        __m128 a0Val = _mm_unpacklo_ps(f0, f0);
+        __m128 a1Val = _mm_unpackhi_ps(f0, f0);
+        __m128 a2Val = _mm_unpacklo_ps(f1, f1);
+        __m128 a3Val = _mm_unpackhi_ps(f1, f1);
+
+        /* Load 8 complex taps (16 floats) */
+        __m128 b0Val = _mm_load_ps(bPtr);
+        __m128 b1Val = _mm_load_ps(bPtr + 4);
+        __m128 b2Val = _mm_load_ps(bPtr + 8);
+        __m128 b3Val = _mm_load_ps(bPtr + 12);
+
+        dotProdVal0 = _mm_add_ps(_mm_mul_ps(a0Val, b0Val), dotProdVal0);
+        dotProdVal1 = _mm_add_ps(_mm_mul_ps(a1Val, b1Val), dotProdVal1);
+        dotProdVal2 = _mm_add_ps(_mm_mul_ps(a2Val, b2Val), dotProdVal2);
+        dotProdVal3 = _mm_add_ps(_mm_mul_ps(a3Val, b3Val), dotProdVal3);
+
+        aPtr += 8;
+        bPtr += 16;
+    }
+
+    dotProdVal0 = _mm_add_ps(dotProdVal0, dotProdVal1);
+    dotProdVal0 = _mm_add_ps(dotProdVal0, dotProdVal2);
+    dotProdVal0 = _mm_add_ps(dotProdVal0, dotProdVal3);
+
+    __VOLK_ATTR_ALIGNED(16) float dotProductVector[4];
+    _mm_store_ps(dotProductVector, dotProdVal0);
+
+    returnValue += lv_cmake(dotProductVector[0], dotProductVector[1]);
+    returnValue += lv_cmake(dotProductVector[2], dotProductVector[3]);
+
+    number = eighthPoints * 8;
+    lv_32fc_t tail_result;
+    volk_16i_32fc_dot_prod_32fc_generic(
+        &tail_result, input + number, taps + number, num_points - number);
+    returnValue += tail_result;
+
+    *result = returnValue;
+}
+
+#endif /*LV_HAVE_SSE4_1*/
 
 #ifdef LV_HAVE_AVX2
 
@@ -823,5 +1210,88 @@ static inline void volk_16i_32fc_dot_prod_32fc_a_avx2_fma(lv_32fc_t* result,
 
 
 #endif /*LV_HAVE_AVX2 && LV_HAVE_FMA*/
+
+
+#ifdef LV_HAVE_AVX512F
+#include <immintrin.h>
+
+static inline void volk_16i_32fc_dot_prod_32fc_a_avx512f(lv_32fc_t* result,
+                                                          const short* input,
+                                                          const lv_32fc_t* taps,
+                                                          unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int thirtysecondPoints = num_points / 32;
+
+    lv_32fc_t returnValue = lv_cmake(0.0f, 0.0f);
+    const short* aPtr = input;
+    const float* bPtr = (const float*)taps;
+
+    __m512 dotProdVal0 = _mm512_setzero_ps();
+    __m512 dotProdVal1 = _mm512_setzero_ps();
+    __m512 dotProdVal2 = _mm512_setzero_ps();
+    __m512 dotProdVal3 = _mm512_setzero_ps();
+
+    for (; number < thirtysecondPoints; number++) {
+        /* Load 32 int16 values in two groups of 16 */
+        __m256i m0 = _mm256_load_si256((const __m256i*)aPtr);
+        __m256i m1 = _mm256_load_si256((const __m256i*)(aPtr + 16));
+
+        /* Convert int16 -> int32 -> float */
+        __m512 g0 = _mm512_cvtepi32_ps(_mm512_cvtepi16_epi32(m0));
+        __m512 g1 = _mm512_cvtepi32_ps(_mm512_cvtepi16_epi32(m1));
+
+        /* Duplicate each float for complex multiply */
+        const __m512i duplo_idx =
+            _mm512_set_epi32(7, 7, 6, 6, 5, 5, 4, 4, 3, 3, 2, 2, 1, 1, 0, 0);
+        const __m512i duphi_idx =
+            _mm512_set_epi32(15, 15, 14, 14, 13, 13, 12, 12, 11, 11, 10, 10, 9, 9, 8, 8);
+
+        __m512 a0Val = _mm512_permutexvar_ps(duplo_idx, g0);
+        __m512 a1Val = _mm512_permutexvar_ps(duphi_idx, g0);
+        __m512 a2Val = _mm512_permutexvar_ps(duplo_idx, g1);
+        __m512 a3Val = _mm512_permutexvar_ps(duphi_idx, g1);
+
+        /* Load 32 complex taps (64 floats) */
+        __m512 b0Val = _mm512_load_ps(bPtr);
+        __m512 b1Val = _mm512_load_ps(bPtr + 16);
+        __m512 b2Val = _mm512_load_ps(bPtr + 32);
+        __m512 b3Val = _mm512_load_ps(bPtr + 48);
+
+        /* FMA: dotProd += a * b */
+        dotProdVal0 = _mm512_fmadd_ps(a0Val, b0Val, dotProdVal0);
+        dotProdVal1 = _mm512_fmadd_ps(a1Val, b1Val, dotProdVal1);
+        dotProdVal2 = _mm512_fmadd_ps(a2Val, b2Val, dotProdVal2);
+        dotProdVal3 = _mm512_fmadd_ps(a3Val, b3Val, dotProdVal3);
+
+        aPtr += 32;
+        bPtr += 64;
+    }
+
+    /* Combine the 4 accumulators */
+    dotProdVal0 = _mm512_add_ps(dotProdVal0, dotProdVal1);
+    dotProdVal2 = _mm512_add_ps(dotProdVal2, dotProdVal3);
+    dotProdVal0 = _mm512_add_ps(dotProdVal0, dotProdVal2);
+
+    /* Horizontal reduction */
+    __VOLK_ATTR_ALIGNED(64) float dotProductVector[16];
+    _mm512_store_ps(dotProductVector, dotProdVal0);
+
+    for (int i = 0; i < 16; i += 2) {
+        returnValue += lv_cmake(dotProductVector[i], dotProductVector[i + 1]);
+    }
+
+    /* Handle tail */
+    number = thirtysecondPoints * 32;
+    lv_32fc_t tail_result;
+    volk_16i_32fc_dot_prod_32fc_generic(
+        &tail_result, input + number, taps + number, num_points - number);
+    returnValue += tail_result;
+
+    *result = returnValue;
+}
+
+#endif /*LV_HAVE_AVX512F*/
+
 
 #endif /* INCLUDED_volk_16i_32fc_dot_prod_32fc_a_H */

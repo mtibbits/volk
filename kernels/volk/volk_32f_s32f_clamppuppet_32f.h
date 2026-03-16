@@ -22,13 +22,13 @@ static inline void volk_32f_s32f_clamppuppet_32f_generic(float* out,
 }
 #endif
 
-#ifdef LV_HAVE_AVX
-static inline void volk_32f_s32f_clamppuppet_32f_a_avx(float* out,
+#ifdef LV_HAVE_SSE
+static inline void volk_32f_s32f_clamppuppet_32f_a_sse(float* out,
                                                        const float* in,
                                                        const float min,
                                                        unsigned int num_points)
 {
-    volk_32f_s32f_x2_clamp_32f_a_avx(out, in, min, -min, num_points);
+    volk_32f_s32f_x2_clamp_32f_a_sse(out, in, min, -min, num_points);
 }
 #endif
 
@@ -43,12 +43,32 @@ static inline void volk_32f_s32f_clamppuppet_32f_a_sse4_1(float* out,
 #endif
 
 #ifdef LV_HAVE_AVX
-static inline void volk_32f_s32f_clamppuppet_32f_u_avx(float* out,
+static inline void volk_32f_s32f_clamppuppet_32f_a_avx(float* out,
                                                        const float* in,
                                                        const float min,
                                                        unsigned int num_points)
 {
-    volk_32f_s32f_x2_clamp_32f_u_avx(out, in, min, -min, num_points);
+    volk_32f_s32f_x2_clamp_32f_a_avx(out, in, min, -min, num_points);
+}
+#endif
+
+#ifdef LV_HAVE_AVX512F
+static inline void volk_32f_s32f_clamppuppet_32f_a_avx512f(float* out,
+                                                            const float* in,
+                                                            const float min,
+                                                            unsigned int num_points)
+{
+    volk_32f_s32f_x2_clamp_32f_a_avx512f(out, in, min, -min, num_points);
+}
+#endif
+
+#ifdef LV_HAVE_SSE
+static inline void volk_32f_s32f_clamppuppet_32f_u_sse(float* out,
+                                                       const float* in,
+                                                       const float min,
+                                                       unsigned int num_points)
+{
+    volk_32f_s32f_x2_clamp_32f_u_sse(out, in, min, -min, num_points);
 }
 #endif
 
@@ -59,6 +79,26 @@ static inline void volk_32f_s32f_clamppuppet_32f_u_sse4_1(float* out,
                                                           unsigned int num_points)
 {
     volk_32f_s32f_x2_clamp_32f_u_sse4_1(out, in, min, -min, num_points);
+}
+#endif
+
+#ifdef LV_HAVE_AVX
+static inline void volk_32f_s32f_clamppuppet_32f_u_avx(float* out,
+                                                       const float* in,
+                                                       const float min,
+                                                       unsigned int num_points)
+{
+    volk_32f_s32f_x2_clamp_32f_u_avx(out, in, min, -min, num_points);
+}
+#endif
+
+#ifdef LV_HAVE_AVX512F
+static inline void volk_32f_s32f_clamppuppet_32f_u_avx512f(float* out,
+                                                            const float* in,
+                                                            const float min,
+                                                            unsigned int num_points)
+{
+    volk_32f_s32f_x2_clamp_32f_u_avx512f(out, in, min, -min, num_points);
 }
 #endif
 

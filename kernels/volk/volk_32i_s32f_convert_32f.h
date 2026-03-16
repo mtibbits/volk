@@ -112,6 +112,43 @@ static inline void volk_32i_s32f_convert_32f_u_sse2(float* outputVector,
 #endif /* LV_HAVE_SSE2 */
 
 
+#ifdef LV_HAVE_AVX
+#include <immintrin.h>
+
+static inline void volk_32i_s32f_convert_32f_u_avx(float* outputVector,
+                                                    const int32_t* inputVector,
+                                                    const float scalar,
+                                                    unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int eighthPoints = num_points / 8;
+
+    float* outputVectorPtr = outputVector;
+    const float iScalar = 1.0f / scalar;
+    __m256 invScalar = _mm256_set1_ps(iScalar);
+    const int32_t* inputPtr = (const int32_t*)inputVector;
+    __m256i inputVal;
+    __m256 ret;
+
+    for (; number < eighthPoints; number++) {
+        inputVal = _mm256_loadu_si256((const __m256i*)inputPtr);
+
+        ret = _mm256_cvtepi32_ps(inputVal);
+        ret = _mm256_mul_ps(ret, invScalar);
+
+        _mm256_storeu_ps(outputVectorPtr, ret);
+
+        outputVectorPtr += 8;
+        inputPtr += 8;
+    }
+
+    number = eighthPoints * 8;
+    volk_32i_s32f_convert_32f_generic(
+        outputVectorPtr, inputPtr, scalar, num_points - number);
+}
+#endif /* LV_HAVE_AVX */
+
+
 #ifdef LV_HAVE_AVX2
 #include <immintrin.h>
 
@@ -328,6 +365,42 @@ static inline void volk_32i_s32f_convert_32f_a_sse2(float* outputVector,
     }
 }
 #endif /* LV_HAVE_SSE2 */
+
+#ifdef LV_HAVE_AVX
+#include <immintrin.h>
+
+static inline void volk_32i_s32f_convert_32f_a_avx(float* outputVector,
+                                                    const int32_t* inputVector,
+                                                    const float scalar,
+                                                    unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int eighthPoints = num_points / 8;
+
+    float* outputVectorPtr = outputVector;
+    const float iScalar = 1.0f / scalar;
+    __m256 invScalar = _mm256_set1_ps(iScalar);
+    const int32_t* inputPtr = (const int32_t*)inputVector;
+    __m256i inputVal;
+    __m256 ret;
+
+    for (; number < eighthPoints; number++) {
+        inputVal = _mm256_load_si256((const __m256i*)inputPtr);
+
+        ret = _mm256_cvtepi32_ps(inputVal);
+        ret = _mm256_mul_ps(ret, invScalar);
+
+        _mm256_store_ps(outputVectorPtr, ret);
+
+        outputVectorPtr += 8;
+        inputPtr += 8;
+    }
+
+    number = eighthPoints * 8;
+    volk_32i_s32f_convert_32f_generic(
+        outputVectorPtr, inputPtr, scalar, num_points - number);
+}
+#endif /* LV_HAVE_AVX */
 
 #ifdef LV_HAVE_AVX2
 #include <immintrin.h>

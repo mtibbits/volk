@@ -176,6 +176,57 @@ static inline void volk_32fc_deinterleave_64f_x2_u_avx(double* iBuffer,
 }
 #endif /* LV_HAVE_AVX */
 
+#ifdef LV_HAVE_AVX512F
+#include <immintrin.h>
+
+static inline void volk_32fc_deinterleave_64f_x2_u_avx512f(double* iBuffer,
+                                                             double* qBuffer,
+                                                             const lv_32fc_t* complexVector,
+                                                             unsigned int num_points)
+{
+    unsigned int number = 0;
+
+    const float* complexVectorPtr = (const float*)complexVector;
+    double* iBufferPtr = iBuffer;
+    double* qBufferPtr = qBuffer;
+
+    const unsigned int sixteenthPoints = num_points / 16;
+
+    const __m512i idx_re = _mm512_set_epi32(30, 28, 26, 24, 22, 20, 18, 16,
+                                            14, 12, 10, 8, 6, 4, 2, 0);
+    const __m512i idx_im = _mm512_set_epi32(31, 29, 27, 25, 23, 21, 19, 17,
+                                            15, 13, 11, 9, 7, 5, 3, 1);
+
+    for (; number < sixteenthPoints; number++) {
+
+        __m512 cplxValue1 = _mm512_loadu_ps(complexVectorPtr);
+        __m512 cplxValue2 = _mm512_loadu_ps(complexVectorPtr + 16);
+        complexVectorPtr += 32;
+
+        // Deinterleave: extract real and imaginary parts
+        __m512 reFloat = _mm512_permutex2var_ps(cplxValue1, idx_re, cplxValue2);
+        __m512 imFloat = _mm512_permutex2var_ps(cplxValue1, idx_im, cplxValue2);
+
+        // Convert lower 8 floats to doubles and store
+        __m256 reLo = _mm512_castps512_ps256(reFloat);
+        __m256 reHi = _mm256_castpd_ps(_mm512_extractf64x4_pd(_mm512_castps_pd(reFloat), 1));
+        _mm512_storeu_pd(iBufferPtr, _mm512_cvtps_pd(reLo));
+        _mm512_storeu_pd(iBufferPtr + 8, _mm512_cvtps_pd(reHi));
+
+        __m256 imLo = _mm512_castps512_ps256(imFloat);
+        __m256 imHi = _mm256_castpd_ps(_mm512_extractf64x4_pd(_mm512_castps_pd(imFloat), 1));
+        _mm512_storeu_pd(qBufferPtr, _mm512_cvtps_pd(imLo));
+        _mm512_storeu_pd(qBufferPtr + 8, _mm512_cvtps_pd(imHi));
+
+        iBufferPtr += 16;
+        qBufferPtr += 16;
+    }
+
+    volk_32fc_deinterleave_64f_x2_generic(
+        iBufferPtr, qBufferPtr, (const lv_32fc_t*)complexVectorPtr, num_points - sixteenthPoints * 16);
+}
+#endif /* LV_HAVE_AVX512F */
+
 #ifdef LV_HAVE_NEONV8
 #include <arm_neon.h>
 
@@ -353,5 +404,56 @@ static inline void volk_32fc_deinterleave_64f_x2_a_avx(double* iBuffer,
     }
 }
 #endif /* LV_HAVE_AVX */
+
+#ifdef LV_HAVE_AVX512F
+#include <immintrin.h>
+
+static inline void volk_32fc_deinterleave_64f_x2_a_avx512f(double* iBuffer,
+                                                             double* qBuffer,
+                                                             const lv_32fc_t* complexVector,
+                                                             unsigned int num_points)
+{
+    unsigned int number = 0;
+
+    const float* complexVectorPtr = (const float*)complexVector;
+    double* iBufferPtr = iBuffer;
+    double* qBufferPtr = qBuffer;
+
+    const unsigned int sixteenthPoints = num_points / 16;
+
+    const __m512i idx_re = _mm512_set_epi32(30, 28, 26, 24, 22, 20, 18, 16,
+                                            14, 12, 10, 8, 6, 4, 2, 0);
+    const __m512i idx_im = _mm512_set_epi32(31, 29, 27, 25, 23, 21, 19, 17,
+                                            15, 13, 11, 9, 7, 5, 3, 1);
+
+    for (; number < sixteenthPoints; number++) {
+
+        __m512 cplxValue1 = _mm512_load_ps(complexVectorPtr);
+        __m512 cplxValue2 = _mm512_load_ps(complexVectorPtr + 16);
+        complexVectorPtr += 32;
+
+        // Deinterleave: extract real and imaginary parts
+        __m512 reFloat = _mm512_permutex2var_ps(cplxValue1, idx_re, cplxValue2);
+        __m512 imFloat = _mm512_permutex2var_ps(cplxValue1, idx_im, cplxValue2);
+
+        // Convert lower 8 floats to doubles and store
+        __m256 reLo = _mm512_castps512_ps256(reFloat);
+        __m256 reHi = _mm256_castpd_ps(_mm512_extractf64x4_pd(_mm512_castps_pd(reFloat), 1));
+        _mm512_store_pd(iBufferPtr, _mm512_cvtps_pd(reLo));
+        _mm512_store_pd(iBufferPtr + 8, _mm512_cvtps_pd(reHi));
+
+        __m256 imLo = _mm512_castps512_ps256(imFloat);
+        __m256 imHi = _mm256_castpd_ps(_mm512_extractf64x4_pd(_mm512_castps_pd(imFloat), 1));
+        _mm512_store_pd(qBufferPtr, _mm512_cvtps_pd(imLo));
+        _mm512_store_pd(qBufferPtr + 8, _mm512_cvtps_pd(imHi));
+
+        iBufferPtr += 16;
+        qBufferPtr += 16;
+    }
+
+    volk_32fc_deinterleave_64f_x2_generic(
+        iBufferPtr, qBufferPtr, (const lv_32fc_t*)complexVectorPtr, num_points - sixteenthPoints * 16);
+}
+#endif /* LV_HAVE_AVX512F */
 
 #endif /* INCLUDED_volk_32fc_deinterleave_64f_x2_a_H */
