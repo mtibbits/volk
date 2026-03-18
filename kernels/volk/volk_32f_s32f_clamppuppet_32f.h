@@ -132,4 +132,14 @@ static inline void volk_32f_s32f_clamppuppet_32f_rvv(float* out,
 }
 #endif
 
+#ifdef LV_HAVE_ORC
+static inline void volk_32f_s32f_clamppuppet_32f_u_orc(float* out,
+                                                        const float* in,
+                                                        const float min,
+                                                        unsigned int num_points)
+{
+    volk_32f_s32f_x2_clamp_32f_u_orc(out, in, min, -min, num_points);
+}
+#endif /* LV_HAVE_ORC */
+
 #endif /* INCLUDED_volk_32f_s32f_clamppuppet_32f_H */

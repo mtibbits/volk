@@ -377,6 +377,59 @@ static inline void volk_32f_x2_dot_prod_32f_u_avx(float* result,
 
 #endif /*LV_HAVE_AVX*/
 
+
+#if LV_HAVE_AVX && LV_HAVE_FMA
+#include <immintrin.h>
+static inline void volk_32f_x2_dot_prod_32f_u_avx_fma(float* result,
+                                                       const float* input,
+                                                       const float* taps,
+                                                       unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int thirtysecondPoints = num_points / 32;
+
+    const float* aPtr = input;
+    const float* bPtr = taps;
+
+    __m256 dotProdVal0 = _mm256_setzero_ps();
+    __m256 dotProdVal1 = _mm256_setzero_ps();
+    __m256 dotProdVal2 = _mm256_setzero_ps();
+    __m256 dotProdVal3 = _mm256_setzero_ps();
+
+    for (; number < thirtysecondPoints; number++) {
+        dotProdVal0 =
+            _mm256_fmadd_ps(_mm256_loadu_ps(aPtr), _mm256_loadu_ps(bPtr), dotProdVal0);
+        dotProdVal1 = _mm256_fmadd_ps(
+            _mm256_loadu_ps(aPtr + 8), _mm256_loadu_ps(bPtr + 8), dotProdVal1);
+        dotProdVal2 = _mm256_fmadd_ps(
+            _mm256_loadu_ps(aPtr + 16), _mm256_loadu_ps(bPtr + 16), dotProdVal2);
+        dotProdVal3 = _mm256_fmadd_ps(
+            _mm256_loadu_ps(aPtr + 24), _mm256_loadu_ps(bPtr + 24), dotProdVal3);
+
+        aPtr += 32;
+        bPtr += 32;
+    }
+
+    dotProdVal0 = _mm256_add_ps(dotProdVal0, dotProdVal1);
+    dotProdVal2 = _mm256_add_ps(dotProdVal2, dotProdVal3);
+    dotProdVal0 = _mm256_add_ps(dotProdVal0, dotProdVal2);
+
+    __VOLK_ATTR_ALIGNED(32) float dotProductVector[8];
+    _mm256_storeu_ps(dotProductVector, dotProdVal0);
+
+    float dotProduct = dotProductVector[0] + dotProductVector[1] + dotProductVector[2] +
+                       dotProductVector[3] + dotProductVector[4] + dotProductVector[5] +
+                       dotProductVector[6] + dotProductVector[7];
+
+    for (number = thirtysecondPoints * 32; number < num_points; number++) {
+        dotProduct += ((*aPtr++) * (*bPtr++));
+    }
+
+    *result = dotProduct;
+}
+#endif /* LV_HAVE_AVX && LV_HAVE_FMA */
+
+
 #if LV_HAVE_AVX2 && LV_HAVE_FMA
 #include <immintrin.h>
 static inline void volk_32f_x2_dot_prod_32f_u_avx2_fma(float* result,
@@ -913,6 +966,58 @@ static inline void volk_32f_x2_dot_prod_32f_a_avx(float* result,
     *result = dotProduct;
 }
 #endif /*LV_HAVE_AVX*/
+
+
+#if LV_HAVE_AVX && LV_HAVE_FMA
+#include <immintrin.h>
+static inline void volk_32f_x2_dot_prod_32f_a_avx_fma(float* result,
+                                                       const float* input,
+                                                       const float* taps,
+                                                       unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int thirtysecondPoints = num_points / 32;
+
+    const float* aPtr = input;
+    const float* bPtr = taps;
+
+    __m256 dotProdVal0 = _mm256_setzero_ps();
+    __m256 dotProdVal1 = _mm256_setzero_ps();
+    __m256 dotProdVal2 = _mm256_setzero_ps();
+    __m256 dotProdVal3 = _mm256_setzero_ps();
+
+    for (; number < thirtysecondPoints; number++) {
+        dotProdVal0 =
+            _mm256_fmadd_ps(_mm256_load_ps(aPtr), _mm256_load_ps(bPtr), dotProdVal0);
+        dotProdVal1 = _mm256_fmadd_ps(
+            _mm256_load_ps(aPtr + 8), _mm256_load_ps(bPtr + 8), dotProdVal1);
+        dotProdVal2 = _mm256_fmadd_ps(
+            _mm256_load_ps(aPtr + 16), _mm256_load_ps(bPtr + 16), dotProdVal2);
+        dotProdVal3 = _mm256_fmadd_ps(
+            _mm256_load_ps(aPtr + 24), _mm256_load_ps(bPtr + 24), dotProdVal3);
+
+        aPtr += 32;
+        bPtr += 32;
+    }
+
+    dotProdVal0 = _mm256_add_ps(dotProdVal0, dotProdVal1);
+    dotProdVal2 = _mm256_add_ps(dotProdVal2, dotProdVal3);
+    dotProdVal0 = _mm256_add_ps(dotProdVal0, dotProdVal2);
+
+    __VOLK_ATTR_ALIGNED(32) float dotProductVector[8];
+    _mm256_store_ps(dotProductVector, dotProdVal0);
+
+    float dotProduct = dotProductVector[0] + dotProductVector[1] + dotProductVector[2] +
+                       dotProductVector[3] + dotProductVector[4] + dotProductVector[5] +
+                       dotProductVector[6] + dotProductVector[7];
+
+    for (number = thirtysecondPoints * 32; number < num_points; number++) {
+        dotProduct += ((*aPtr++) * (*bPtr++));
+    }
+
+    *result = dotProduct;
+}
+#endif /* LV_HAVE_AVX && LV_HAVE_FMA */
 
 
 #if LV_HAVE_AVX2 && LV_HAVE_FMA

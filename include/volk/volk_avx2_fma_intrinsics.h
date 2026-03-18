@@ -139,4 +139,73 @@ static inline __m256 _mm256_log2_poly_avx2_fma(const __m256 x)
     return poly;
 }
 
+/*
+ * Compute |cplxValue0|² and |cplxValue1|² for 8 interleaved complex floats.
+ *
+ * Input:  cplxValue0 = [I0,Q0,I1,Q1, I2,Q2,I3,Q3]
+ *         cplxValue1 = [I4,Q4,I5,Q5, I6,Q6,I7,Q7]
+ * Output: [mag²_0, mag²_1, ..., mag²_7] in sequential order
+ *
+ * Replaces the hadd-based _mm256_magnitudesquared_ps_avx2 with
+ * shuffle + FMA, avoiding the slow 2-cycle-throughput hadd.
+ */
+static inline __m256 _mm256_magnitudesquared_ps_avx2_fma(const __m256 cplxValue0,
+                                                          const __m256 cplxValue1)
+{
+    const __m256i fix = _mm256_set_epi32(7, 6, 3, 2, 5, 4, 1, 0);
+
+    /* Deinterleave re/im (within 128-bit lanes, output is lane-interleaved) */
+    const __m256 re = _mm256_shuffle_ps(cplxValue0, cplxValue1, _MM_SHUFFLE(2, 0, 2, 0));
+    const __m256 im = _mm256_shuffle_ps(cplxValue0, cplxValue1, _MM_SHUFFLE(3, 1, 3, 1));
+
+    /* mag² = re*re + im*im using FMA (still in lane-interleaved order) */
+    const __m256 mag_sq = _mm256_fmadd_ps(im, im, _mm256_mul_ps(re, re));
+
+    /* Fix cross-lane ordering */
+    return _mm256_permutevar8x32_ps(mag_sq, fix);
+}
+
+/*
+ * Compute |y - x|² * scalar for 8 interleaved complex floats.
+ *
+ * FMA version of _mm256_scaled_norm_dist_ps_avx2.
+ */
+static inline __m256 _mm256_scaled_norm_dist_ps_avx2_fma(const __m256 symbols0,
+                                                          const __m256 symbols1,
+                                                          const __m256 points0,
+                                                          const __m256 points1,
+                                                          const __m256 scalar)
+{
+    const __m256 diff0 = _mm256_sub_ps(symbols0, points0);
+    const __m256 diff1 = _mm256_sub_ps(symbols1, points1);
+    const __m256 norms = _mm256_magnitudesquared_ps_avx2_fma(diff0, diff1);
+    return _mm256_mul_ps(norms, scalar);
+}
+
+/*
+ * Newton-Raphson refined reciprocal square root with FMA: 1/sqrt(a)
+ * x1 = x0 * (1.5 - 0.5 * a * x0^2)
+ *     = x0 * fnmadd(0.5*a, x0^2, 1.5)
+ */
+static inline __m256 _mm256_rsqrt_nr_avx2_fma(const __m256 a)
+{
+    const __m256 HALF = _mm256_set1_ps(0.5f);
+    const __m256 THREE_HALFS = _mm256_set1_ps(1.5f);
+
+    const __m256 x0 = _mm256_rsqrt_ps(a);
+
+    // Newton-Raphson with FMA: x1 = x0 * (1.5 - 0.5 * a * x0^2)
+    const __m256 half_a = _mm256_mul_ps(HALF, a);
+    const __m256 x0_sq = _mm256_mul_ps(x0, x0);
+    __m256 x1 = _mm256_mul_ps(x0, _mm256_fnmadd_ps(half_a, x0_sq, THREE_HALFS));
+
+    // For +0 and +Inf inputs, x0 is correct but NR produces NaN due to Inf*0
+    // AVX2: native 256-bit integer compare
+    __m256i a_si = _mm256_castps_si256(a);
+    __m256i zero_mask = _mm256_cmpeq_epi32(a_si, _mm256_setzero_si256());
+    __m256i inf_mask = _mm256_cmpeq_epi32(a_si, _mm256_set1_epi32(0x7F800000));
+    __m256 special_mask = _mm256_castsi256_ps(_mm256_or_si256(zero_mask, inf_mask));
+    return _mm256_blendv_ps(x1, x0, special_mask);
+}
+
 #endif /* INCLUDE_VOLK_VOLK_AVX2_FMA_INTRINSICS_H_ */

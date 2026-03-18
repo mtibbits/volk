@@ -178,6 +178,262 @@ volk_32f_tan_32f_u_sse4_1(float* bVector, const float* aVector, unsigned int num
 
 #endif /* LV_HAVE_SSE4_1 for unaligned */
 
+#ifdef LV_HAVE_AVX
+#include <immintrin.h>
+
+static inline void
+volk_32f_tan_32f_u_avx(float* bVector, const float* aVector, unsigned int num_points)
+{
+    float* bPtr = bVector;
+    const float* aPtr = aVector;
+
+    unsigned int number = 0;
+    unsigned int eighthPoints = num_points / 8;
+    unsigned int i = 0;
+
+    __m256 aVal, s, m4pi, pio4A, pio4B, cp1, cp2, cp3, cp4, cp5, ffours, ftwos, fones,
+        fzeroes;
+    __m256 sine, cosine, tangent, condition1, condition2, condition3;
+    /* 128-bit integer constants for range reduction (plain AVX has no 256-bit integer ops) */
+    __m128i ones_128, twos_128, fours_128;
+
+    m4pi = _mm256_set1_ps(1.273239545f);
+    pio4A = _mm256_set1_ps(0.78515625f);
+    pio4B = _mm256_set1_ps(0.241876e-3f);
+    ffours = _mm256_set1_ps(4.0f);
+    ftwos = _mm256_set1_ps(2.0f);
+    fones = _mm256_set1_ps(1.0f);
+    fzeroes = _mm256_setzero_ps();
+    ones_128 = _mm_set1_epi32(1);
+    twos_128 = _mm_set1_epi32(2);
+    fours_128 = _mm_set1_epi32(4);
+
+    cp1 = _mm256_set1_ps(1.0f);
+    cp2 = _mm256_set1_ps(0.83333333e-1f);
+    cp3 = _mm256_set1_ps(0.2777778e-2f);
+    cp4 = _mm256_set1_ps(0.49603e-4f);
+    cp5 = _mm256_set1_ps(0.551e-6f);
+
+    for (; number < eighthPoints; number++) {
+        aVal = _mm256_loadu_ps(aPtr);
+        s = _mm256_sub_ps(aVal,
+                          _mm256_and_ps(_mm256_mul_ps(aVal, ftwos),
+                                        _mm256_cmp_ps(aVal, fzeroes, _CMP_LT_OS)));
+
+        /* Compute q = floor(s * m4pi): _mm256_cvtps_epi32 + floor IS AVX */
+        __m256 s_m4pi_floor = _mm256_floor_ps(_mm256_mul_ps(s, m4pi));
+        /* Split q to 128-bit halves for integer operations */
+        __m128i q_lo = _mm_cvtps_epi32(_mm256_castps256_ps128(s_m4pi_floor));
+        __m128i q_hi = _mm_cvtps_epi32(_mm256_extractf128_ps(s_m4pi_floor, 1));
+
+        /* r = q + (q & 1) */
+        __m128i r_lo = _mm_add_epi32(q_lo, _mm_and_si128(q_lo, ones_128));
+        __m128i r_hi = _mm_add_epi32(q_hi, _mm_and_si128(q_hi, ones_128));
+
+        /* Convert r back to float for range reduction */
+        __m256 r_f = _mm256_insertf128_ps(_mm256_castps128_ps256(_mm_cvtepi32_ps(r_lo)),
+                                          _mm_cvtepi32_ps(r_hi), 1);
+        s = _mm256_sub_ps(s, _mm256_mul_ps(r_f, pio4A));
+        s = _mm256_sub_ps(s, _mm256_mul_ps(r_f, pio4B));
+
+        s = _mm256_div_ps(s, _mm256_set1_ps(8.0f)); /* 2^N for 3× argument reduction */
+        s = _mm256_mul_ps(s, s);
+        /* Evaluate Taylor series */
+        s = _mm256_mul_ps(
+            _mm256_add_ps(
+                _mm256_mul_ps(
+                    _mm256_sub_ps(
+                        _mm256_mul_ps(
+                            _mm256_add_ps(
+                                _mm256_mul_ps(_mm256_sub_ps(_mm256_mul_ps(s, cp5), cp4), s),
+                                cp3),
+                            s),
+                        cp2),
+                    s),
+                cp1),
+            s);
+
+        for (i = 0; i < 3; i++) {
+            s = _mm256_mul_ps(s, _mm256_sub_ps(ffours, s));
+        }
+        s = _mm256_div_ps(s, ftwos);
+
+        sine = _mm256_sqrt_ps(_mm256_mul_ps(_mm256_sub_ps(ftwos, s), s));
+        cosine = _mm256_sub_ps(fones, s);
+
+        /* Compute conditions using 128-bit integer ops then recombine */
+        /* condition1: ((q+1) & 2) != 0 */
+        __m128i q1_lo = _mm_add_epi32(q_lo, ones_128);
+        __m128i q1_hi = _mm_add_epi32(q_hi, ones_128);
+        __m256 cond1_f = _mm256_insertf128_ps(
+            _mm256_castps128_ps256(_mm_cvtepi32_ps(_mm_and_si128(q1_lo, twos_128))),
+            _mm_cvtepi32_ps(_mm_and_si128(q1_hi, twos_128)), 1);
+        condition1 = _mm256_cmp_ps(cond1_f, fzeroes, _CMP_NEQ_UQ);
+
+        /* condition2: ((q & 4) != 0) XOR (aVal < 0) */
+        __m256 q_and4_f = _mm256_insertf128_ps(
+            _mm256_castps128_ps256(_mm_cvtepi32_ps(_mm_and_si128(q_lo, fours_128))),
+            _mm_cvtepi32_ps(_mm_and_si128(q_hi, fours_128)), 1);
+        condition2 = _mm256_cmp_ps(
+            _mm256_cmp_ps(q_and4_f, fzeroes, _CMP_NEQ_UQ),
+            _mm256_cmp_ps(aVal, fzeroes, _CMP_LT_OS),
+            _CMP_NEQ_UQ);
+
+        /* condition3: ((q+2) & 4) != 0 */
+        __m128i q2_lo = _mm_add_epi32(q_lo, twos_128);
+        __m128i q2_hi = _mm_add_epi32(q_hi, twos_128);
+        __m256 cond3_f = _mm256_insertf128_ps(
+            _mm256_castps128_ps256(_mm_cvtepi32_ps(_mm_and_si128(q2_lo, fours_128))),
+            _mm_cvtepi32_ps(_mm_and_si128(q2_hi, fours_128)), 1);
+        condition3 = _mm256_cmp_ps(cond3_f, fzeroes, _CMP_NEQ_UQ);
+
+        __m256 temp = cosine;
+        cosine =
+            _mm256_add_ps(cosine, _mm256_and_ps(_mm256_sub_ps(sine, cosine), condition1));
+        sine = _mm256_add_ps(sine, _mm256_and_ps(_mm256_sub_ps(temp, sine), condition1));
+        sine = _mm256_sub_ps(
+            sine, _mm256_and_ps(_mm256_mul_ps(sine, _mm256_set1_ps(2.0f)), condition2));
+        cosine = _mm256_sub_ps(
+            cosine,
+            _mm256_and_ps(_mm256_mul_ps(cosine, _mm256_set1_ps(2.0f)), condition3));
+        tangent = _mm256_div_ps(sine, cosine);
+        _mm256_storeu_ps(bPtr, tangent);
+        aPtr += 8;
+        bPtr += 8;
+    }
+
+    number = eighthPoints * 8;
+    for (; number < num_points; number++) {
+        *bPtr++ = tanf(*aPtr++);
+    }
+}
+
+#endif /* LV_HAVE_AVX for unaligned */
+
+#if LV_HAVE_AVX && LV_HAVE_FMA
+#include <immintrin.h>
+
+static inline void
+volk_32f_tan_32f_u_avx_fma(float* bVector, const float* aVector, unsigned int num_points)
+{
+    float* bPtr = bVector;
+    const float* aPtr = aVector;
+
+    unsigned int number = 0;
+    unsigned int eighthPoints = num_points / 8;
+    unsigned int i = 0;
+
+    __m256 aVal, s, m4pi, pio4A, pio4B, cp1, cp2, cp3, cp4, cp5, ffours, ftwos, fones,
+        fzeroes;
+    __m256 sine, cosine, tangent, condition1, condition2, condition3;
+    /* 128-bit integer constants for range reduction (plain AVX has no 256-bit integer ops) */
+    __m128i ones_128, twos_128, fours_128;
+
+    m4pi = _mm256_set1_ps(1.273239545f);
+    pio4A = _mm256_set1_ps(0.78515625f);
+    pio4B = _mm256_set1_ps(0.241876e-3f);
+    ffours = _mm256_set1_ps(4.0f);
+    ftwos = _mm256_set1_ps(2.0f);
+    fones = _mm256_set1_ps(1.0f);
+    fzeroes = _mm256_setzero_ps();
+    ones_128 = _mm_set1_epi32(1);
+    twos_128 = _mm_set1_epi32(2);
+    fours_128 = _mm_set1_epi32(4);
+
+    cp1 = _mm256_set1_ps(1.0f);
+    cp2 = _mm256_set1_ps(0.83333333e-1f);
+    cp3 = _mm256_set1_ps(0.2777778e-2f);
+    cp4 = _mm256_set1_ps(0.49603e-4f);
+    cp5 = _mm256_set1_ps(0.551e-6f);
+
+    for (; number < eighthPoints; number++) {
+        aVal = _mm256_loadu_ps(aPtr);
+        s = _mm256_sub_ps(aVal,
+                          _mm256_and_ps(_mm256_mul_ps(aVal, ftwos),
+                                        _mm256_cmp_ps(aVal, fzeroes, _CMP_LT_OS)));
+
+        /* Compute q = floor(s * m4pi): _mm256_cvtps_epi32 + floor IS AVX */
+        __m256 s_m4pi_floor = _mm256_floor_ps(_mm256_mul_ps(s, m4pi));
+        /* Split q to 128-bit halves for integer operations */
+        __m128i q_lo = _mm_cvtps_epi32(_mm256_castps256_ps128(s_m4pi_floor));
+        __m128i q_hi = _mm_cvtps_epi32(_mm256_extractf128_ps(s_m4pi_floor, 1));
+
+        /* r = q + (q & 1) */
+        __m128i r_lo = _mm_add_epi32(q_lo, _mm_and_si128(q_lo, ones_128));
+        __m128i r_hi = _mm_add_epi32(q_hi, _mm_and_si128(q_hi, ones_128));
+
+        /* Convert r back to float for range reduction */
+        __m256 r_f = _mm256_insertf128_ps(_mm256_castps128_ps256(_mm_cvtepi32_ps(r_lo)),
+                                          _mm_cvtepi32_ps(r_hi), 1);
+        s = _mm256_fnmadd_ps(r_f, pio4A, s);
+        s = _mm256_fnmadd_ps(r_f, pio4B, s);
+
+        s = _mm256_div_ps(s, _mm256_set1_ps(8.0f)); /* 2^N for 3x argument reduction */
+        s = _mm256_mul_ps(s, s);
+        /* Evaluate Taylor series using FMA */
+        __m256 poly = _mm256_fmsub_ps(s, cp5, cp4);
+        poly = _mm256_fmadd_ps(poly, s, cp3);
+        poly = _mm256_fmsub_ps(poly, s, cp2);
+        poly = _mm256_fmadd_ps(poly, s, cp1);
+        s = _mm256_mul_ps(poly, s);
+
+        for (i = 0; i < 3; i++) {
+            s = _mm256_mul_ps(s, _mm256_sub_ps(ffours, s));
+        }
+        s = _mm256_div_ps(s, ftwos);
+
+        sine = _mm256_sqrt_ps(_mm256_mul_ps(_mm256_sub_ps(ftwos, s), s));
+        cosine = _mm256_sub_ps(fones, s);
+
+        /* Compute conditions using 128-bit integer ops then recombine */
+        /* condition1: ((q+1) & 2) != 0 */
+        __m128i q1_lo = _mm_add_epi32(q_lo, ones_128);
+        __m128i q1_hi = _mm_add_epi32(q_hi, ones_128);
+        __m256 cond1_f = _mm256_insertf128_ps(
+            _mm256_castps128_ps256(_mm_cvtepi32_ps(_mm_and_si128(q1_lo, twos_128))),
+            _mm_cvtepi32_ps(_mm_and_si128(q1_hi, twos_128)), 1);
+        condition1 = _mm256_cmp_ps(cond1_f, fzeroes, _CMP_NEQ_UQ);
+
+        /* condition2: ((q & 4) != 0) XOR (aVal < 0) */
+        __m256 q_and4_f = _mm256_insertf128_ps(
+            _mm256_castps128_ps256(_mm_cvtepi32_ps(_mm_and_si128(q_lo, fours_128))),
+            _mm_cvtepi32_ps(_mm_and_si128(q_hi, fours_128)), 1);
+        condition2 = _mm256_cmp_ps(
+            _mm256_cmp_ps(q_and4_f, fzeroes, _CMP_NEQ_UQ),
+            _mm256_cmp_ps(aVal, fzeroes, _CMP_LT_OS),
+            _CMP_NEQ_UQ);
+
+        /* condition3: ((q+2) & 4) != 0 */
+        __m128i q2_lo = _mm_add_epi32(q_lo, twos_128);
+        __m128i q2_hi = _mm_add_epi32(q_hi, twos_128);
+        __m256 cond3_f = _mm256_insertf128_ps(
+            _mm256_castps128_ps256(_mm_cvtepi32_ps(_mm_and_si128(q2_lo, fours_128))),
+            _mm_cvtepi32_ps(_mm_and_si128(q2_hi, fours_128)), 1);
+        condition3 = _mm256_cmp_ps(cond3_f, fzeroes, _CMP_NEQ_UQ);
+
+        __m256 temp = cosine;
+        cosine =
+            _mm256_add_ps(cosine, _mm256_and_ps(_mm256_sub_ps(sine, cosine), condition1));
+        sine = _mm256_add_ps(sine, _mm256_and_ps(_mm256_sub_ps(temp, sine), condition1));
+        sine = _mm256_sub_ps(
+            sine, _mm256_and_ps(_mm256_mul_ps(sine, _mm256_set1_ps(2.0f)), condition2));
+        cosine = _mm256_sub_ps(
+            cosine,
+            _mm256_and_ps(_mm256_mul_ps(cosine, _mm256_set1_ps(2.0f)), condition3));
+        tangent = _mm256_div_ps(sine, cosine);
+        _mm256_storeu_ps(bPtr, tangent);
+        aPtr += 8;
+        bPtr += 8;
+    }
+
+    number = eighthPoints * 8;
+    for (; number < num_points; number++) {
+        *bPtr++ = tanf(*aPtr++);
+    }
+}
+
+#endif /* LV_HAVE_AVX && LV_HAVE_FMA for unaligned */
+
 #ifdef LV_HAVE_AVX2
 #include <immintrin.h>
 
@@ -493,6 +749,109 @@ volk_32f_tan_32f_u_avx512f(float* bVector, const float* aVector, unsigned int nu
 
 #endif /* LV_HAVE_AVX512F for unaligned */
 
+#ifdef LV_HAVE_AVX512DQ
+#include <immintrin.h>
+
+static inline void
+volk_32f_tan_32f_u_avx512dq(float* bVector, const float* aVector, unsigned int num_points)
+{
+    float* bPtr = bVector;
+    const float* aPtr = aVector;
+
+    unsigned int number = 0;
+    const unsigned int sixteenthPoints = num_points / 16;
+    unsigned int i = 0;
+
+    __m512 aVal, s, m4pi, pio4A, pio4B, cp1, cp2, cp3, cp4, cp5, ffours, ftwos, fones;
+    __m512 sine, cosine, tangent;
+    __m512i q, r, ones, twos, fours;
+
+    m4pi = _mm512_set1_ps(1.273239545);
+    pio4A = _mm512_set1_ps(0.78515625);
+    pio4B = _mm512_set1_ps(0.241876e-3);
+    ffours = _mm512_set1_ps(4.0);
+    ftwos = _mm512_set1_ps(2.0);
+    fones = _mm512_set1_ps(1.0);
+    ones = _mm512_set1_epi32(1);
+    twos = _mm512_set1_epi32(2);
+    fours = _mm512_set1_epi32(4);
+
+    cp1 = _mm512_set1_ps(1.0);
+    cp2 = _mm512_set1_ps(0.83333333e-1);
+    cp3 = _mm512_set1_ps(0.2777778e-2);
+    cp4 = _mm512_set1_ps(0.49603e-4);
+    cp5 = _mm512_set1_ps(0.551e-6);
+
+    /* DQ: abs_mask for float-domain absolute value via _mm512_and_ps */
+    const __m512 abs_mask = _mm512_castsi512_ps(_mm512_set1_epi32(0x7fffffff));
+
+    for (; number < sixteenthPoints; number++) {
+        aVal = _mm512_loadu_ps(aPtr);
+
+        /* s = abs(aVal) — DQ: native float-domain AND, no integer bypass */
+        s = _mm512_and_ps(aVal, abs_mask);
+
+        q = _mm512_cvtps_epi32(_mm512_floor_ps(_mm512_mul_ps(s, m4pi)));
+        r = _mm512_add_epi32(q, _mm512_and_si512(q, ones));
+
+        s = _mm512_fnmadd_ps(_mm512_cvtepi32_ps(r), pio4A, s);
+        s = _mm512_fnmadd_ps(_mm512_cvtepi32_ps(r), pio4B, s);
+
+        s = _mm512_div_ps(s, _mm512_set1_ps(8.0));
+        s = _mm512_mul_ps(s, s);
+
+        /* Evaluate Taylor series */
+        s = _mm512_mul_ps(
+            _mm512_fmadd_ps(
+                _mm512_fmsub_ps(
+                    _mm512_fmadd_ps(_mm512_fmsub_ps(s, cp5, cp4), s, cp3), s, cp2),
+                s,
+                cp1),
+            s);
+
+        for (i = 0; i < 3; i++) {
+            s = _mm512_mul_ps(s, _mm512_sub_ps(ffours, s));
+        }
+        s = _mm512_div_ps(s, ftwos);
+
+        sine = _mm512_sqrt_ps(_mm512_mul_ps(_mm512_sub_ps(ftwos, s), s));
+        cosine = _mm512_sub_ps(fones, s);
+
+        /* Conditionally swap sine/cosine */
+        __mmask16 cond1 = _mm512_cmp_epi32_mask(
+            _mm512_and_si512(_mm512_add_epi32(q, ones), twos),
+            _mm512_setzero_si512(),
+            _MM_CMPINT_NE);
+        __m512 temp_sine = sine;
+        sine = _mm512_mask_blend_ps(cond1, sine, cosine);
+        cosine = _mm512_mask_blend_ps(cond1, cosine, temp_sine);
+
+        /* Negate sine where needed based on sign of input XOR octant */
+        __mmask16 neg_input = _mm512_cmp_ps_mask(aVal, _mm512_setzero_ps(), _CMP_LT_OS);
+        __mmask16 q_and_4 = _mm512_cmp_epi32_mask(
+            _mm512_and_si512(q, fours), _mm512_setzero_si512(), _MM_CMPINT_NE);
+        __mmask16 cond2 = neg_input ^ q_and_4;
+        sine = _mm512_mask_sub_ps(sine, cond2, _mm512_setzero_ps(), sine);
+
+        /* Negate cosine where needed */
+        __mmask16 cond3 = _mm512_cmp_epi32_mask(
+            _mm512_and_si512(_mm512_add_epi32(q, twos), fours),
+            _mm512_setzero_si512(),
+            _MM_CMPINT_NE);
+        cosine = _mm512_mask_sub_ps(cosine, cond3, _mm512_setzero_ps(), cosine);
+
+        tangent = _mm512_div_ps(sine, cosine);
+        _mm512_storeu_ps(bPtr, tangent);
+        aPtr += 16;
+        bPtr += 16;
+    }
+
+    number = sixteenthPoints * 16;
+    volk_32f_tan_32f_generic(bPtr, aPtr, num_points - number);
+}
+
+#endif /* LV_HAVE_AVX512DQ for unaligned */
+
 #ifdef LV_HAVE_NEON
 #include <arm_neon.h>
 #include <volk/volk_neon_intrinsics.h>
@@ -725,6 +1084,262 @@ volk_32f_tan_32f_a_sse4_1(float* bVector, const float* aVector, unsigned int num
 }
 
 #endif /* LV_HAVE_SSE4_1 for aligned */
+
+#ifdef LV_HAVE_AVX
+#include <immintrin.h>
+
+static inline void
+volk_32f_tan_32f_a_avx(float* bVector, const float* aVector, unsigned int num_points)
+{
+    float* bPtr = bVector;
+    const float* aPtr = aVector;
+
+    unsigned int number = 0;
+    unsigned int eighthPoints = num_points / 8;
+    unsigned int i = 0;
+
+    __m256 aVal, s, m4pi, pio4A, pio4B, cp1, cp2, cp3, cp4, cp5, ffours, ftwos, fones,
+        fzeroes;
+    __m256 sine, cosine, tangent, condition1, condition2, condition3;
+    /* 128-bit integer constants for range reduction (plain AVX has no 256-bit integer ops) */
+    __m128i ones_128, twos_128, fours_128;
+
+    m4pi = _mm256_set1_ps(1.273239545f);
+    pio4A = _mm256_set1_ps(0.78515625f);
+    pio4B = _mm256_set1_ps(0.241876e-3f);
+    ffours = _mm256_set1_ps(4.0f);
+    ftwos = _mm256_set1_ps(2.0f);
+    fones = _mm256_set1_ps(1.0f);
+    fzeroes = _mm256_setzero_ps();
+    ones_128 = _mm_set1_epi32(1);
+    twos_128 = _mm_set1_epi32(2);
+    fours_128 = _mm_set1_epi32(4);
+
+    cp1 = _mm256_set1_ps(1.0f);
+    cp2 = _mm256_set1_ps(0.83333333e-1f);
+    cp3 = _mm256_set1_ps(0.2777778e-2f);
+    cp4 = _mm256_set1_ps(0.49603e-4f);
+    cp5 = _mm256_set1_ps(0.551e-6f);
+
+    for (; number < eighthPoints; number++) {
+        aVal = _mm256_load_ps(aPtr);
+        s = _mm256_sub_ps(aVal,
+                          _mm256_and_ps(_mm256_mul_ps(aVal, ftwos),
+                                        _mm256_cmp_ps(aVal, fzeroes, _CMP_LT_OS)));
+
+        /* Compute q = floor(s * m4pi): _mm256_cvtps_epi32 + floor IS AVX */
+        __m256 s_m4pi_floor = _mm256_floor_ps(_mm256_mul_ps(s, m4pi));
+        /* Split q to 128-bit halves for integer operations */
+        __m128i q_lo = _mm_cvtps_epi32(_mm256_castps256_ps128(s_m4pi_floor));
+        __m128i q_hi = _mm_cvtps_epi32(_mm256_extractf128_ps(s_m4pi_floor, 1));
+
+        /* r = q + (q & 1) */
+        __m128i r_lo = _mm_add_epi32(q_lo, _mm_and_si128(q_lo, ones_128));
+        __m128i r_hi = _mm_add_epi32(q_hi, _mm_and_si128(q_hi, ones_128));
+
+        /* Convert r back to float for range reduction */
+        __m256 r_f = _mm256_insertf128_ps(_mm256_castps128_ps256(_mm_cvtepi32_ps(r_lo)),
+                                          _mm_cvtepi32_ps(r_hi), 1);
+        s = _mm256_sub_ps(s, _mm256_mul_ps(r_f, pio4A));
+        s = _mm256_sub_ps(s, _mm256_mul_ps(r_f, pio4B));
+
+        s = _mm256_div_ps(s, _mm256_set1_ps(8.0f)); /* 2^N for 3× argument reduction */
+        s = _mm256_mul_ps(s, s);
+        /* Evaluate Taylor series */
+        s = _mm256_mul_ps(
+            _mm256_add_ps(
+                _mm256_mul_ps(
+                    _mm256_sub_ps(
+                        _mm256_mul_ps(
+                            _mm256_add_ps(
+                                _mm256_mul_ps(_mm256_sub_ps(_mm256_mul_ps(s, cp5), cp4), s),
+                                cp3),
+                            s),
+                        cp2),
+                    s),
+                cp1),
+            s);
+
+        for (i = 0; i < 3; i++) {
+            s = _mm256_mul_ps(s, _mm256_sub_ps(ffours, s));
+        }
+        s = _mm256_div_ps(s, ftwos);
+
+        sine = _mm256_sqrt_ps(_mm256_mul_ps(_mm256_sub_ps(ftwos, s), s));
+        cosine = _mm256_sub_ps(fones, s);
+
+        /* Compute conditions using 128-bit integer ops then recombine */
+        /* condition1: ((q+1) & 2) != 0 */
+        __m128i q1_lo = _mm_add_epi32(q_lo, ones_128);
+        __m128i q1_hi = _mm_add_epi32(q_hi, ones_128);
+        __m256 cond1_f = _mm256_insertf128_ps(
+            _mm256_castps128_ps256(_mm_cvtepi32_ps(_mm_and_si128(q1_lo, twos_128))),
+            _mm_cvtepi32_ps(_mm_and_si128(q1_hi, twos_128)), 1);
+        condition1 = _mm256_cmp_ps(cond1_f, fzeroes, _CMP_NEQ_UQ);
+
+        /* condition2: ((q & 4) != 0) XOR (aVal < 0) */
+        __m256 q_and4_f = _mm256_insertf128_ps(
+            _mm256_castps128_ps256(_mm_cvtepi32_ps(_mm_and_si128(q_lo, fours_128))),
+            _mm_cvtepi32_ps(_mm_and_si128(q_hi, fours_128)), 1);
+        condition2 = _mm256_cmp_ps(
+            _mm256_cmp_ps(q_and4_f, fzeroes, _CMP_NEQ_UQ),
+            _mm256_cmp_ps(aVal, fzeroes, _CMP_LT_OS),
+            _CMP_NEQ_UQ);
+
+        /* condition3: ((q+2) & 4) != 0 */
+        __m128i q2_lo = _mm_add_epi32(q_lo, twos_128);
+        __m128i q2_hi = _mm_add_epi32(q_hi, twos_128);
+        __m256 cond3_f = _mm256_insertf128_ps(
+            _mm256_castps128_ps256(_mm_cvtepi32_ps(_mm_and_si128(q2_lo, fours_128))),
+            _mm_cvtepi32_ps(_mm_and_si128(q2_hi, fours_128)), 1);
+        condition3 = _mm256_cmp_ps(cond3_f, fzeroes, _CMP_NEQ_UQ);
+
+        __m256 temp = cosine;
+        cosine =
+            _mm256_add_ps(cosine, _mm256_and_ps(_mm256_sub_ps(sine, cosine), condition1));
+        sine = _mm256_add_ps(sine, _mm256_and_ps(_mm256_sub_ps(temp, sine), condition1));
+        sine = _mm256_sub_ps(
+            sine, _mm256_and_ps(_mm256_mul_ps(sine, _mm256_set1_ps(2.0f)), condition2));
+        cosine = _mm256_sub_ps(
+            cosine,
+            _mm256_and_ps(_mm256_mul_ps(cosine, _mm256_set1_ps(2.0f)), condition3));
+        tangent = _mm256_div_ps(sine, cosine);
+        _mm256_store_ps(bPtr, tangent);
+        aPtr += 8;
+        bPtr += 8;
+    }
+
+    number = eighthPoints * 8;
+    for (; number < num_points; number++) {
+        *bPtr++ = tanf(*aPtr++);
+    }
+}
+
+#endif /* LV_HAVE_AVX for aligned */
+
+#if LV_HAVE_AVX && LV_HAVE_FMA
+#include <immintrin.h>
+
+static inline void
+volk_32f_tan_32f_a_avx_fma(float* bVector, const float* aVector, unsigned int num_points)
+{
+    float* bPtr = bVector;
+    const float* aPtr = aVector;
+
+    unsigned int number = 0;
+    unsigned int eighthPoints = num_points / 8;
+    unsigned int i = 0;
+
+    __m256 aVal, s, m4pi, pio4A, pio4B, cp1, cp2, cp3, cp4, cp5, ffours, ftwos, fones,
+        fzeroes;
+    __m256 sine, cosine, tangent, condition1, condition2, condition3;
+    /* 128-bit integer constants for range reduction (plain AVX has no 256-bit integer ops) */
+    __m128i ones_128, twos_128, fours_128;
+
+    m4pi = _mm256_set1_ps(1.273239545f);
+    pio4A = _mm256_set1_ps(0.78515625f);
+    pio4B = _mm256_set1_ps(0.241876e-3f);
+    ffours = _mm256_set1_ps(4.0f);
+    ftwos = _mm256_set1_ps(2.0f);
+    fones = _mm256_set1_ps(1.0f);
+    fzeroes = _mm256_setzero_ps();
+    ones_128 = _mm_set1_epi32(1);
+    twos_128 = _mm_set1_epi32(2);
+    fours_128 = _mm_set1_epi32(4);
+
+    cp1 = _mm256_set1_ps(1.0f);
+    cp2 = _mm256_set1_ps(0.83333333e-1f);
+    cp3 = _mm256_set1_ps(0.2777778e-2f);
+    cp4 = _mm256_set1_ps(0.49603e-4f);
+    cp5 = _mm256_set1_ps(0.551e-6f);
+
+    for (; number < eighthPoints; number++) {
+        aVal = _mm256_load_ps(aPtr);
+        s = _mm256_sub_ps(aVal,
+                          _mm256_and_ps(_mm256_mul_ps(aVal, ftwos),
+                                        _mm256_cmp_ps(aVal, fzeroes, _CMP_LT_OS)));
+
+        /* Compute q = floor(s * m4pi): _mm256_cvtps_epi32 + floor IS AVX */
+        __m256 s_m4pi_floor = _mm256_floor_ps(_mm256_mul_ps(s, m4pi));
+        /* Split q to 128-bit halves for integer operations */
+        __m128i q_lo = _mm_cvtps_epi32(_mm256_castps256_ps128(s_m4pi_floor));
+        __m128i q_hi = _mm_cvtps_epi32(_mm256_extractf128_ps(s_m4pi_floor, 1));
+
+        /* r = q + (q & 1) */
+        __m128i r_lo = _mm_add_epi32(q_lo, _mm_and_si128(q_lo, ones_128));
+        __m128i r_hi = _mm_add_epi32(q_hi, _mm_and_si128(q_hi, ones_128));
+
+        /* Convert r back to float for range reduction */
+        __m256 r_f = _mm256_insertf128_ps(_mm256_castps128_ps256(_mm_cvtepi32_ps(r_lo)),
+                                          _mm_cvtepi32_ps(r_hi), 1);
+        s = _mm256_fnmadd_ps(r_f, pio4A, s);
+        s = _mm256_fnmadd_ps(r_f, pio4B, s);
+
+        s = _mm256_div_ps(s, _mm256_set1_ps(8.0f)); /* 2^N for 3x argument reduction */
+        s = _mm256_mul_ps(s, s);
+        /* Evaluate Taylor series using FMA */
+        __m256 poly = _mm256_fmsub_ps(s, cp5, cp4);
+        poly = _mm256_fmadd_ps(poly, s, cp3);
+        poly = _mm256_fmsub_ps(poly, s, cp2);
+        poly = _mm256_fmadd_ps(poly, s, cp1);
+        s = _mm256_mul_ps(poly, s);
+
+        for (i = 0; i < 3; i++) {
+            s = _mm256_mul_ps(s, _mm256_sub_ps(ffours, s));
+        }
+        s = _mm256_div_ps(s, ftwos);
+
+        sine = _mm256_sqrt_ps(_mm256_mul_ps(_mm256_sub_ps(ftwos, s), s));
+        cosine = _mm256_sub_ps(fones, s);
+
+        /* Compute conditions using 128-bit integer ops then recombine */
+        /* condition1: ((q+1) & 2) != 0 */
+        __m128i q1_lo = _mm_add_epi32(q_lo, ones_128);
+        __m128i q1_hi = _mm_add_epi32(q_hi, ones_128);
+        __m256 cond1_f = _mm256_insertf128_ps(
+            _mm256_castps128_ps256(_mm_cvtepi32_ps(_mm_and_si128(q1_lo, twos_128))),
+            _mm_cvtepi32_ps(_mm_and_si128(q1_hi, twos_128)), 1);
+        condition1 = _mm256_cmp_ps(cond1_f, fzeroes, _CMP_NEQ_UQ);
+
+        /* condition2: ((q & 4) != 0) XOR (aVal < 0) */
+        __m256 q_and4_f = _mm256_insertf128_ps(
+            _mm256_castps128_ps256(_mm_cvtepi32_ps(_mm_and_si128(q_lo, fours_128))),
+            _mm_cvtepi32_ps(_mm_and_si128(q_hi, fours_128)), 1);
+        condition2 = _mm256_cmp_ps(
+            _mm256_cmp_ps(q_and4_f, fzeroes, _CMP_NEQ_UQ),
+            _mm256_cmp_ps(aVal, fzeroes, _CMP_LT_OS),
+            _CMP_NEQ_UQ);
+
+        /* condition3: ((q+2) & 4) != 0 */
+        __m128i q2_lo = _mm_add_epi32(q_lo, twos_128);
+        __m128i q2_hi = _mm_add_epi32(q_hi, twos_128);
+        __m256 cond3_f = _mm256_insertf128_ps(
+            _mm256_castps128_ps256(_mm_cvtepi32_ps(_mm_and_si128(q2_lo, fours_128))),
+            _mm_cvtepi32_ps(_mm_and_si128(q2_hi, fours_128)), 1);
+        condition3 = _mm256_cmp_ps(cond3_f, fzeroes, _CMP_NEQ_UQ);
+
+        __m256 temp = cosine;
+        cosine =
+            _mm256_add_ps(cosine, _mm256_and_ps(_mm256_sub_ps(sine, cosine), condition1));
+        sine = _mm256_add_ps(sine, _mm256_and_ps(_mm256_sub_ps(temp, sine), condition1));
+        sine = _mm256_sub_ps(
+            sine, _mm256_and_ps(_mm256_mul_ps(sine, _mm256_set1_ps(2.0f)), condition2));
+        cosine = _mm256_sub_ps(
+            cosine,
+            _mm256_and_ps(_mm256_mul_ps(cosine, _mm256_set1_ps(2.0f)), condition3));
+        tangent = _mm256_div_ps(sine, cosine);
+        _mm256_store_ps(bPtr, tangent);
+        aPtr += 8;
+        bPtr += 8;
+    }
+
+    number = eighthPoints * 8;
+    for (; number < num_points; number++) {
+        *bPtr++ = tanf(*aPtr++);
+    }
+}
+
+#endif /* LV_HAVE_AVX && LV_HAVE_FMA for aligned */
 
 #ifdef LV_HAVE_AVX2
 #include <immintrin.h>
@@ -1040,6 +1655,109 @@ volk_32f_tan_32f_a_avx512f(float* bVector, const float* aVector, unsigned int nu
 }
 
 #endif /* LV_HAVE_AVX512F for aligned */
+
+#ifdef LV_HAVE_AVX512DQ
+#include <immintrin.h>
+
+static inline void
+volk_32f_tan_32f_a_avx512dq(float* bVector, const float* aVector, unsigned int num_points)
+{
+    float* bPtr = bVector;
+    const float* aPtr = aVector;
+
+    unsigned int number = 0;
+    const unsigned int sixteenthPoints = num_points / 16;
+    unsigned int i = 0;
+
+    __m512 aVal, s, m4pi, pio4A, pio4B, cp1, cp2, cp3, cp4, cp5, ffours, ftwos, fones;
+    __m512 sine, cosine, tangent;
+    __m512i q, r, ones, twos, fours;
+
+    m4pi = _mm512_set1_ps(1.273239545);
+    pio4A = _mm512_set1_ps(0.78515625);
+    pio4B = _mm512_set1_ps(0.241876e-3);
+    ffours = _mm512_set1_ps(4.0);
+    ftwos = _mm512_set1_ps(2.0);
+    fones = _mm512_set1_ps(1.0);
+    ones = _mm512_set1_epi32(1);
+    twos = _mm512_set1_epi32(2);
+    fours = _mm512_set1_epi32(4);
+
+    cp1 = _mm512_set1_ps(1.0);
+    cp2 = _mm512_set1_ps(0.83333333e-1);
+    cp3 = _mm512_set1_ps(0.2777778e-2);
+    cp4 = _mm512_set1_ps(0.49603e-4);
+    cp5 = _mm512_set1_ps(0.551e-6);
+
+    /* DQ: abs_mask for float-domain absolute value via _mm512_and_ps */
+    const __m512 abs_mask = _mm512_castsi512_ps(_mm512_set1_epi32(0x7fffffff));
+
+    for (; number < sixteenthPoints; number++) {
+        aVal = _mm512_load_ps(aPtr);
+
+        /* s = abs(aVal) — DQ: native float-domain AND, no integer bypass */
+        s = _mm512_and_ps(aVal, abs_mask);
+
+        q = _mm512_cvtps_epi32(_mm512_floor_ps(_mm512_mul_ps(s, m4pi)));
+        r = _mm512_add_epi32(q, _mm512_and_si512(q, ones));
+
+        s = _mm512_fnmadd_ps(_mm512_cvtepi32_ps(r), pio4A, s);
+        s = _mm512_fnmadd_ps(_mm512_cvtepi32_ps(r), pio4B, s);
+
+        s = _mm512_div_ps(s, _mm512_set1_ps(8.0));
+        s = _mm512_mul_ps(s, s);
+
+        /* Evaluate Taylor series */
+        s = _mm512_mul_ps(
+            _mm512_fmadd_ps(
+                _mm512_fmsub_ps(
+                    _mm512_fmadd_ps(_mm512_fmsub_ps(s, cp5, cp4), s, cp3), s, cp2),
+                s,
+                cp1),
+            s);
+
+        for (i = 0; i < 3; i++) {
+            s = _mm512_mul_ps(s, _mm512_sub_ps(ffours, s));
+        }
+        s = _mm512_div_ps(s, ftwos);
+
+        sine = _mm512_sqrt_ps(_mm512_mul_ps(_mm512_sub_ps(ftwos, s), s));
+        cosine = _mm512_sub_ps(fones, s);
+
+        /* Conditionally swap sine/cosine */
+        __mmask16 cond1 = _mm512_cmp_epi32_mask(
+            _mm512_and_si512(_mm512_add_epi32(q, ones), twos),
+            _mm512_setzero_si512(),
+            _MM_CMPINT_NE);
+        __m512 temp_sine = sine;
+        sine = _mm512_mask_blend_ps(cond1, sine, cosine);
+        cosine = _mm512_mask_blend_ps(cond1, cosine, temp_sine);
+
+        /* Negate sine where needed based on sign of input XOR octant */
+        __mmask16 neg_input = _mm512_cmp_ps_mask(aVal, _mm512_setzero_ps(), _CMP_LT_OS);
+        __mmask16 q_and_4 = _mm512_cmp_epi32_mask(
+            _mm512_and_si512(q, fours), _mm512_setzero_si512(), _MM_CMPINT_NE);
+        __mmask16 cond2 = neg_input ^ q_and_4;
+        sine = _mm512_mask_sub_ps(sine, cond2, _mm512_setzero_ps(), sine);
+
+        /* Negate cosine where needed */
+        __mmask16 cond3 = _mm512_cmp_epi32_mask(
+            _mm512_and_si512(_mm512_add_epi32(q, twos), fours),
+            _mm512_setzero_si512(),
+            _MM_CMPINT_NE);
+        cosine = _mm512_mask_sub_ps(cosine, cond3, _mm512_setzero_ps(), cosine);
+
+        tangent = _mm512_div_ps(sine, cosine);
+        _mm512_store_ps(bPtr, tangent);
+        aPtr += 16;
+        bPtr += 16;
+    }
+
+    number = sixteenthPoints * 16;
+    volk_32f_tan_32f_generic(bPtr, aPtr, num_points - number);
+}
+
+#endif /* LV_HAVE_AVX512DQ for aligned */
 
 
 #endif /* INCLUDED_volk_32f_tan_32f_a_H */

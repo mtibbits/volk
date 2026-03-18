@@ -328,6 +328,26 @@ extern void volk_16i_max_star_horizontal_16i_neonasm(int16_t* target,
                                                      unsigned int num_points);
 #endif /* LV_HAVE_NEONV7 */
 
+#ifdef LV_HAVE_RVV
+#include <riscv_vector.h>
+
+static inline void volk_16i_max_star_horizontal_16i_rvv(int16_t* target,
+                                                         const int16_t* src0,
+                                                         unsigned int num_points)
+{
+    /* Process consecutive pairs: target[i] = max(src0[2i], src0[2i+1]) */
+    size_t n = (size_t)num_points / 2;
+    for (size_t vl; n > 0; n -= vl, src0 += vl * 2, target += vl) {
+        vl = __riscv_vsetvl_e16m4(n);
+        /* Load interleaved pairs with stride-2 segment load */
+        vint16m4_t v0 = __riscv_vlse16_v_i16m4(src0, 2 * sizeof(int16_t), vl);
+        vint16m4_t v1 = __riscv_vlse16_v_i16m4(src0 + 1, 2 * sizeof(int16_t), vl);
+        vint16m4_t result = __riscv_vmax(v0, v1, vl);
+        __riscv_vse16(target, result, vl);
+    }
+}
+#endif /* LV_HAVE_RVV */
+
 #endif /* INCLUDED_volk_16i_max_star_horizontal_16i_u_H */
 
 #ifndef INCLUDED_volk_16i_max_star_horizontal_16i_a_H

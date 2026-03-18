@@ -119,6 +119,44 @@ static inline void volk_32f_x2_max_32f_u_avx(float* cVector,
 }
 #endif /* LV_HAVE_AVX */
 
+#ifdef LV_HAVE_AVX2
+#include <immintrin.h>
+
+static inline void volk_32f_x2_max_32f_u_avx2(float* cVector,
+                                             const float* aVector,
+                                             const float* bVector,
+                                             unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int eighthPoints = num_points / 8;
+
+    float* cPtr = cVector;
+    const float* aPtr = aVector;
+    const float* bPtr = bVector;
+
+    __m256 aVal, bVal, cVal;
+    for (; number < eighthPoints; number++) {
+        aVal = _mm256_loadu_ps(aPtr);
+        bVal = _mm256_loadu_ps(bPtr);
+
+        cVal = _mm256_max_ps(aVal, bVal);
+
+        _mm256_storeu_ps(cPtr, cVal); // Store the results back into the C container
+
+        aPtr += 8;
+        bPtr += 8;
+        cPtr += 8;
+    }
+
+    number = eighthPoints * 8;
+    for (; number < num_points; number++) {
+        const float a = *aPtr++;
+        const float b = *bPtr++;
+        *cPtr++ = (a > b ? a : b);
+    }
+}
+#endif /* LV_HAVE_AVX2 */
+
 #ifdef LV_HAVE_AVX512F
 #include <immintrin.h>
 
@@ -346,6 +384,44 @@ static inline void volk_32f_x2_max_32f_a_avx(float* cVector,
     }
 }
 #endif /* LV_HAVE_AVX */
+
+#ifdef LV_HAVE_AVX2
+#include <immintrin.h>
+
+static inline void volk_32f_x2_max_32f_a_avx2(float* cVector,
+                                             const float* aVector,
+                                             const float* bVector,
+                                             unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int eighthPoints = num_points / 8;
+
+    float* cPtr = cVector;
+    const float* aPtr = aVector;
+    const float* bPtr = bVector;
+
+    __m256 aVal, bVal, cVal;
+    for (; number < eighthPoints; number++) {
+        aVal = _mm256_load_ps(aPtr);
+        bVal = _mm256_load_ps(bPtr);
+
+        cVal = _mm256_max_ps(aVal, bVal);
+
+        _mm256_store_ps(cPtr, cVal); // Store the results back into the C container
+
+        aPtr += 8;
+        bPtr += 8;
+        cPtr += 8;
+    }
+
+    number = eighthPoints * 8;
+    for (; number < num_points; number++) {
+        const float a = *aPtr++;
+        const float b = *bPtr++;
+        *cPtr++ = (a > b ? a : b);
+    }
+}
+#endif /* LV_HAVE_AVX2 */
 
 #ifdef LV_HAVE_AVX512F
 #include <immintrin.h>

@@ -219,6 +219,78 @@ static inline void volk_32f_expfast_32f_u_avx_fma(float* bVector,
 
 #endif /* LV_HAVE_AVX && LV_HAVE_FMA */
 
+#ifdef LV_HAVE_AVX2
+#include <immintrin.h>
+
+static inline void volk_32f_expfast_32f_u_avx2(float* bVector,
+                                                const float* aVector,
+                                                unsigned int num_points)
+{
+    float* bPtr = bVector;
+    const float* aPtr = aVector;
+
+    unsigned int number = 0;
+    const unsigned int eighthPoints = num_points / 8;
+
+    __m256 aVal, bVal, a, b;
+    __m256i exp;
+    a = _mm256_set1_ps(A / Mln2);
+    b = _mm256_set1_ps(B - C);
+
+    for (; number < eighthPoints; number++) {
+        aVal = _mm256_loadu_ps(aPtr);
+        exp = _mm256_cvtps_epi32(_mm256_add_ps(_mm256_mul_ps(a, aVal), b));
+        bVal = _mm256_castsi256_ps(exp);
+
+        _mm256_storeu_ps(bPtr, bVal);
+        aPtr += 8;
+        bPtr += 8;
+    }
+
+    number = eighthPoints * 8;
+    for (; number < num_points; number++) {
+        *bPtr++ = expf(*aPtr++);
+    }
+}
+
+#endif /* LV_HAVE_AVX2 */
+
+#if LV_HAVE_AVX2 && LV_HAVE_FMA
+#include <immintrin.h>
+
+static inline void volk_32f_expfast_32f_u_avx2_fma(float* bVector,
+                                                    const float* aVector,
+                                                    unsigned int num_points)
+{
+    float* bPtr = bVector;
+    const float* aPtr = aVector;
+
+    unsigned int number = 0;
+    const unsigned int eighthPoints = num_points / 8;
+
+    __m256 aVal, bVal, a, b;
+    __m256i exp;
+    a = _mm256_set1_ps(A / Mln2);
+    b = _mm256_set1_ps(B - C);
+
+    for (; number < eighthPoints; number++) {
+        aVal = _mm256_loadu_ps(aPtr);
+        exp = _mm256_cvtps_epi32(_mm256_fmadd_ps(a, aVal, b));
+        bVal = _mm256_castsi256_ps(exp);
+
+        _mm256_storeu_ps(bPtr, bVal);
+        aPtr += 8;
+        bPtr += 8;
+    }
+
+    number = eighthPoints * 8;
+    for (; number < num_points; number++) {
+        *bPtr++ = expf(*aPtr++);
+    }
+}
+
+#endif /* LV_HAVE_AVX2 && LV_HAVE_FMA */
+
 #ifdef LV_HAVE_AVX512F
 #include <immintrin.h>
 
@@ -494,6 +566,78 @@ static inline void volk_32f_expfast_32f_a_avx_fma(float* bVector,
 }
 
 #endif /* LV_HAVE_AVX && LV_HAVE_FMA */
+
+#ifdef LV_HAVE_AVX2
+#include <immintrin.h>
+
+static inline void volk_32f_expfast_32f_a_avx2(float* bVector,
+                                                const float* aVector,
+                                                unsigned int num_points)
+{
+    float* bPtr = bVector;
+    const float* aPtr = aVector;
+
+    unsigned int number = 0;
+    const unsigned int eighthPoints = num_points / 8;
+
+    __m256 aVal, bVal, a, b;
+    __m256i exp;
+    a = _mm256_set1_ps(A / Mln2);
+    b = _mm256_set1_ps(B - C);
+
+    for (; number < eighthPoints; number++) {
+        aVal = _mm256_load_ps(aPtr);
+        exp = _mm256_cvtps_epi32(_mm256_add_ps(_mm256_mul_ps(a, aVal), b));
+        bVal = _mm256_castsi256_ps(exp);
+
+        _mm256_store_ps(bPtr, bVal);
+        aPtr += 8;
+        bPtr += 8;
+    }
+
+    number = eighthPoints * 8;
+    for (; number < num_points; number++) {
+        *bPtr++ = expf(*aPtr++);
+    }
+}
+
+#endif /* LV_HAVE_AVX2 */
+
+#if LV_HAVE_AVX2 && LV_HAVE_FMA
+#include <immintrin.h>
+
+static inline void volk_32f_expfast_32f_a_avx2_fma(float* bVector,
+                                                    const float* aVector,
+                                                    unsigned int num_points)
+{
+    float* bPtr = bVector;
+    const float* aPtr = aVector;
+
+    unsigned int number = 0;
+    const unsigned int eighthPoints = num_points / 8;
+
+    __m256 aVal, bVal, a, b;
+    __m256i exp;
+    a = _mm256_set1_ps(A / Mln2);
+    b = _mm256_set1_ps(B - C);
+
+    for (; number < eighthPoints; number++) {
+        aVal = _mm256_load_ps(aPtr);
+        exp = _mm256_cvtps_epi32(_mm256_fmadd_ps(a, aVal, b));
+        bVal = _mm256_castsi256_ps(exp);
+
+        _mm256_store_ps(bPtr, bVal);
+        aPtr += 8;
+        bPtr += 8;
+    }
+
+    number = eighthPoints * 8;
+    for (; number < num_points; number++) {
+        *bPtr++ = expf(*aPtr++);
+    }
+}
+
+#endif /* LV_HAVE_AVX2 && LV_HAVE_FMA */
 
 #ifdef LV_HAVE_AVX512F
 #include <immintrin.h>

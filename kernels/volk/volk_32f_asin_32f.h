@@ -176,6 +176,73 @@ volk_32f_asin_32f_u_avx(float* bVector, const float* aVector, unsigned int num_p
 
 #endif /* LV_HAVE_AVX */
 
+#if LV_HAVE_AVX && LV_HAVE_FMA
+#include <immintrin.h>
+
+static inline void volk_32f_asin_32f_u_avx_fma(float* bVector,
+                                                const float* aVector,
+                                                unsigned int num_points)
+{
+    const __m256 pi_2 = _mm256_set1_ps(0x1.921fb6p0f);
+    const __m256 half = _mm256_set1_ps(0.5f);
+    const __m256 one = _mm256_set1_ps(1.0f);
+    const __m256 two = _mm256_set1_ps(2.0f);
+    const __m256 sign_mask = _mm256_set1_ps(-0.0f);
+
+    const __m256 c0 = _mm256_set1_ps(0x1.ffffcep-1f);
+    const __m256 c1 = _mm256_set1_ps(0x1.55b648p-3f);
+    const __m256 c2 = _mm256_set1_ps(0x1.24d192p-4f);
+    const __m256 c3 = _mm256_set1_ps(0x1.0a788p-4f);
+
+    unsigned int number = 0;
+    const unsigned int eighthPoints = num_points / 8;
+
+    for (; number < eighthPoints; number++) {
+        __m256 aVal = _mm256_loadu_ps(aVector);
+
+        __m256 sign = _mm256_and_ps(aVal, sign_mask);
+        __m256 ax = _mm256_andnot_ps(sign_mask, aVal);
+
+        __m256 t = _mm256_mul_ps(_mm256_sub_ps(one, ax), half);
+        __m256 s = _mm256_sqrt_ps(t);
+
+        /* arcsin poly (small range): Horner with FMA on ax */
+        __m256 u_small = _mm256_mul_ps(ax, ax);
+        __m256 p_small = c3;
+        p_small = _mm256_fmadd_ps(u_small, p_small, c2);
+        p_small = _mm256_fmadd_ps(u_small, p_small, c1);
+        p_small = _mm256_fmadd_ps(u_small, p_small, c0);
+        __m256 poly_small = _mm256_mul_ps(ax, p_small);
+
+        /* arcsin poly (large range): Horner with FMA on s */
+        __m256 u_large = _mm256_mul_ps(s, s);
+        __m256 p_large = c3;
+        p_large = _mm256_fmadd_ps(u_large, p_large, c2);
+        p_large = _mm256_fmadd_ps(u_large, p_large, c1);
+        p_large = _mm256_fmadd_ps(u_large, p_large, c0);
+        __m256 poly_large = _mm256_mul_ps(s, p_large);
+
+        __m256 result_large = _mm256_fnmadd_ps(two, poly_large, pi_2);
+
+        __m256 mask = _mm256_cmp_ps(ax, half, _CMP_GT_OS);
+        __m256 result = _mm256_blendv_ps(poly_small, result_large, mask);
+
+        result = _mm256_or_ps(result, sign);
+
+        _mm256_storeu_ps(bVector, result);
+
+        aVector += 8;
+        bVector += 8;
+    }
+
+    number = eighthPoints * 8;
+    for (; number < num_points; number++) {
+        *bVector++ = volk_arcsin(*aVector++);
+    }
+}
+
+#endif /* LV_HAVE_AVX && LV_HAVE_FMA */
+
 #if LV_HAVE_AVX2 && LV_HAVE_FMA
 #include <immintrin.h>
 #include <volk/volk_avx2_fma_intrinsics.h>
@@ -274,6 +341,55 @@ volk_32f_asin_32f_u_avx512(float* bVector, const float* aVector, unsigned int nu
 }
 
 #endif /* LV_HAVE_AVX512F */
+
+#ifdef LV_HAVE_AVX512DQ
+#include <immintrin.h>
+#include <volk/volk_avx512_intrinsics.h>
+
+static inline void
+volk_32f_asin_32f_u_avx512dq(float* bVector, const float* aVector, unsigned int num_points)
+{
+    const __m512 pi_2 = _mm512_set1_ps(0x1.921fb6p0f);
+    const __m512 half = _mm512_set1_ps(0.5f);
+    const __m512 one = _mm512_set1_ps(1.0f);
+    const __m512 two = _mm512_set1_ps(2.0f);
+    const __m512 sign_mask = _mm512_set1_ps(-0.0f);
+
+    unsigned int number = 0;
+    const unsigned int sixteenthPoints = num_points / 16;
+
+    for (; number < sixteenthPoints; number++) {
+        __m512 aVal = _mm512_loadu_ps(aVector);
+
+        __m512 sign = _mm512_and_ps(aVal, sign_mask);
+        __m512 ax = _mm512_andnot_ps(sign_mask, aVal);
+
+        __m512 t = _mm512_mul_ps(_mm512_sub_ps(one, ax), half);
+        __m512 s = _mm512_sqrt_ps(t);
+
+        __m512 poly_small = _mm512_arcsin_poly_avx512(ax);
+        __m512 poly_large = _mm512_arcsin_poly_avx512(s);
+
+        __m512 result_large = _mm512_fnmadd_ps(two, poly_large, pi_2);
+
+        __mmask16 mask = _mm512_cmp_ps_mask(ax, half, _CMP_GT_OS);
+        __m512 result = _mm512_mask_blend_ps(mask, poly_small, result_large);
+
+        result = _mm512_or_ps(result, sign);
+
+        _mm512_storeu_ps(bVector, result);
+
+        aVector += 16;
+        bVector += 16;
+    }
+
+    number = sixteenthPoints * 16;
+    for (; number < num_points; number++) {
+        *bVector++ = volk_arcsin(*aVector++);
+    }
+}
+
+#endif /* LV_HAVE_AVX512DQ */
 
 #ifdef LV_HAVE_NEON
 #include <arm_neon.h>
@@ -380,6 +496,68 @@ volk_32f_asin_32f_neonv8(float* bVector, const float* aVector, unsigned int num_
 }
 
 #endif /* LV_HAVE_NEONV8 */
+
+#ifdef LV_HAVE_RVV
+#include <riscv_vector.h>
+
+static inline void
+volk_32f_asin_32f_rvv(float* bVector, const float* aVector, unsigned int num_points)
+{
+    /* arcsin polynomial coefficients: asin(x) = x * P(x^2) on |x| <= 0.5 */
+    const float c0 = 0x1.ffffcep-1f;
+    const float c1 = 0x1.55b648p-3f;
+    const float c2 = 0x1.24d192p-4f;
+    const float c3 = 0x1.0a788p-4f;
+    const float pi_2 = 0x1.921fb6p0f;
+
+    size_t n = (size_t)num_points;
+    for (size_t vl; n > 0; n -= vl, aVector += vl, bVector += vl) {
+        vl = __riscv_vsetvl_e32m4(n);
+        vfloat32m4_t x = __riscv_vle32_v_f32m4(aVector, vl);
+
+        /* Extract sign and take absolute value */
+        vfloat32m4_t ax = __riscv_vfabs(x, vl);
+        vuint32m4_t sign_bits = __riscv_vand(
+            __riscv_vreinterpret_u32m4(__riscv_vreinterpret_v_f32m4_i32m4(x)),
+            0x80000000u, vl);
+
+        /* Two-range approximation */
+        vbool8_t large = __riscv_vmfgt(ax, 0.5f, vl);
+
+        /* Large range: t = (1 - |x|) * 0.5, s = sqrt(t) */
+        vfloat32m4_t t = __riscv_vfmul(
+            __riscv_vfrsub(ax, 1.0f, vl), 0.5f, vl);
+        vfloat32m4_t s = __riscv_vfsqrt(t, vl);
+
+        /* Select input for polynomial: |x| when small, sqrt(t) when large */
+        vfloat32m4_t poly_in = __riscv_vmerge(ax, s, large, vl);
+
+        /* Evaluate arcsin polynomial via Horner: x * (c0 + u*(c1 + u*(c2 + u*c3))) */
+        vfloat32m4_t u = __riscv_vfmul(poly_in, poly_in, vl);
+        vfloat32m4_t p = __riscv_vfmv_v_f_f32m4(c3, vl);
+        p = __riscv_vfmadd(p, u, __riscv_vfmv_v_f_f32m4(c2, vl), vl);
+        p = __riscv_vfmadd(p, u, __riscv_vfmv_v_f_f32m4(c1, vl), vl);
+        p = __riscv_vfmadd(p, u, __riscv_vfmv_v_f_f32m4(c0, vl), vl);
+        vfloat32m4_t poly_val = __riscv_vfmul(poly_in, p, vl);
+
+        /* Large range result: pi/2 - 2 * poly_val */
+        vfloat32m4_t result_large = __riscv_vfnmsac(
+            __riscv_vfmv_v_f_f32m4(pi_2, vl), 2.0f, poly_val, vl);
+
+        /* Select result */
+        vfloat32m4_t result = __riscv_vmerge(poly_val, result_large, large, vl);
+
+        /* Apply sign */
+        vuint32m4_t result_bits = __riscv_vreinterpret_u32m4(
+            __riscv_vreinterpret_v_f32m4_i32m4(result));
+        result_bits = __riscv_vor(result_bits, sign_bits, vl);
+        result = __riscv_vreinterpret_f32m4(
+            __riscv_vreinterpret_v_u32m4_i32m4(result_bits));
+
+        __riscv_vse32(bVector, result, vl);
+    }
+}
+#endif /* LV_HAVE_RVV */
 
 #endif /* INCLUDED_volk_32f_asin_32f_u_H */
 
@@ -499,6 +677,73 @@ volk_32f_asin_32f_a_avx(float* bVector, const float* aVector, unsigned int num_p
 
 #endif /* LV_HAVE_AVX */
 
+#if LV_HAVE_AVX && LV_HAVE_FMA
+#include <immintrin.h>
+
+static inline void volk_32f_asin_32f_a_avx_fma(float* bVector,
+                                                const float* aVector,
+                                                unsigned int num_points)
+{
+    const __m256 pi_2 = _mm256_set1_ps(0x1.921fb6p0f);
+    const __m256 half = _mm256_set1_ps(0.5f);
+    const __m256 one = _mm256_set1_ps(1.0f);
+    const __m256 two = _mm256_set1_ps(2.0f);
+    const __m256 sign_mask = _mm256_set1_ps(-0.0f);
+
+    const __m256 c0 = _mm256_set1_ps(0x1.ffffcep-1f);
+    const __m256 c1 = _mm256_set1_ps(0x1.55b648p-3f);
+    const __m256 c2 = _mm256_set1_ps(0x1.24d192p-4f);
+    const __m256 c3 = _mm256_set1_ps(0x1.0a788p-4f);
+
+    unsigned int number = 0;
+    const unsigned int eighthPoints = num_points / 8;
+
+    for (; number < eighthPoints; number++) {
+        __m256 aVal = _mm256_load_ps(aVector);
+
+        __m256 sign = _mm256_and_ps(aVal, sign_mask);
+        __m256 ax = _mm256_andnot_ps(sign_mask, aVal);
+
+        __m256 t = _mm256_mul_ps(_mm256_sub_ps(one, ax), half);
+        __m256 s = _mm256_sqrt_ps(t);
+
+        /* arcsin poly (small range): Horner with FMA on ax */
+        __m256 u_small = _mm256_mul_ps(ax, ax);
+        __m256 p_small = c3;
+        p_small = _mm256_fmadd_ps(u_small, p_small, c2);
+        p_small = _mm256_fmadd_ps(u_small, p_small, c1);
+        p_small = _mm256_fmadd_ps(u_small, p_small, c0);
+        __m256 poly_small = _mm256_mul_ps(ax, p_small);
+
+        /* arcsin poly (large range): Horner with FMA on s */
+        __m256 u_large = _mm256_mul_ps(s, s);
+        __m256 p_large = c3;
+        p_large = _mm256_fmadd_ps(u_large, p_large, c2);
+        p_large = _mm256_fmadd_ps(u_large, p_large, c1);
+        p_large = _mm256_fmadd_ps(u_large, p_large, c0);
+        __m256 poly_large = _mm256_mul_ps(s, p_large);
+
+        __m256 result_large = _mm256_fnmadd_ps(two, poly_large, pi_2);
+
+        __m256 mask = _mm256_cmp_ps(ax, half, _CMP_GT_OS);
+        __m256 result = _mm256_blendv_ps(poly_small, result_large, mask);
+
+        result = _mm256_or_ps(result, sign);
+
+        _mm256_store_ps(bVector, result);
+
+        aVector += 8;
+        bVector += 8;
+    }
+
+    number = eighthPoints * 8;
+    for (; number < num_points; number++) {
+        *bVector++ = volk_arcsin(*aVector++);
+    }
+}
+
+#endif /* LV_HAVE_AVX && LV_HAVE_FMA */
+
 #if LV_HAVE_AVX2 && LV_HAVE_FMA
 #include <immintrin.h>
 #include <volk/volk_avx2_fma_intrinsics.h>
@@ -609,5 +854,54 @@ volk_32f_asin_32f_a_avx512(float* bVector, const float* aVector, unsigned int nu
 }
 
 #endif /* LV_HAVE_AVX512F */
+
+#ifdef LV_HAVE_AVX512DQ
+#include <immintrin.h>
+#include <volk/volk_avx512_intrinsics.h>
+
+static inline void
+volk_32f_asin_32f_a_avx512dq(float* bVector, const float* aVector, unsigned int num_points)
+{
+    const __m512 pi_2 = _mm512_set1_ps(0x1.921fb6p0f);
+    const __m512 half = _mm512_set1_ps(0.5f);
+    const __m512 one = _mm512_set1_ps(1.0f);
+    const __m512 two = _mm512_set1_ps(2.0f);
+    const __m512 sign_mask = _mm512_set1_ps(-0.0f);
+
+    unsigned int number = 0;
+    const unsigned int sixteenthPoints = num_points / 16;
+
+    for (; number < sixteenthPoints; number++) {
+        __m512 aVal = _mm512_load_ps(aVector);
+
+        __m512 sign = _mm512_and_ps(aVal, sign_mask);
+        __m512 ax = _mm512_andnot_ps(sign_mask, aVal);
+
+        __m512 t = _mm512_mul_ps(_mm512_sub_ps(one, ax), half);
+        __m512 s = _mm512_sqrt_ps(t);
+
+        __m512 poly_small = _mm512_arcsin_poly_avx512(ax);
+        __m512 poly_large = _mm512_arcsin_poly_avx512(s);
+
+        __m512 result_large = _mm512_fnmadd_ps(two, poly_large, pi_2);
+
+        __mmask16 mask = _mm512_cmp_ps_mask(ax, half, _CMP_GT_OS);
+        __m512 result = _mm512_mask_blend_ps(mask, poly_small, result_large);
+
+        result = _mm512_or_ps(result, sign);
+
+        _mm512_store_ps(bVector, result);
+
+        aVector += 16;
+        bVector += 16;
+    }
+
+    number = sixteenthPoints * 16;
+    for (; number < num_points; number++) {
+        *bVector++ = volk_arcsin(*aVector++);
+    }
+}
+
+#endif /* LV_HAVE_AVX512DQ */
 
 #endif /* INCLUDED_volk_32f_asin_32f_a_H */

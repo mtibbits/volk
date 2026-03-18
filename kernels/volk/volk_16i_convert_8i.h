@@ -311,6 +311,21 @@ static inline void volk_16i_convert_8i_rvv(int8_t* outputVector,
 }
 #endif /* LV_HAVE_RVV */
 
+#ifdef LV_HAVE_ORC
+
+extern void volk_16i_convert_8i_a_orc_impl(int8_t* outputVector,
+                                            const int16_t* inputVector,
+                                            int num_points);
+
+static inline void volk_16i_convert_8i_u_orc(int8_t* outputVector,
+                                              const int16_t* inputVector,
+                                              unsigned int num_points)
+{
+    volk_16i_convert_8i_a_orc_impl(outputVector, inputVector, num_points);
+}
+
+#endif /* LV_HAVE_ORC */
+
 #endif /* INCLUDED_volk_16i_convert_8i_u_H */
 #ifndef INCLUDED_volk_16i_convert_8i_a_H
 #define INCLUDED_volk_16i_convert_8i_a_H

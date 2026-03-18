@@ -98,6 +98,17 @@ static inline void volk_32fc_s32fc_multiply_32fc_generic(lv_32fc_t* cVector,
 }
 #endif /* LV_HAVE_GENERIC */
 
+#ifdef LV_HAVE_SSE
+
+static inline void volk_32fc_s32fc_multiply_32fc_u_sse(lv_32fc_t* cVector,
+                                                        const lv_32fc_t* aVector,
+                                                        const lv_32fc_t scalar,
+                                                        unsigned int num_points)
+{
+    volk_32fc_s32fc_multiply2_32fc_u_sse(cVector, aVector, &scalar, num_points);
+}
+#endif /* LV_HAVE_SSE */
+
 #ifdef LV_HAVE_SSE3
 
 static inline void volk_32fc_s32fc_multiply_32fc_u_sse3(lv_32fc_t* cVector,
@@ -120,6 +131,17 @@ static inline void volk_32fc_s32fc_multiply_32fc_u_avx(lv_32fc_t* cVector,
 }
 #endif /* LV_HAVE_AVX */
 
+#ifdef LV_HAVE_AVX2
+
+static inline void volk_32fc_s32fc_multiply_32fc_u_avx2(lv_32fc_t* cVector,
+                                                       const lv_32fc_t* aVector,
+                                                       const lv_32fc_t scalar,
+                                                       unsigned int num_points)
+{
+    volk_32fc_s32fc_multiply2_32fc_u_avx2(cVector, aVector, &scalar, num_points);
+}
+#endif /* LV_HAVE_AVX2 */
+
 #if LV_HAVE_AVX && LV_HAVE_FMA
 
 static inline void volk_32fc_s32fc_multiply_32fc_u_avx_fma(lv_32fc_t* cVector,
@@ -130,6 +152,17 @@ static inline void volk_32fc_s32fc_multiply_32fc_u_avx_fma(lv_32fc_t* cVector,
     volk_32fc_s32fc_multiply2_32fc_u_avx_fma(cVector, aVector, &scalar, num_points);
 }
 #endif /* LV_HAVE_AVX && LV_HAVE_FMA */
+
+#if LV_HAVE_AVX2 && LV_HAVE_FMA
+
+static inline void volk_32fc_s32fc_multiply_32fc_u_avx2_fma(lv_32fc_t* cVector,
+                                                              const lv_32fc_t* aVector,
+                                                              const lv_32fc_t scalar,
+                                                              unsigned int num_points)
+{
+    volk_32fc_s32fc_multiply2_32fc_u_avx2_fma(cVector, aVector, &scalar, num_points);
+}
+#endif /* LV_HAVE_AVX2 && LV_HAVE_FMA */
 
 #ifdef LV_HAVE_AVX512F
 
@@ -165,6 +198,28 @@ static inline void volk_32fc_s32fc_multiply_32fc_neonv8(lv_32fc_t* cVector,
 }
 #endif /* LV_HAVE_NEONV8 */
 
+#ifdef LV_HAVE_RVV
+
+static inline void volk_32fc_s32fc_multiply_32fc_rvv(lv_32fc_t* cVector,
+                                                      const lv_32fc_t* aVector,
+                                                      const lv_32fc_t scalar,
+                                                      unsigned int num_points)
+{
+    volk_32fc_s32fc_multiply2_32fc_rvv(cVector, aVector, &scalar, num_points);
+}
+#endif /* LV_HAVE_RVV */
+
+#ifdef LV_HAVE_RVVSEG
+
+static inline void volk_32fc_s32fc_multiply_32fc_rvvseg(lv_32fc_t* cVector,
+                                                         const lv_32fc_t* aVector,
+                                                         const lv_32fc_t scalar,
+                                                         unsigned int num_points)
+{
+    volk_32fc_s32fc_multiply2_32fc_rvvseg(cVector, aVector, &scalar, num_points);
+}
+#endif /* LV_HAVE_RVVSEG */
+
 #endif /* INCLUDED_volk_32fc_s32fc_multiply_32fc_u_H */
 #ifndef INCLUDED_volk_32fc_s32fc_multiply_32fc_a_H
 #define INCLUDED_volk_32fc_s32fc_multiply_32fc_a_H
@@ -172,7 +227,19 @@ static inline void volk_32fc_s32fc_multiply_32fc_neonv8(lv_32fc_t* cVector,
 #include <float.h>
 #include <inttypes.h>
 #include <stdio.h>
+#include <volk/volk_32fc_s32fc_multiply2_32fc.h>
 #include <volk/volk_complex.h>
+
+#ifdef LV_HAVE_SSE
+
+static inline void volk_32fc_s32fc_multiply_32fc_a_sse(lv_32fc_t* cVector,
+                                                        const lv_32fc_t* aVector,
+                                                        const lv_32fc_t scalar,
+                                                        unsigned int num_points)
+{
+    volk_32fc_s32fc_multiply2_32fc_a_sse(cVector, aVector, &scalar, num_points);
+}
+#endif /* LV_HAVE_SSE */
 
 #ifdef LV_HAVE_SSE3
 
@@ -196,6 +263,17 @@ static inline void volk_32fc_s32fc_multiply_32fc_a_avx(lv_32fc_t* cVector,
 }
 #endif /* LV_HAVE_AVX */
 
+#ifdef LV_HAVE_AVX2
+
+static inline void volk_32fc_s32fc_multiply_32fc_a_avx2(lv_32fc_t* cVector,
+                                                       const lv_32fc_t* aVector,
+                                                       const lv_32fc_t scalar,
+                                                       unsigned int num_points)
+{
+    volk_32fc_s32fc_multiply2_32fc_a_avx2(cVector, aVector, &scalar, num_points);
+}
+#endif /* LV_HAVE_AVX2 */
+
 #if LV_HAVE_AVX && LV_HAVE_FMA
 
 static inline void volk_32fc_s32fc_multiply_32fc_a_avx_fma(lv_32fc_t* cVector,
@@ -206,6 +284,17 @@ static inline void volk_32fc_s32fc_multiply_32fc_a_avx_fma(lv_32fc_t* cVector,
     volk_32fc_s32fc_multiply2_32fc_a_avx_fma(cVector, aVector, &scalar, num_points);
 }
 #endif /* LV_HAVE_AVX && LV_HAVE_FMA */
+
+#if LV_HAVE_AVX2 && LV_HAVE_FMA
+
+static inline void volk_32fc_s32fc_multiply_32fc_a_avx2_fma(lv_32fc_t* cVector,
+                                                              const lv_32fc_t* aVector,
+                                                              const lv_32fc_t scalar,
+                                                              unsigned int num_points)
+{
+    volk_32fc_s32fc_multiply2_32fc_a_avx2_fma(cVector, aVector, &scalar, num_points);
+}
+#endif /* LV_HAVE_AVX2 && LV_HAVE_FMA */
 
 #ifdef LV_HAVE_AVX512F
 

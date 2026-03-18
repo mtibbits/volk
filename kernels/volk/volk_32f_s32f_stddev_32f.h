@@ -265,6 +265,65 @@ static inline void volk_32f_s32f_stddev_32f_u_avx(float* stddev,
 }
 #endif /* LV_HAVE_AVX */
 
+
+#if LV_HAVE_AVX && LV_HAVE_FMA
+#include <immintrin.h>
+
+static inline void volk_32f_s32f_stddev_32f_u_avx_fma(float* stddev,
+                                                       const float* inputBuffer,
+                                                       const float mean,
+                                                       unsigned int num_points)
+{
+    float returnValue = 0;
+    if (num_points > 0) {
+        unsigned int number = 0;
+        const unsigned int thirtysecondPoints = num_points / 32;
+
+        const float* aPtr = inputBuffer;
+
+        __m256 squareAccumulator0 = _mm256_setzero_ps();
+        __m256 squareAccumulator1 = _mm256_setzero_ps();
+        __m256 squareAccumulator2 = _mm256_setzero_ps();
+        __m256 squareAccumulator3 = _mm256_setzero_ps();
+
+        for (; number < thirtysecondPoints; number++) {
+            __m256 aVal0 = _mm256_loadu_ps(aPtr);
+            __m256 aVal1 = _mm256_loadu_ps(aPtr + 8);
+            __m256 aVal2 = _mm256_loadu_ps(aPtr + 16);
+            __m256 aVal3 = _mm256_loadu_ps(aPtr + 24);
+
+            squareAccumulator0 = _mm256_fmadd_ps(aVal0, aVal0, squareAccumulator0);
+            squareAccumulator1 = _mm256_fmadd_ps(aVal1, aVal1, squareAccumulator1);
+            squareAccumulator2 = _mm256_fmadd_ps(aVal2, aVal2, squareAccumulator2);
+            squareAccumulator3 = _mm256_fmadd_ps(aVal3, aVal3, squareAccumulator3);
+
+            aPtr += 32;
+        }
+
+        squareAccumulator0 = _mm256_add_ps(squareAccumulator0, squareAccumulator1);
+        squareAccumulator2 = _mm256_add_ps(squareAccumulator2, squareAccumulator3);
+        squareAccumulator0 = _mm256_add_ps(squareAccumulator0, squareAccumulator2);
+
+        __VOLK_ATTR_ALIGNED(32) float squareBuffer[8];
+        _mm256_store_ps(squareBuffer, squareAccumulator0);
+        for (int i = 0; i < 8; i++) {
+            returnValue += squareBuffer[i];
+        }
+
+        number = thirtysecondPoints * 32;
+        for (; number < num_points; number++) {
+            returnValue += (*aPtr) * (*aPtr);
+            aPtr++;
+        }
+        returnValue /= num_points;
+        returnValue -= (mean * mean);
+        returnValue = sqrtf(returnValue);
+    }
+    *stddev = returnValue;
+}
+#endif /* LV_HAVE_AVX && LV_HAVE_FMA */
+
+
 #ifdef LV_HAVE_NEON
 #include <arm_neon.h>
 
@@ -670,6 +729,64 @@ static inline void volk_32f_s32f_stddev_32f_a_avx(float* stddev,
     *stddev = stdDev;
 }
 #endif /* LV_HAVE_AVX */
+
+
+#if LV_HAVE_AVX && LV_HAVE_FMA
+#include <immintrin.h>
+
+static inline void volk_32f_s32f_stddev_32f_a_avx_fma(float* stddev,
+                                                       const float* inputBuffer,
+                                                       const float mean,
+                                                       unsigned int num_points)
+{
+    float returnValue = 0;
+    if (num_points > 0) {
+        unsigned int number = 0;
+        const unsigned int thirtysecondPoints = num_points / 32;
+
+        const float* aPtr = inputBuffer;
+
+        __m256 squareAccumulator0 = _mm256_setzero_ps();
+        __m256 squareAccumulator1 = _mm256_setzero_ps();
+        __m256 squareAccumulator2 = _mm256_setzero_ps();
+        __m256 squareAccumulator3 = _mm256_setzero_ps();
+
+        for (; number < thirtysecondPoints; number++) {
+            __m256 aVal0 = _mm256_load_ps(aPtr);
+            __m256 aVal1 = _mm256_load_ps(aPtr + 8);
+            __m256 aVal2 = _mm256_load_ps(aPtr + 16);
+            __m256 aVal3 = _mm256_load_ps(aPtr + 24);
+
+            squareAccumulator0 = _mm256_fmadd_ps(aVal0, aVal0, squareAccumulator0);
+            squareAccumulator1 = _mm256_fmadd_ps(aVal1, aVal1, squareAccumulator1);
+            squareAccumulator2 = _mm256_fmadd_ps(aVal2, aVal2, squareAccumulator2);
+            squareAccumulator3 = _mm256_fmadd_ps(aVal3, aVal3, squareAccumulator3);
+
+            aPtr += 32;
+        }
+
+        squareAccumulator0 = _mm256_add_ps(squareAccumulator0, squareAccumulator1);
+        squareAccumulator2 = _mm256_add_ps(squareAccumulator2, squareAccumulator3);
+        squareAccumulator0 = _mm256_add_ps(squareAccumulator0, squareAccumulator2);
+
+        __VOLK_ATTR_ALIGNED(32) float squareBuffer[8];
+        _mm256_store_ps(squareBuffer, squareAccumulator0);
+        for (int i = 0; i < 8; i++) {
+            returnValue += squareBuffer[i];
+        }
+
+        number = thirtysecondPoints * 32;
+        for (; number < num_points; number++) {
+            returnValue += (*aPtr) * (*aPtr);
+            aPtr++;
+        }
+        returnValue /= num_points;
+        returnValue -= (mean * mean);
+        returnValue = sqrtf(returnValue);
+    }
+    *stddev = returnValue;
+}
+#endif /* LV_HAVE_AVX && LV_HAVE_FMA */
 
 
 #if LV_HAVE_AVX2 && LV_HAVE_FMA

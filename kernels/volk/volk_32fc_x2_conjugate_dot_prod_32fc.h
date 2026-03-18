@@ -120,6 +120,63 @@ static inline void volk_32fc_x2_conjugate_dot_prod_32fc_block(lv_32fc_t* result,
 
 #endif /*LV_HAVE_GENERIC*/
 
+#ifdef LV_HAVE_SSE
+
+#include <xmmintrin.h>
+
+static inline void volk_32fc_x2_conjugate_dot_prod_32fc_u_sse(lv_32fc_t* result,
+                                                               const lv_32fc_t* input,
+                                                               const lv_32fc_t* taps,
+                                                               unsigned int num_points)
+{
+    const unsigned int halfPoints = num_points / 2;
+    unsigned int number = 0;
+
+    /* conjugator sign-flips imaginary parts of taps: conj(br+j*bi) = br - j*bi
+     * XOR with 0x80000000 on odd (imaginary) float positions negates them.
+     */
+    const __m128 conjugator = _mm_setr_ps(0, -0.f, 0, -0.f);
+    __m128 dotProdVal = _mm_setzero_ps();
+
+    const lv_32fc_t* a = input;
+    const lv_32fc_t* b = taps;
+
+    for (; number < halfPoints; number++) {
+        __m128 x = _mm_loadu_ps((const float*)a);
+        __m128 y = _mm_loadu_ps((const float*)b);
+
+        /* Duplicate real and imag parts of taps, negate imaginary copy for conjugate */
+        __m128 dreal = _mm_shuffle_ps(y, y, _MM_SHUFFLE(2, 2, 0, 0));
+        __m128 dimag = _mm_shuffle_ps(y, y, _MM_SHUFFLE(3, 3, 1, 1));
+        __m128 dimagconj = _mm_xor_ps(dimag, conjugator);
+
+        /* Swap real/imag of input for the imag product term */
+        __m128 nswap = _mm_shuffle_ps(x, x, 0xB1);
+
+        /* (ar + j*ai) * (br - j*bi) = ar*br + ai*bi + j*(ai*br - ar*bi) */
+        dotProdVal = _mm_add_ps(dotProdVal,
+                                _mm_add_ps(_mm_mul_ps(x, dreal),
+                                           _mm_mul_ps(nswap, dimagconj)));
+
+        a += 2;
+        b += 2;
+    }
+
+    dotProdVal = _mm_add_ps(dotProdVal,
+                            _mm_shuffle_ps(dotProdVal, dotProdVal, _MM_SHUFFLE(1, 0, 3, 2)));
+    _mm_storel_pi((__m64*)result, dotProdVal);
+
+    if (num_points & 1u) {
+        *result += lv_cmake(
+            lv_creal(input[num_points - 1]) * lv_creal(taps[num_points - 1]) +
+                lv_cimag(input[num_points - 1]) * lv_cimag(taps[num_points - 1]),
+            lv_cimag(input[num_points - 1]) * lv_creal(taps[num_points - 1]) -
+                lv_creal(input[num_points - 1]) * lv_cimag(taps[num_points - 1]));
+    }
+}
+
+#endif /* LV_HAVE_SSE */
+
 #ifdef LV_HAVE_SSE3
 
 #include <pmmintrin.h>
@@ -324,6 +381,95 @@ volk_32fc_x2_conjugate_dot_prod_32fc_u_avx_fma(lv_32fc_t* result,
 }
 
 #endif /* LV_HAVE_AVX && LV_HAVE_FMA */
+
+#ifdef LV_HAVE_AVX512F
+
+#include <immintrin.h>
+
+static inline void
+volk_32fc_x2_conjugate_dot_prod_32fc_u_avx512f(lv_32fc_t* result,
+                                                const lv_32fc_t* input,
+                                                const lv_32fc_t* taps,
+                                                unsigned int num_points)
+{
+    /* Four independent accumulators to saturate FMA pipeline (4-cycle latency,
+     * 0.5-cycle throughput on Skylake → need ≥8 in-flight FMAs). Each accumulator
+     * holds 8 complex partial sums, so 4 accumulators = 32 complex in flight.
+     */
+    __m512 dotProdVal0 = _mm512_setzero_ps();
+    __m512 dotProdVal1 = _mm512_setzero_ps();
+    __m512 dotProdVal2 = _mm512_setzero_ps();
+    __m512 dotProdVal3 = _mm512_setzero_ps();
+
+    for (long unsigned i = 0; i < (num_points & ~31u); i += 32) {
+        /* Conjugate dot product: (ar + j·ai) * conj(br + j·bi)
+         * = ar·br + ai·bi + j·(ai·br − ar·bi)
+         *
+         * Strategy: load a and b, duplicate b's real/imag parts,
+         * swap a's real/imag, then use fmsubadd to get:
+         *   even lanes: a·b_real + a_swap·b_imag = ar·br + ai·bi  (real)
+         *   odd  lanes: a·b_real − a_swap·b_imag = ai·br − ar·bi  (imag)
+         */
+        __m512 a0 = _mm512_loadu_ps((const float*)&input[i]);
+        __m512 b0 = _mm512_loadu_ps((const float*)&taps[i]);
+        __m512 b0r = _mm512_moveldup_ps(b0);
+        __m512 b0i = _mm512_movehdup_ps(b0);
+        __m512 a0s = _mm512_permute_ps(a0, 0xB1);
+        dotProdVal0 = _mm512_add_ps(
+            dotProdVal0, _mm512_fmsubadd_ps(a0, b0r, _mm512_mul_ps(a0s, b0i)));
+
+        __m512 a1 = _mm512_loadu_ps((const float*)&input[i + 8]);
+        __m512 b1 = _mm512_loadu_ps((const float*)&taps[i + 8]);
+        __m512 b1r = _mm512_moveldup_ps(b1);
+        __m512 b1i = _mm512_movehdup_ps(b1);
+        __m512 a1s = _mm512_permute_ps(a1, 0xB1);
+        dotProdVal1 = _mm512_add_ps(
+            dotProdVal1, _mm512_fmsubadd_ps(a1, b1r, _mm512_mul_ps(a1s, b1i)));
+
+        __m512 a2 = _mm512_loadu_ps((const float*)&input[i + 16]);
+        __m512 b2 = _mm512_loadu_ps((const float*)&taps[i + 16]);
+        __m512 b2r = _mm512_moveldup_ps(b2);
+        __m512 b2i = _mm512_movehdup_ps(b2);
+        __m512 a2s = _mm512_permute_ps(a2, 0xB1);
+        dotProdVal2 = _mm512_add_ps(
+            dotProdVal2, _mm512_fmsubadd_ps(a2, b2r, _mm512_mul_ps(a2s, b2i)));
+
+        __m512 a3 = _mm512_loadu_ps((const float*)&input[i + 24]);
+        __m512 b3 = _mm512_loadu_ps((const float*)&taps[i + 24]);
+        __m512 b3r = _mm512_moveldup_ps(b3);
+        __m512 b3i = _mm512_movehdup_ps(b3);
+        __m512 a3s = _mm512_permute_ps(a3, 0xB1);
+        dotProdVal3 = _mm512_add_ps(
+            dotProdVal3, _mm512_fmsubadd_ps(a3, b3r, _mm512_mul_ps(a3s, b3i)));
+    }
+
+    // Merge four accumulators into one.
+    dotProdVal0 = _mm512_add_ps(dotProdVal0, dotProdVal1);
+    dotProdVal2 = _mm512_add_ps(dotProdVal2, dotProdVal3);
+    __m512 sum = _mm512_add_ps(dotProdVal0, dotProdVal2);
+
+    // Horizontal reduction: 8 complex → 1 complex.
+    __m256 sum_hi =
+        _mm512_castps512_ps256(_mm512_shuffle_f32x4(sum, sum, 0x0E));
+    __m256 sum_lo = _mm512_castps512_ps256(sum);
+    __m256 sum256 = _mm256_add_ps(sum_lo, sum_hi);
+    sum256 = _mm256_add_ps(sum256, _mm256_permute2f128_ps(sum256, sum256, 0x01));
+    sum256 = _mm256_add_ps(sum256, _mm256_permute_ps(sum256, _MM_SHUFFLE(1, 0, 3, 2)));
+    _mm_storel_pi((__m64*)result, _mm256_castps256_ps128(sum256));
+
+    // Handle remaining elements.
+    if (num_points & 31u) {
+        lv_32fc_t tail_result;
+        volk_32fc_x2_conjugate_dot_prod_32fc_generic(
+            &tail_result,
+            input + (num_points & ~31u),
+            taps + (num_points & ~31u),
+            num_points & 31u);
+        *result += tail_result;
+    }
+}
+
+#endif /* LV_HAVE_AVX512F */
 
 #if LV_HAVE_AVX512F && LV_HAVE_AVX512DQ
 
@@ -633,6 +779,57 @@ static inline void volk_32fc_x2_conjugate_dot_prod_32fc_rvvseg(lv_32fc_t* result
 #include <volk/volk_common.h>
 #include <volk/volk_complex.h>
 
+#ifdef LV_HAVE_SSE
+
+#include <xmmintrin.h>
+
+static inline void volk_32fc_x2_conjugate_dot_prod_32fc_a_sse(lv_32fc_t* result,
+                                                               const lv_32fc_t* input,
+                                                               const lv_32fc_t* taps,
+                                                               unsigned int num_points)
+{
+    const unsigned int halfPoints = num_points / 2;
+    unsigned int number = 0;
+
+    const __m128 conjugator = _mm_setr_ps(0, -0.f, 0, -0.f);
+    __m128 dotProdVal = _mm_setzero_ps();
+
+    const lv_32fc_t* a = input;
+    const lv_32fc_t* b = taps;
+
+    for (; number < halfPoints; number++) {
+        __m128 x = _mm_load_ps((const float*)a);
+        __m128 y = _mm_load_ps((const float*)b);
+
+        __m128 dreal = _mm_shuffle_ps(y, y, _MM_SHUFFLE(2, 2, 0, 0));
+        __m128 dimag = _mm_shuffle_ps(y, y, _MM_SHUFFLE(3, 3, 1, 1));
+        __m128 dimagconj = _mm_xor_ps(dimag, conjugator);
+
+        __m128 nswap = _mm_shuffle_ps(x, x, 0xB1);
+
+        dotProdVal = _mm_add_ps(dotProdVal,
+                                _mm_add_ps(_mm_mul_ps(x, dreal),
+                                           _mm_mul_ps(nswap, dimagconj)));
+
+        a += 2;
+        b += 2;
+    }
+
+    dotProdVal = _mm_add_ps(dotProdVal,
+                            _mm_shuffle_ps(dotProdVal, dotProdVal, _MM_SHUFFLE(1, 0, 3, 2)));
+    _mm_storel_pi((__m64*)result, dotProdVal);
+
+    if (num_points & 1u) {
+        *result += lv_cmake(
+            lv_creal(input[num_points - 1]) * lv_creal(taps[num_points - 1]) +
+                lv_cimag(input[num_points - 1]) * lv_cimag(taps[num_points - 1]),
+            lv_cimag(input[num_points - 1]) * lv_creal(taps[num_points - 1]) -
+                lv_creal(input[num_points - 1]) * lv_cimag(taps[num_points - 1]));
+    }
+}
+
+#endif /* LV_HAVE_SSE */
+
 #ifdef LV_HAVE_SSE3
 
 #include <pmmintrin.h>
@@ -830,6 +1027,88 @@ volk_32fc_x2_conjugate_dot_prod_32fc_a_avx_fma(lv_32fc_t* result,
 }
 
 #endif /* LV_HAVE_AVX && LV_HAVE_FMA */
+
+#ifdef LV_HAVE_AVX512F
+
+#include <immintrin.h>
+
+static inline void
+volk_32fc_x2_conjugate_dot_prod_32fc_a_avx512f(lv_32fc_t* result,
+                                                const lv_32fc_t* input,
+                                                const lv_32fc_t* taps,
+                                                unsigned int num_points)
+{
+    /* Four independent accumulators to saturate FMA pipeline. */
+    __m512 dotProdVal0 = _mm512_setzero_ps();
+    __m512 dotProdVal1 = _mm512_setzero_ps();
+    __m512 dotProdVal2 = _mm512_setzero_ps();
+    __m512 dotProdVal3 = _mm512_setzero_ps();
+
+    for (long unsigned i = 0; i < (num_points & ~31u); i += 32) {
+        /* Conjugate dot product via fmsubadd (aligned loads):
+         *   even lanes: a·b_real + a_swap·b_imag = ar·br + ai·bi  (real)
+         *   odd  lanes: a·b_real − a_swap·b_imag = ai·br − ar·bi  (imag)
+         */
+        __m512 a0 = _mm512_load_ps((const float*)&input[i]);
+        __m512 b0 = _mm512_load_ps((const float*)&taps[i]);
+        __m512 b0r = _mm512_moveldup_ps(b0);
+        __m512 b0i = _mm512_movehdup_ps(b0);
+        __m512 a0s = _mm512_permute_ps(a0, 0xB1);
+        dotProdVal0 = _mm512_add_ps(
+            dotProdVal0, _mm512_fmsubadd_ps(a0, b0r, _mm512_mul_ps(a0s, b0i)));
+
+        __m512 a1 = _mm512_load_ps((const float*)&input[i + 8]);
+        __m512 b1 = _mm512_load_ps((const float*)&taps[i + 8]);
+        __m512 b1r = _mm512_moveldup_ps(b1);
+        __m512 b1i = _mm512_movehdup_ps(b1);
+        __m512 a1s = _mm512_permute_ps(a1, 0xB1);
+        dotProdVal1 = _mm512_add_ps(
+            dotProdVal1, _mm512_fmsubadd_ps(a1, b1r, _mm512_mul_ps(a1s, b1i)));
+
+        __m512 a2 = _mm512_load_ps((const float*)&input[i + 16]);
+        __m512 b2 = _mm512_load_ps((const float*)&taps[i + 16]);
+        __m512 b2r = _mm512_moveldup_ps(b2);
+        __m512 b2i = _mm512_movehdup_ps(b2);
+        __m512 a2s = _mm512_permute_ps(a2, 0xB1);
+        dotProdVal2 = _mm512_add_ps(
+            dotProdVal2, _mm512_fmsubadd_ps(a2, b2r, _mm512_mul_ps(a2s, b2i)));
+
+        __m512 a3 = _mm512_load_ps((const float*)&input[i + 24]);
+        __m512 b3 = _mm512_load_ps((const float*)&taps[i + 24]);
+        __m512 b3r = _mm512_moveldup_ps(b3);
+        __m512 b3i = _mm512_movehdup_ps(b3);
+        __m512 a3s = _mm512_permute_ps(a3, 0xB1);
+        dotProdVal3 = _mm512_add_ps(
+            dotProdVal3, _mm512_fmsubadd_ps(a3, b3r, _mm512_mul_ps(a3s, b3i)));
+    }
+
+    // Merge four accumulators into one.
+    dotProdVal0 = _mm512_add_ps(dotProdVal0, dotProdVal1);
+    dotProdVal2 = _mm512_add_ps(dotProdVal2, dotProdVal3);
+    __m512 sum = _mm512_add_ps(dotProdVal0, dotProdVal2);
+
+    // Horizontal reduction: 8 complex → 1 complex.
+    __m256 sum_hi =
+        _mm512_castps512_ps256(_mm512_shuffle_f32x4(sum, sum, 0x0E));
+    __m256 sum_lo = _mm512_castps512_ps256(sum);
+    __m256 sum256 = _mm256_add_ps(sum_lo, sum_hi);
+    sum256 = _mm256_add_ps(sum256, _mm256_permute2f128_ps(sum256, sum256, 0x01));
+    sum256 = _mm256_add_ps(sum256, _mm256_permute_ps(sum256, _MM_SHUFFLE(1, 0, 3, 2)));
+    _mm_storel_pi((__m64*)result, _mm256_castps256_ps128(sum256));
+
+    // Handle remaining elements.
+    if (num_points & 31u) {
+        lv_32fc_t tail_result;
+        volk_32fc_x2_conjugate_dot_prod_32fc_generic(
+            &tail_result,
+            input + (num_points & ~31u),
+            taps + (num_points & ~31u),
+            num_points & 31u);
+        *result += tail_result;
+    }
+}
+
+#endif /* LV_HAVE_AVX512F */
 
 #if LV_HAVE_AVX512F && LV_HAVE_AVX512DQ
 

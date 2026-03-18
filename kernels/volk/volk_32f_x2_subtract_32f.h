@@ -104,6 +104,34 @@ static inline void volk_32f_x2_subtract_32f_u_avx(float* cVector,
 }
 #endif /* LV_HAVE_AVX */
 
+#ifdef LV_HAVE_AVX2
+#include <immintrin.h>
+
+static inline void volk_32f_x2_subtract_32f_u_avx2(float* cVector,
+                                                  const float* aVector,
+                                                  const float* bVector,
+                                                  unsigned int num_points)
+{
+    const unsigned int eighthPoints = num_points / 8;
+
+    for (unsigned int number = 0; number < eighthPoints; number++) {
+        __m256 aVal = _mm256_loadu_ps(aVector);
+        __m256 bVal = _mm256_loadu_ps(bVector);
+
+        __m256 cVal = _mm256_sub_ps(aVal, bVal);
+
+        _mm256_storeu_ps(cVector, cVal); // Store the results back into the C container
+
+        aVector += 8;
+        bVector += 8;
+        cVector += 8;
+    }
+
+    volk_32f_x2_subtract_32f_generic(
+        cVector, aVector, bVector, num_points - eighthPoints * 8);
+}
+#endif /* LV_HAVE_AVX2 */
+
 
 #ifdef LV_HAVE_AVX512F
 #include <immintrin.h>
@@ -310,6 +338,34 @@ static inline void volk_32f_x2_subtract_32f_a_avx(float* cVector,
         cVector, aVector, bVector, num_points - eighthPoints * 8);
 }
 #endif /* LV_HAVE_AVX */
+
+#ifdef LV_HAVE_AVX2
+#include <immintrin.h>
+
+static inline void volk_32f_x2_subtract_32f_a_avx2(float* cVector,
+                                                  const float* aVector,
+                                                  const float* bVector,
+                                                  unsigned int num_points)
+{
+    const unsigned int eighthPoints = num_points / 8;
+
+    for (unsigned int number = 0; number < eighthPoints; number++) {
+        __m256 aVal = _mm256_load_ps(aVector);
+        __m256 bVal = _mm256_load_ps(bVector);
+
+        __m256 cVal = _mm256_sub_ps(aVal, bVal);
+
+        _mm256_store_ps(cVector, cVal); // Store the results back into the C container
+
+        aVector += 8;
+        bVector += 8;
+        cVector += 8;
+    }
+
+    volk_32f_x2_subtract_32f_generic(
+        cVector, aVector, bVector, num_points - eighthPoints * 8);
+}
+#endif /* LV_HAVE_AVX2 */
 
 
 #ifdef LV_HAVE_AVX512F

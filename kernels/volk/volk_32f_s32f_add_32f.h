@@ -141,6 +141,39 @@ static inline void volk_32f_s32f_add_32f_u_avx(float* cVector,
 }
 #endif /* LV_HAVE_AVX */
 
+#ifdef LV_HAVE_AVX2
+#include <immintrin.h>
+
+static inline void volk_32f_s32f_add_32f_u_avx2(float* cVector,
+                                               const float* aVector,
+                                               const float scalar,
+                                               unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int eighthPoints = num_points / 8;
+
+    float* cPtr = cVector;
+    const float* aPtr = aVector;
+
+    __m256 aVal, bVal, cVal;
+    bVal = _mm256_set1_ps(scalar);
+    for (; number < eighthPoints; number++) {
+
+        aVal = _mm256_loadu_ps(aPtr);
+
+        cVal = _mm256_add_ps(aVal, bVal);
+
+        _mm256_storeu_ps(cPtr, cVal); // Store the results back into the C container
+
+        aPtr += 8;
+        cPtr += 8;
+    }
+
+    number = eighthPoints * 8;
+    volk_32f_s32f_add_32f_generic(cPtr, aPtr, scalar, num_points - number);
+}
+#endif /* LV_HAVE_AVX2 */
+
 #ifdef LV_HAVE_AVX512F
 #include <immintrin.h>
 
@@ -332,6 +365,38 @@ static inline void volk_32f_s32f_add_32f_a_avx(float* cVector,
     volk_32f_s32f_add_32f_generic(cPtr, aPtr, scalar, num_points - number);
 }
 #endif /* LV_HAVE_AVX */
+
+#ifdef LV_HAVE_AVX2
+#include <immintrin.h>
+
+static inline void volk_32f_s32f_add_32f_a_avx2(float* cVector,
+                                               const float* aVector,
+                                               const float scalar,
+                                               unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int eighthPoints = num_points / 8;
+
+    float* cPtr = cVector;
+    const float* aPtr = aVector;
+
+    __m256 aVal, bVal, cVal;
+    bVal = _mm256_set1_ps(scalar);
+    for (; number < eighthPoints; number++) {
+        aVal = _mm256_load_ps(aPtr);
+
+        cVal = _mm256_add_ps(aVal, bVal);
+
+        _mm256_store_ps(cPtr, cVal); // Store the results back into the C container
+
+        aPtr += 8;
+        cPtr += 8;
+    }
+
+    number = eighthPoints * 8;
+    volk_32f_s32f_add_32f_generic(cPtr, aPtr, scalar, num_points - number);
+}
+#endif /* LV_HAVE_AVX2 */
 
 #ifdef LV_HAVE_AVX512F
 #include <immintrin.h>

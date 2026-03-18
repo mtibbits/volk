@@ -319,6 +319,59 @@ static inline void volk_32f_s32f_convert_16i_u_avx2(int16_t* outputVector,
 }
 #endif /* LV_HAVE_AVX2 */
 
+#if LV_HAVE_AVX2 && LV_HAVE_FMA
+#include <immintrin.h>
+
+static inline void volk_32f_s32f_convert_16i_u_avx2_fma(int16_t* outputVector,
+                                                         const float* inputVector,
+                                                         const float scalar,
+                                                         unsigned int num_points)
+{
+    unsigned int number = 0;
+
+    const unsigned int sixteenthPoints = num_points / 16;
+
+    const float* inputVectorPtr = (const float*)inputVector;
+    int16_t* outputVectorPtr = outputVector;
+
+    float min_val = SHRT_MIN;
+    float max_val = SHRT_MAX;
+
+    __m256 vScalar = _mm256_set1_ps(scalar);
+    __m256 inputVal1, inputVal2;
+    __m256i intInputVal1, intInputVal2;
+    __m256 ret1, ret2;
+    __m256 vmin_val = _mm256_set1_ps(min_val);
+    __m256 vmax_val = _mm256_set1_ps(max_val);
+
+    for (; number < sixteenthPoints; number++) {
+        inputVal1 = _mm256_loadu_ps(inputVectorPtr);
+        inputVectorPtr += 8;
+        inputVal2 = _mm256_loadu_ps(inputVectorPtr);
+        inputVectorPtr += 8;
+
+        // Scale and clip
+        ret1 = _mm256_max_ps(
+            _mm256_min_ps(_mm256_mul_ps(inputVal1, vScalar), vmax_val), vmin_val);
+        ret2 = _mm256_max_ps(
+            _mm256_min_ps(_mm256_mul_ps(inputVal2, vScalar), vmax_val), vmin_val);
+
+        intInputVal1 = _mm256_cvtps_epi32(ret1);
+        intInputVal2 = _mm256_cvtps_epi32(ret2);
+
+        intInputVal1 = _mm256_packs_epi32(intInputVal1, intInputVal2);
+        intInputVal1 = _mm256_permute4x64_epi64(intInputVal1, 0b11011000);
+
+        _mm256_storeu_si256((__m256i*)outputVectorPtr, intInputVal1);
+        outputVectorPtr += 16;
+    }
+
+    number = sixteenthPoints * 16;
+    volk_32f_s32f_convert_16i_generic(
+        outputVector + number, inputVector + number, scalar, num_points - number);
+}
+#endif /* LV_HAVE_AVX2 && LV_HAVE_FMA */
+
 #ifdef LV_HAVE_AVX512F
 #include <immintrin.h>
 
@@ -371,6 +424,51 @@ static inline void volk_32f_s32f_convert_16i_u_avx512(int16_t* outputVector,
     }
 }
 #endif /* LV_HAVE_AVX512F */
+
+
+#ifdef LV_HAVE_AVX512BW
+#include <immintrin.h>
+
+static inline void volk_32f_s32f_convert_16i_u_avx512bw(int16_t* outputVector,
+                                                         const float* inputVector,
+                                                         const float scalar,
+                                                         unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int thirtySecondPoints = num_points / 32;
+    const float* inputVectorPtr = (const float*)inputVector;
+    int16_t* outputVectorPtr = outputVector;
+    const float min_val = (float)SHRT_MIN;
+    const float max_val = (float)SHRT_MAX;
+    const __m512 vScalar = _mm512_set1_ps(scalar);
+    const __m512 vmin_val = _mm512_set1_ps(min_val);
+    const __m512 vmax_val = _mm512_set1_ps(max_val);
+    const __m512i fix_idx = _mm512_set_epi64(7, 5, 3, 1, 6, 4, 2, 0);
+
+    for (; number < thirtySecondPoints; number++) {
+        __m512 inputVal1 = _mm512_loadu_ps(inputVectorPtr);
+        inputVectorPtr += 16;
+        __m512 inputVal2 = _mm512_loadu_ps(inputVectorPtr);
+        inputVectorPtr += 16;
+
+        inputVal1 = _mm512_max_ps(
+            _mm512_min_ps(_mm512_mul_ps(inputVal1, vScalar), vmax_val), vmin_val);
+        inputVal2 = _mm512_max_ps(
+            _mm512_min_ps(_mm512_mul_ps(inputVal2, vScalar), vmax_val), vmin_val);
+
+        __m512i intVal1 = _mm512_cvtps_epi32(inputVal1);
+        __m512i intVal2 = _mm512_cvtps_epi32(inputVal2);
+
+        __m512i packed = _mm512_permutexvar_epi64(fix_idx, _mm512_packs_epi32(intVal1, intVal2));
+        _mm512_storeu_si512((__m512i*)outputVectorPtr, packed);
+        outputVectorPtr += 32;
+    }
+
+    number = thirtySecondPoints * 32;
+    volk_32f_s32f_convert_16i_generic(
+        outputVector + number, inputVector + number, scalar, num_points - number);
+}
+#endif /* LV_HAVE_AVX512BW */
 
 
 #ifdef LV_HAVE_NEON
@@ -524,6 +622,23 @@ static inline void volk_32f_s32f_convert_16i_rvv(int16_t* outputVector,
     }
 }
 #endif /* LV_HAVE_RVV */
+
+#ifdef LV_HAVE_ORC
+
+extern void volk_32f_s32f_convert_16i_a_orc_impl(int16_t* outputVector,
+                                                   const float* inputVector,
+                                                   const float scalar,
+                                                   int num_points);
+
+static inline void volk_32f_s32f_convert_16i_u_orc(int16_t* outputVector,
+                                                     const float* inputVector,
+                                                     const float scalar,
+                                                     unsigned int num_points)
+{
+    volk_32f_s32f_convert_16i_a_orc_impl(outputVector, inputVector, scalar, num_points);
+}
+
+#endif /* LV_HAVE_ORC */
 
 #endif /* INCLUDED_volk_32f_s32f_convert_16i_u_H */
 #ifndef INCLUDED_volk_32f_s32f_convert_16i_a_H
@@ -762,6 +877,59 @@ static inline void volk_32f_s32f_convert_16i_a_avx2(int16_t* outputVector,
 }
 #endif /* LV_HAVE_AVX2 */
 
+#if LV_HAVE_AVX2 && LV_HAVE_FMA
+#include <immintrin.h>
+
+static inline void volk_32f_s32f_convert_16i_a_avx2_fma(int16_t* outputVector,
+                                                         const float* inputVector,
+                                                         const float scalar,
+                                                         unsigned int num_points)
+{
+    unsigned int number = 0;
+
+    const unsigned int sixteenthPoints = num_points / 16;
+
+    const float* inputVectorPtr = (const float*)inputVector;
+    int16_t* outputVectorPtr = outputVector;
+
+    float min_val = SHRT_MIN;
+    float max_val = SHRT_MAX;
+
+    __m256 vScalar = _mm256_set1_ps(scalar);
+    __m256 inputVal1, inputVal2;
+    __m256i intInputVal1, intInputVal2;
+    __m256 ret1, ret2;
+    __m256 vmin_val = _mm256_set1_ps(min_val);
+    __m256 vmax_val = _mm256_set1_ps(max_val);
+
+    for (; number < sixteenthPoints; number++) {
+        inputVal1 = _mm256_load_ps(inputVectorPtr);
+        inputVectorPtr += 8;
+        inputVal2 = _mm256_load_ps(inputVectorPtr);
+        inputVectorPtr += 8;
+
+        // Scale and clip
+        ret1 = _mm256_max_ps(
+            _mm256_min_ps(_mm256_mul_ps(inputVal1, vScalar), vmax_val), vmin_val);
+        ret2 = _mm256_max_ps(
+            _mm256_min_ps(_mm256_mul_ps(inputVal2, vScalar), vmax_val), vmin_val);
+
+        intInputVal1 = _mm256_cvtps_epi32(ret1);
+        intInputVal2 = _mm256_cvtps_epi32(ret2);
+
+        intInputVal1 = _mm256_packs_epi32(intInputVal1, intInputVal2);
+        intInputVal1 = _mm256_permute4x64_epi64(intInputVal1, 0b11011000);
+
+        _mm256_store_si256((__m256i*)outputVectorPtr, intInputVal1);
+        outputVectorPtr += 16;
+    }
+
+    number = sixteenthPoints * 16;
+    volk_32f_s32f_convert_16i_generic(
+        outputVector + number, inputVector + number, scalar, num_points - number);
+}
+#endif /* LV_HAVE_AVX2 && LV_HAVE_FMA */
+
 #ifdef LV_HAVE_AVX512F
 #include <immintrin.h>
 
@@ -814,6 +982,51 @@ static inline void volk_32f_s32f_convert_16i_a_avx512(int16_t* outputVector,
     }
 }
 #endif /* LV_HAVE_AVX512F */
+
+
+#ifdef LV_HAVE_AVX512BW
+#include <immintrin.h>
+
+static inline void volk_32f_s32f_convert_16i_a_avx512bw(int16_t* outputVector,
+                                                         const float* inputVector,
+                                                         const float scalar,
+                                                         unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int thirtySecondPoints = num_points / 32;
+    const float* inputVectorPtr = (const float*)inputVector;
+    int16_t* outputVectorPtr = outputVector;
+    const float min_val = (float)SHRT_MIN;
+    const float max_val = (float)SHRT_MAX;
+    const __m512 vScalar = _mm512_set1_ps(scalar);
+    const __m512 vmin_val = _mm512_set1_ps(min_val);
+    const __m512 vmax_val = _mm512_set1_ps(max_val);
+    const __m512i fix_idx = _mm512_set_epi64(7, 5, 3, 1, 6, 4, 2, 0);
+
+    for (; number < thirtySecondPoints; number++) {
+        __m512 inputVal1 = _mm512_load_ps(inputVectorPtr);
+        inputVectorPtr += 16;
+        __m512 inputVal2 = _mm512_load_ps(inputVectorPtr);
+        inputVectorPtr += 16;
+
+        inputVal1 = _mm512_max_ps(
+            _mm512_min_ps(_mm512_mul_ps(inputVal1, vScalar), vmax_val), vmin_val);
+        inputVal2 = _mm512_max_ps(
+            _mm512_min_ps(_mm512_mul_ps(inputVal2, vScalar), vmax_val), vmin_val);
+
+        __m512i intVal1 = _mm512_cvtps_epi32(inputVal1);
+        __m512i intVal2 = _mm512_cvtps_epi32(inputVal2);
+
+        __m512i packed = _mm512_permutexvar_epi64(fix_idx, _mm512_packs_epi32(intVal1, intVal2));
+        _mm512_store_si512((__m512i*)outputVectorPtr, packed);
+        outputVectorPtr += 32;
+    }
+
+    number = thirtySecondPoints * 32;
+    volk_32f_s32f_convert_16i_generic(
+        outputVector + number, inputVector + number, scalar, num_points - number);
+}
+#endif /* LV_HAVE_AVX512BW */
 
 
 #endif /* INCLUDED_volk_32f_s32f_convert_16i_a_H */

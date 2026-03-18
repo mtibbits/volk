@@ -492,6 +492,80 @@ static inline void volk_32f_s32f_x2_convert_8u_u_avx512f(uint8_t* outputVector,
 #endif /* LV_HAVE_AVX512F */
 
 
+#ifdef LV_HAVE_AVX512BW
+#include <immintrin.h>
+
+static inline void volk_32f_s32f_x2_convert_8u_u_avx512bw(uint8_t* outputVector,
+                                                           const float* inputVector,
+                                                           const float scale,
+                                                           const float bias,
+                                                           unsigned int num_points)
+{
+    const unsigned int sixtyfourthPoints = num_points / 64;
+
+    const float* inputVectorPtr = (const float*)inputVector;
+    uint8_t* outputVectorPtr = outputVector;
+
+    const float min_val = 0.0f;
+    const float max_val = UINT8_MAX;
+    const __m512 vmin_val = _mm512_set1_ps(min_val);
+    const __m512 vmax_val = _mm512_set1_ps(max_val);
+
+    const __m512 vScale = _mm512_set1_ps(scale);
+    const __m512 vBias = _mm512_set1_ps(bias);
+    const __m512i fix_idx64 = _mm512_set_epi64(7, 5, 3, 1, 6, 4, 2, 0);
+
+    for (unsigned int number = 0; number < sixtyfourthPoints; number++) {
+        __m512 inputVal1 = _mm512_loadu_ps(inputVectorPtr);
+        inputVectorPtr += 16;
+        __m512 inputVal2 = _mm512_loadu_ps(inputVectorPtr);
+        inputVectorPtr += 16;
+        __m512 inputVal3 = _mm512_loadu_ps(inputVectorPtr);
+        inputVectorPtr += 16;
+        __m512 inputVal4 = _mm512_loadu_ps(inputVectorPtr);
+        inputVectorPtr += 16;
+
+        inputVal1 = _mm512_max_ps(
+            _mm512_min_ps(_mm512_fmadd_ps(inputVal1, vScale, vBias), vmax_val),
+            vmin_val);
+        inputVal2 = _mm512_max_ps(
+            _mm512_min_ps(_mm512_fmadd_ps(inputVal2, vScale, vBias), vmax_val),
+            vmin_val);
+        inputVal3 = _mm512_max_ps(
+            _mm512_min_ps(_mm512_fmadd_ps(inputVal3, vScale, vBias), vmax_val),
+            vmin_val);
+        inputVal4 = _mm512_max_ps(
+            _mm512_min_ps(_mm512_fmadd_ps(inputVal4, vScale, vBias), vmax_val),
+            vmin_val);
+
+        __m512i intVal1 = _mm512_cvtps_epi32(inputVal1);
+        __m512i intVal2 = _mm512_cvtps_epi32(inputVal2);
+        __m512i intVal3 = _mm512_cvtps_epi32(inputVal3);
+        __m512i intVal4 = _mm512_cvtps_epi32(inputVal4);
+
+        // Pack int32 -> int16 (with lane fix)
+        __m512i packed16_12 =
+            _mm512_permutexvar_epi64(fix_idx64, _mm512_packs_epi32(intVal1, intVal2));
+        __m512i packed16_34 =
+            _mm512_permutexvar_epi64(fix_idx64, _mm512_packs_epi32(intVal3, intVal4));
+
+        // Pack int16 -> uint8 with unsigned saturation (with lane fix)
+        __m512i packed8 =
+            _mm512_permutexvar_epi64(fix_idx64, _mm512_packus_epi16(packed16_12, packed16_34));
+        _mm512_storeu_si512((__m512i*)outputVectorPtr, packed8);
+        outputVectorPtr += 64;
+    }
+
+    volk_32f_s32f_x2_convert_8u_generic(
+        outputVector + sixtyfourthPoints * 64,
+        inputVector + sixtyfourthPoints * 64,
+        scale,
+        bias,
+        num_points - sixtyfourthPoints * 64);
+}
+#endif /* LV_HAVE_AVX512BW */
+
+
 #ifdef LV_HAVE_NEON
 #include <arm_neon.h>
 
@@ -1051,5 +1125,79 @@ static inline void volk_32f_s32f_x2_convert_8u_a_avx512f(uint8_t* outputVector,
 }
 
 #endif /* LV_HAVE_AVX512F */
+
+
+#ifdef LV_HAVE_AVX512BW
+#include <immintrin.h>
+
+static inline void volk_32f_s32f_x2_convert_8u_a_avx512bw(uint8_t* outputVector,
+                                                           const float* inputVector,
+                                                           const float scale,
+                                                           const float bias,
+                                                           unsigned int num_points)
+{
+    const unsigned int sixtyfourthPoints = num_points / 64;
+
+    const float* inputVectorPtr = (const float*)inputVector;
+    uint8_t* outputVectorPtr = outputVector;
+
+    const float min_val = 0.0f;
+    const float max_val = UINT8_MAX;
+    const __m512 vmin_val = _mm512_set1_ps(min_val);
+    const __m512 vmax_val = _mm512_set1_ps(max_val);
+
+    const __m512 vScale = _mm512_set1_ps(scale);
+    const __m512 vBias = _mm512_set1_ps(bias);
+    const __m512i fix_idx64 = _mm512_set_epi64(7, 5, 3, 1, 6, 4, 2, 0);
+
+    for (unsigned int number = 0; number < sixtyfourthPoints; number++) {
+        __m512 inputVal1 = _mm512_load_ps(inputVectorPtr);
+        inputVectorPtr += 16;
+        __m512 inputVal2 = _mm512_load_ps(inputVectorPtr);
+        inputVectorPtr += 16;
+        __m512 inputVal3 = _mm512_load_ps(inputVectorPtr);
+        inputVectorPtr += 16;
+        __m512 inputVal4 = _mm512_load_ps(inputVectorPtr);
+        inputVectorPtr += 16;
+
+        inputVal1 = _mm512_max_ps(
+            _mm512_min_ps(_mm512_fmadd_ps(inputVal1, vScale, vBias), vmax_val),
+            vmin_val);
+        inputVal2 = _mm512_max_ps(
+            _mm512_min_ps(_mm512_fmadd_ps(inputVal2, vScale, vBias), vmax_val),
+            vmin_val);
+        inputVal3 = _mm512_max_ps(
+            _mm512_min_ps(_mm512_fmadd_ps(inputVal3, vScale, vBias), vmax_val),
+            vmin_val);
+        inputVal4 = _mm512_max_ps(
+            _mm512_min_ps(_mm512_fmadd_ps(inputVal4, vScale, vBias), vmax_val),
+            vmin_val);
+
+        __m512i intVal1 = _mm512_cvtps_epi32(inputVal1);
+        __m512i intVal2 = _mm512_cvtps_epi32(inputVal2);
+        __m512i intVal3 = _mm512_cvtps_epi32(inputVal3);
+        __m512i intVal4 = _mm512_cvtps_epi32(inputVal4);
+
+        // Pack int32 -> int16 (with lane fix)
+        __m512i packed16_12 =
+            _mm512_permutexvar_epi64(fix_idx64, _mm512_packs_epi32(intVal1, intVal2));
+        __m512i packed16_34 =
+            _mm512_permutexvar_epi64(fix_idx64, _mm512_packs_epi32(intVal3, intVal4));
+
+        // Pack int16 -> uint8 with unsigned saturation (with lane fix)
+        __m512i packed8 =
+            _mm512_permutexvar_epi64(fix_idx64, _mm512_packus_epi16(packed16_12, packed16_34));
+        _mm512_store_si512((__m512i*)outputVectorPtr, packed8);
+        outputVectorPtr += 64;
+    }
+
+    volk_32f_s32f_x2_convert_8u_generic(
+        outputVector + sixtyfourthPoints * 64,
+        inputVector + sixtyfourthPoints * 64,
+        scale,
+        bias,
+        num_points - sixtyfourthPoints * 64);
+}
+#endif /* LV_HAVE_AVX512BW */
 
 #endif /* INCLUDED_volk_32f_s32f_x2_convert_8u_a_H */

@@ -213,6 +213,41 @@ static inline void volk_16ic_convert_32fc_u_avx2(lv_32fc_t* outputVector,
 
 #endif /* LV_HAVE_AVX2 */
 
+#if LV_HAVE_AVX2 && LV_HAVE_FMA
+#include <immintrin.h>
+
+static inline void volk_16ic_convert_32fc_u_avx2_fma(lv_32fc_t* outputVector,
+                                                      const lv_16sc_t* inputVector,
+                                                      unsigned int num_points)
+{
+    const unsigned int avx_iters = num_points / 4;
+    unsigned int number = 0;
+    const int16_t* complexVectorPtr = (const int16_t*)inputVector;
+    float* outputVectorPtr = (float*)outputVector;
+    __m256 outVal;
+    __m256i outValInt;
+    __m128i cplxValue;
+
+    for (number = 0; number < avx_iters; number++) {
+        cplxValue = _mm_loadu_si128((const __m128i*)complexVectorPtr);
+        __VOLK_PREFETCH(complexVectorPtr + 16);
+        complexVectorPtr += 8;
+
+        outValInt = _mm256_cvtepi16_epi32(cplxValue);
+        outVal = _mm256_cvtepi32_ps(outValInt);
+        _mm256_storeu_ps((float*)outputVectorPtr, outVal);
+
+        outputVectorPtr += 8;
+    }
+
+    volk_16ic_convert_32fc_generic(
+        (lv_32fc_t*)outputVectorPtr,
+        (const lv_16sc_t*)complexVectorPtr,
+        num_points - avx_iters * 4);
+}
+
+#endif /* LV_HAVE_AVX2 && LV_HAVE_FMA */
+
 #ifdef LV_HAVE_AVX512F
 #include <immintrin.h>
 
@@ -342,6 +377,26 @@ static inline void volk_16ic_convert_32fc_rvv(lv_32fc_t* outputVector,
     }
 }
 #endif /* LV_HAVE_RVV */
+
+#ifdef LV_HAVE_RVVSEG
+#include <riscv_vector.h>
+
+static inline void volk_16ic_convert_32fc_rvvseg(lv_32fc_t* outputVector,
+                                                  const lv_16sc_t* inputVector,
+                                                  unsigned int num_points)
+{
+    size_t n = num_points;
+    for (size_t vl; n > 0; n -= vl, inputVector += vl, outputVector += vl) {
+        vl = __riscv_vsetvl_e16m2(n);
+        vint16m2x2_t vc =
+            __riscv_vlseg2e16_v_i16m2x2((const int16_t*)inputVector, vl);
+        vfloat32m4_t vr = __riscv_vfwcvt_f(__riscv_vget_i16m2(vc, 0), vl);
+        vfloat32m4_t vi = __riscv_vfwcvt_f(__riscv_vget_i16m2(vc, 1), vl);
+        __riscv_vsseg2e32_v_f32m4x2(
+            (float*)outputVector, __riscv_vcreate_v_f32m4x2(vr, vi), vl);
+    }
+}
+#endif /* LV_HAVE_RVVSEG */
 
 #endif /* INCLUDED_volk_16ic_convert_32fc_u_H */
 
@@ -495,6 +550,41 @@ static inline void volk_16ic_convert_32fc_a_avx2(lv_32fc_t* outputVector,
 }
 
 #endif /* LV_HAVE_AVX2 */
+
+#if LV_HAVE_AVX2 && LV_HAVE_FMA
+#include <immintrin.h>
+
+static inline void volk_16ic_convert_32fc_a_avx2_fma(lv_32fc_t* outputVector,
+                                                      const lv_16sc_t* inputVector,
+                                                      unsigned int num_points)
+{
+    const unsigned int avx_iters = num_points / 4;
+    unsigned int number = 0;
+    const int16_t* complexVectorPtr = (const int16_t*)inputVector;
+    float* outputVectorPtr = (float*)outputVector;
+    __m256 outVal;
+    __m256i outValInt;
+    __m128i cplxValue;
+
+    for (number = 0; number < avx_iters; number++) {
+        cplxValue = _mm_load_si128((const __m128i*)complexVectorPtr);
+        __VOLK_PREFETCH(complexVectorPtr + 16);
+        complexVectorPtr += 8;
+
+        outValInt = _mm256_cvtepi16_epi32(cplxValue);
+        outVal = _mm256_cvtepi32_ps(outValInt);
+        _mm256_store_ps((float*)outputVectorPtr, outVal);
+
+        outputVectorPtr += 8;
+    }
+
+    volk_16ic_convert_32fc_generic(
+        (lv_32fc_t*)outputVectorPtr,
+        (const lv_16sc_t*)complexVectorPtr,
+        num_points - avx_iters * 4);
+}
+
+#endif /* LV_HAVE_AVX2 && LV_HAVE_FMA */
 
 #ifdef LV_HAVE_AVX512F
 #include <immintrin.h>

@@ -147,6 +147,39 @@ volk_32f_atan_32f_u_avx(float* out, const float* in, unsigned int num_points)
 }
 #endif /* LV_HAVE_AVX */
 
+#if LV_HAVE_AVX && LV_HAVE_FMA
+#include <immintrin.h>
+#include <volk/volk_avx2_fma_intrinsics.h>
+static inline void
+volk_32f_atan_32f_u_avx_fma(float* out, const float* in, unsigned int num_points)
+{
+    const __m256 one = _mm256_set1_ps(1.f);
+    const __m256 pi_over_2 = _mm256_set1_ps(0x1.921fb6p0f);
+    const __m256 abs_mask = _mm256_castsi256_ps(_mm256_set1_epi32(0x7FFFFFFF));
+    const __m256 sign_mask = _mm256_set1_ps(-0.0f);
+
+    const unsigned int eighth_points = num_points / 8;
+
+    for (unsigned int number = 0; number < eighth_points; number++) {
+        __m256 x = _mm256_loadu_ps(in);
+        in += 8;
+        __m256 swap_mask = _mm256_cmp_ps(_mm256_and_ps(x, abs_mask), one, _CMP_GT_OS);
+        __m256 x_star = _mm256_blendv_ps(x, _mm256_rcp_ps(x), swap_mask);
+        __m256 result = _mm256_arctan_poly_avx2_fma(x_star);
+        __m256 term = _mm256_and_ps(x_star, sign_mask);
+        term = _mm256_or_ps(pi_over_2, term);
+        term = _mm256_sub_ps(term, result);
+        result = _mm256_blendv_ps(result, term, swap_mask);
+        _mm256_storeu_ps(out, result);
+        out += 8;
+    }
+
+    for (unsigned int number = eighth_points * 8; number < num_points; number++) {
+        *out++ = volk_arctan(*in++);
+    }
+}
+#endif /* LV_HAVE_AVX && LV_HAVE_FMA */
+
 #if LV_HAVE_AVX2 && LV_HAVE_FMA
 #include <immintrin.h>
 static inline void
@@ -178,6 +211,46 @@ volk_32f_atan_32f_u_avx2_fma(float* out, const float* in, unsigned int num_point
     }
 }
 #endif /* LV_HAVE_AVX2 && LV_HAVE_FMA */
+
+#ifdef LV_HAVE_AVX512F
+#include <immintrin.h>
+#include <volk/volk_avx512_intrinsics.h>
+static inline void
+volk_32f_atan_32f_u_avx512f(float* out, const float* in, unsigned int num_points)
+{
+    const __m512 one = _mm512_set1_ps(1.f);
+    const __m512 pi_over_2 = _mm512_set1_ps(0x1.921fb6p0f);
+    const __m512 abs_mask = _mm512_castsi512_ps(_mm512_set1_epi32(0x7FFFFFFF));
+    const __m512 sign_mask = _mm512_set1_ps(-0.0f);
+
+    const unsigned int sixteenth_points = num_points / 16;
+
+    for (unsigned int number = 0; number < sixteenth_points; number++) {
+        __m512 x = _mm512_loadu_ps(in);
+        in += 16;
+        __mmask16 swap_mask = _mm512_cmp_ps_mask(
+            _mm512_castsi512_ps(_mm512_and_si512(_mm512_castps_si512(x),
+                                                  _mm512_castps_si512(abs_mask))),
+            one, _CMP_GT_OS);
+        __m512 x_star = _mm512_mask_blend_ps(swap_mask, x, _mm512_rcp14_ps(x));
+        __m512 result = _mm512_arctan_poly_avx512(x_star);
+        __m512 term = _mm512_castsi512_ps(
+            _mm512_and_si512(_mm512_castps_si512(x_star),
+                             _mm512_castps_si512(sign_mask)));
+        term = _mm512_castsi512_ps(
+            _mm512_or_si512(_mm512_castps_si512(pi_over_2),
+                            _mm512_castps_si512(term)));
+        term = _mm512_sub_ps(term, result);
+        result = _mm512_mask_blend_ps(swap_mask, result, term);
+        _mm512_storeu_ps(out, result);
+        out += 16;
+    }
+
+    for (unsigned int number = sixteenth_points * 16; number < num_points; number++) {
+        *out++ = volk_arctan(*in++);
+    }
+}
+#endif /* LV_HAVE_AVX512F */
 
 #if LV_HAVE_AVX512F && LV_HAVE_AVX512DQ
 #include <immintrin.h>
@@ -423,6 +496,39 @@ volk_32f_atan_32f_a_avx(float* out, const float* in, unsigned int num_points)
 }
 #endif /* LV_HAVE_AVX */
 
+#if LV_HAVE_AVX && LV_HAVE_FMA
+#include <immintrin.h>
+#include <volk/volk_avx2_fma_intrinsics.h>
+static inline void
+volk_32f_atan_32f_a_avx_fma(float* out, const float* in, unsigned int num_points)
+{
+    const __m256 one = _mm256_set1_ps(1.f);
+    const __m256 pi_over_2 = _mm256_set1_ps(0x1.921fb6p0f);
+    const __m256 abs_mask = _mm256_castsi256_ps(_mm256_set1_epi32(0x7FFFFFFF));
+    const __m256 sign_mask = _mm256_set1_ps(-0.0f);
+
+    const unsigned int eighth_points = num_points / 8;
+
+    for (unsigned int number = 0; number < eighth_points; number++) {
+        __m256 x = _mm256_load_ps(in);
+        in += 8;
+        __m256 swap_mask = _mm256_cmp_ps(_mm256_and_ps(x, abs_mask), one, _CMP_GT_OS);
+        __m256 x_star = _mm256_blendv_ps(x, _mm256_rcp_ps(x), swap_mask);
+        __m256 result = _mm256_arctan_poly_avx2_fma(x_star);
+        __m256 term = _mm256_and_ps(x_star, sign_mask);
+        term = _mm256_or_ps(pi_over_2, term);
+        term = _mm256_sub_ps(term, result);
+        result = _mm256_blendv_ps(result, term, swap_mask);
+        _mm256_store_ps(out, result);
+        out += 8;
+    }
+
+    for (unsigned int number = eighth_points * 8; number < num_points; number++) {
+        *out++ = volk_arctan(*in++);
+    }
+}
+#endif /* LV_HAVE_AVX && LV_HAVE_FMA */
+
 #if LV_HAVE_AVX2 && LV_HAVE_FMA
 #include <immintrin.h>
 #include <volk/volk_avx2_fma_intrinsics.h>
@@ -455,6 +561,46 @@ volk_32f_atan_32f_a_avx2_fma(float* out, const float* in, unsigned int num_point
     }
 }
 #endif /* LV_HAVE_AVX2 && LV_HAVE_FMA */
+
+#ifdef LV_HAVE_AVX512F
+#include <immintrin.h>
+#include <volk/volk_avx512_intrinsics.h>
+static inline void
+volk_32f_atan_32f_a_avx512f(float* out, const float* in, unsigned int num_points)
+{
+    const __m512 one = _mm512_set1_ps(1.f);
+    const __m512 pi_over_2 = _mm512_set1_ps(0x1.921fb6p0f);
+    const __m512 abs_mask = _mm512_castsi512_ps(_mm512_set1_epi32(0x7FFFFFFF));
+    const __m512 sign_mask = _mm512_set1_ps(-0.0f);
+
+    const unsigned int sixteenth_points = num_points / 16;
+
+    for (unsigned int number = 0; number < sixteenth_points; number++) {
+        __m512 x = _mm512_load_ps(in);
+        in += 16;
+        __mmask16 swap_mask = _mm512_cmp_ps_mask(
+            _mm512_castsi512_ps(_mm512_and_si512(_mm512_castps_si512(x),
+                                                  _mm512_castps_si512(abs_mask))),
+            one, _CMP_GT_OS);
+        __m512 x_star = _mm512_mask_blend_ps(swap_mask, x, _mm512_rcp14_ps(x));
+        __m512 result = _mm512_arctan_poly_avx512(x_star);
+        __m512 term = _mm512_castsi512_ps(
+            _mm512_and_si512(_mm512_castps_si512(x_star),
+                             _mm512_castps_si512(sign_mask)));
+        term = _mm512_castsi512_ps(
+            _mm512_or_si512(_mm512_castps_si512(pi_over_2),
+                            _mm512_castps_si512(term)));
+        term = _mm512_sub_ps(term, result);
+        result = _mm512_mask_blend_ps(swap_mask, result, term);
+        _mm512_store_ps(out, result);
+        out += 16;
+    }
+
+    for (unsigned int number = sixteenth_points * 16; number < num_points; number++) {
+        *out++ = volk_arctan(*in++);
+    }
+}
+#endif /* LV_HAVE_AVX512F */
 
 #if LV_HAVE_AVX512F && LV_HAVE_AVX512DQ
 #include <immintrin.h>

@@ -182,6 +182,10 @@ public:
  ************************************************/
 volk_type_t volk_type_from_string(std::string);
 
+void get_signatures_from_name(std::vector<volk_type_t>& inputsig,
+                               std::vector<volk_type_t>& outputsig,
+                               std::string name);
+
 float uniform(void);
 void random_floats(float* buf, unsigned n);
 

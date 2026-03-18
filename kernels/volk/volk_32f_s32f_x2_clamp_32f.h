@@ -160,6 +160,35 @@ static inline void volk_32f_s32f_x2_clamp_32f_u_avx(float* out,
 }
 #endif /* LV_HAVE_AVX */
 
+#ifdef LV_HAVE_AVX2
+#include <immintrin.h>
+static inline void volk_32f_s32f_x2_clamp_32f_u_avx2(float* out,
+                                                      const float* in,
+                                                      const float min,
+                                                      const float max,
+                                                      unsigned int num_points)
+{
+    const __m256 vmin = _mm256_set1_ps(min);
+    const __m256 vmax = _mm256_set1_ps(max);
+
+    unsigned int number = 0;
+    unsigned int eighth_points = num_points / 8;
+    for (; number < eighth_points; number++) {
+        __m256 res = _mm256_loadu_ps(in);
+        __m256 max_mask = _mm256_cmp_ps(vmax, res, _CMP_LT_OS);
+        __m256 min_mask = _mm256_cmp_ps(res, vmin, _CMP_LT_OS);
+        res = _mm256_blendv_ps(res, vmax, max_mask);
+        res = _mm256_blendv_ps(res, vmin, min_mask);
+        _mm256_storeu_ps(out, res);
+        in += 8;
+        out += 8;
+    }
+
+    number = eighth_points * 8;
+    volk_32f_s32f_x2_clamp_32f_generic(out, in, min, max, num_points - number);
+}
+#endif /* LV_HAVE_AVX2 */
+
 #ifdef LV_HAVE_AVX512F
 #include <immintrin.h>
 static inline void volk_32f_s32f_x2_clamp_32f_u_avx512f(float* out,
@@ -287,6 +316,25 @@ static inline void volk_32f_s32f_x2_clamp_32f_rvv(float* out,
 }
 #endif /* LV_HAVE_RVV */
 
+#ifdef LV_HAVE_ORC
+
+extern void volk_32f_s32f_x2_clamp_32f_a_orc_impl(float* out,
+                                                    const float* in,
+                                                    const float min_val,
+                                                    const float max_val,
+                                                    int num_points);
+
+static inline void volk_32f_s32f_x2_clamp_32f_u_orc(float* out,
+                                                      const float* in,
+                                                      const float min,
+                                                      const float max,
+                                                      unsigned int num_points)
+{
+    volk_32f_s32f_x2_clamp_32f_a_orc_impl(out, in, min, max, num_points);
+}
+
+#endif /* LV_HAVE_ORC */
+
 #endif /* INCLUDED_volk_32f_s32f_x2_clamp_32f_u_H */
 
 #ifndef INCLUDED_volk_32f_s32f_x2_clamp_32f_a_H
@@ -376,6 +424,35 @@ static inline void volk_32f_s32f_x2_clamp_32f_a_avx(float* out,
     volk_32f_s32f_x2_clamp_32f_generic(out, in, min, max, num_points - number);
 }
 #endif /* LV_HAVE_AVX */
+
+#ifdef LV_HAVE_AVX2
+#include <immintrin.h>
+static inline void volk_32f_s32f_x2_clamp_32f_a_avx2(float* out,
+                                                      const float* in,
+                                                      const float min,
+                                                      const float max,
+                                                      unsigned int num_points)
+{
+    const __m256 vmin = _mm256_set1_ps(min);
+    const __m256 vmax = _mm256_set1_ps(max);
+
+    unsigned int number = 0;
+    unsigned int eighth_points = num_points / 8;
+    for (; number < eighth_points; number++) {
+        __m256 res = _mm256_load_ps(in);
+        __m256 max_mask = _mm256_cmp_ps(vmax, res, _CMP_LT_OS);
+        __m256 min_mask = _mm256_cmp_ps(res, vmin, _CMP_LT_OS);
+        res = _mm256_blendv_ps(res, vmax, max_mask);
+        res = _mm256_blendv_ps(res, vmin, min_mask);
+        _mm256_store_ps(out, res);
+        in += 8;
+        out += 8;
+    }
+
+    number = eighth_points * 8;
+    volk_32f_s32f_x2_clamp_32f_generic(out, in, min, max, num_points - number);
+}
+#endif /* LV_HAVE_AVX2 */
 
 #ifdef LV_HAVE_AVX512F
 #include <immintrin.h>

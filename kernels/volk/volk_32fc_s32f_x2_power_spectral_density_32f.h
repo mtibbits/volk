@@ -98,9 +98,298 @@ volk_32fc_s32f_x2_power_spectral_density_32f_generic(float* logPowerOutput,
 
 #endif /* LV_HAVE_GENERIC */
 
+#ifdef LV_HAVE_SSE2
+
+static inline void
+volk_32fc_s32f_x2_power_spectral_density_32f_u_sse2(float* logPowerOutput,
+                                                      const lv_32fc_t* complexFFTInput,
+                                                      const float normalizationFactor,
+                                                      const float rbw,
+                                                      unsigned int num_points)
+{
+    if (rbw != 1.0f)
+        volk_32fc_s32f_power_spectrum_32f(
+            logPowerOutput, complexFFTInput, normalizationFactor * sqrtf(rbw), num_points);
+    else
+        volk_32fc_s32f_power_spectrum_32f(
+            logPowerOutput, complexFFTInput, normalizationFactor, num_points);
+}
+#endif /* LV_HAVE_SSE2 */
+
+#ifdef LV_HAVE_AVX
+
+static inline void
+volk_32fc_s32f_x2_power_spectral_density_32f_u_avx(float* logPowerOutput,
+                                                     const lv_32fc_t* complexFFTInput,
+                                                     const float normalizationFactor,
+                                                     const float rbw,
+                                                     unsigned int num_points)
+{
+    if (rbw != 1.0f)
+        volk_32fc_s32f_power_spectrum_32f(
+            logPowerOutput, complexFFTInput, normalizationFactor * sqrtf(rbw), num_points);
+    else
+        volk_32fc_s32f_power_spectrum_32f(
+            logPowerOutput, complexFFTInput, normalizationFactor, num_points);
+}
+#endif /* LV_HAVE_AVX */
+
+#if LV_HAVE_AVX && LV_HAVE_FMA
+
+static inline void
+volk_32fc_s32f_x2_power_spectral_density_32f_u_avx_fma(float* logPowerOutput,
+                                                         const lv_32fc_t* complexFFTInput,
+                                                         const float normalizationFactor,
+                                                         const float rbw,
+                                                         unsigned int num_points)
+{
+    if (rbw != 1.0f)
+        volk_32fc_s32f_power_spectrum_32f(
+            logPowerOutput, complexFFTInput, normalizationFactor * sqrtf(rbw), num_points);
+    else
+        volk_32fc_s32f_power_spectrum_32f(
+            logPowerOutput, complexFFTInput, normalizationFactor, num_points);
+}
+#endif /* LV_HAVE_AVX && LV_HAVE_FMA */
+
+#if LV_HAVE_AVX2 && LV_HAVE_FMA
+
+static inline void
+volk_32fc_s32f_x2_power_spectral_density_32f_u_avx2_fma(float* logPowerOutput,
+                                                          const lv_32fc_t* complexFFTInput,
+                                                          const float normalizationFactor,
+                                                          const float rbw,
+                                                          unsigned int num_points)
+{
+    if (rbw != 1.0f)
+        volk_32fc_s32f_power_spectrum_32f(
+            logPowerOutput, complexFFTInput, normalizationFactor * sqrtf(rbw), num_points);
+    else
+        volk_32fc_s32f_power_spectrum_32f(
+            logPowerOutput, complexFFTInput, normalizationFactor, num_points);
+}
+#endif /* LV_HAVE_AVX2 && LV_HAVE_FMA */
+
+#ifdef LV_HAVE_AVX512F
+
+static inline void
+volk_32fc_s32f_x2_power_spectral_density_32f_u_avx512f(float* logPowerOutput,
+                                                         const lv_32fc_t* complexFFTInput,
+                                                         const float normalizationFactor,
+                                                         const float rbw,
+                                                         unsigned int num_points)
+{
+    if (rbw != 1.0f)
+        volk_32fc_s32f_power_spectrum_32f(
+            logPowerOutput, complexFFTInput, normalizationFactor * sqrtf(rbw), num_points);
+    else
+        volk_32fc_s32f_power_spectrum_32f(
+            logPowerOutput, complexFFTInput, normalizationFactor, num_points);
+}
+#endif /* LV_HAVE_AVX512F */
+
+#if LV_HAVE_AVX512F && LV_HAVE_AVX512DQ
+
+static inline void
+volk_32fc_s32f_x2_power_spectral_density_32f_u_avx512dq(float* logPowerOutput,
+                                                          const lv_32fc_t* complexFFTInput,
+                                                          const float normalizationFactor,
+                                                          const float rbw,
+                                                          unsigned int num_points)
+{
+    if (rbw != 1.0f)
+        volk_32fc_s32f_power_spectrum_32f(
+            logPowerOutput, complexFFTInput, normalizationFactor * sqrtf(rbw), num_points);
+    else
+        volk_32fc_s32f_power_spectrum_32f(
+            logPowerOutput, complexFFTInput, normalizationFactor, num_points);
+}
+#endif /* LV_HAVE_AVX512F && LV_HAVE_AVX512DQ */
+
+
+#ifdef LV_HAVE_NEON
+
+static inline void
+volk_32fc_s32f_x2_power_spectral_density_32f_neon(float* logPowerOutput,
+                                                   const lv_32fc_t* complexFFTInput,
+                                                   const float normalizationFactor,
+                                                   const float rbw,
+                                                   unsigned int num_points)
+{
+    if (rbw != 1.0f)
+        volk_32fc_s32f_power_spectrum_32f(
+            logPowerOutput, complexFFTInput, normalizationFactor * sqrtf(rbw), num_points);
+    else
+        volk_32fc_s32f_power_spectrum_32f(
+            logPowerOutput, complexFFTInput, normalizationFactor, num_points);
+}
+#endif /* LV_HAVE_NEON */
+
+#ifdef LV_HAVE_NEONV8
+
+static inline void
+volk_32fc_s32f_x2_power_spectral_density_32f_neonv8(float* logPowerOutput,
+                                                      const lv_32fc_t* complexFFTInput,
+                                                      const float normalizationFactor,
+                                                      const float rbw,
+                                                      unsigned int num_points)
+{
+    if (rbw != 1.0f)
+        volk_32fc_s32f_power_spectrum_32f(
+            logPowerOutput, complexFFTInput, normalizationFactor * sqrtf(rbw), num_points);
+    else
+        volk_32fc_s32f_power_spectrum_32f(
+            logPowerOutput, complexFFTInput, normalizationFactor, num_points);
+}
+#endif /* LV_HAVE_NEONV8 */
+
+#ifdef LV_HAVE_RVV
+
+static inline void
+volk_32fc_s32f_x2_power_spectral_density_32f_rvv(float* logPowerOutput,
+                                                   const lv_32fc_t* complexFFTInput,
+                                                   const float normalizationFactor,
+                                                   const float rbw,
+                                                   unsigned int num_points)
+{
+    if (rbw != 1.0f)
+        volk_32fc_s32f_power_spectrum_32f(
+            logPowerOutput, complexFFTInput, normalizationFactor * sqrtf(rbw), num_points);
+    else
+        volk_32fc_s32f_power_spectrum_32f(
+            logPowerOutput, complexFFTInput, normalizationFactor, num_points);
+}
+#endif /* LV_HAVE_RVV */
+
+#ifdef LV_HAVE_RVVSEG
+
+static inline void
+volk_32fc_s32f_x2_power_spectral_density_32f_rvvseg(float* logPowerOutput,
+                                                      const lv_32fc_t* complexFFTInput,
+                                                      const float normalizationFactor,
+                                                      const float rbw,
+                                                      unsigned int num_points)
+{
+    if (rbw != 1.0f)
+        volk_32fc_s32f_power_spectrum_32f(
+            logPowerOutput, complexFFTInput, normalizationFactor * sqrtf(rbw), num_points);
+    else
+        volk_32fc_s32f_power_spectrum_32f(
+            logPowerOutput, complexFFTInput, normalizationFactor, num_points);
+}
+#endif /* LV_HAVE_RVVSEG */
+
 #endif /* INCLUDED_volk_32fc_s32f_x2_power_spectral_density_32f_u_H */
 
 #ifndef INCLUDED_volk_32fc_s32f_x2_power_spectral_density_32f_a_H
 #define INCLUDED_volk_32fc_s32f_x2_power_spectral_density_32f_a_H
+
+#ifdef LV_HAVE_SSE2
+
+static inline void
+volk_32fc_s32f_x2_power_spectral_density_32f_a_sse2(float* logPowerOutput,
+                                                      const lv_32fc_t* complexFFTInput,
+                                                      const float normalizationFactor,
+                                                      const float rbw,
+                                                      unsigned int num_points)
+{
+    if (rbw != 1.0f)
+        volk_32fc_s32f_power_spectrum_32f(
+            logPowerOutput, complexFFTInput, normalizationFactor * sqrtf(rbw), num_points);
+    else
+        volk_32fc_s32f_power_spectrum_32f(
+            logPowerOutput, complexFFTInput, normalizationFactor, num_points);
+}
+#endif /* LV_HAVE_SSE2 */
+
+#ifdef LV_HAVE_AVX
+
+static inline void
+volk_32fc_s32f_x2_power_spectral_density_32f_a_avx(float* logPowerOutput,
+                                                     const lv_32fc_t* complexFFTInput,
+                                                     const float normalizationFactor,
+                                                     const float rbw,
+                                                     unsigned int num_points)
+{
+    if (rbw != 1.0f)
+        volk_32fc_s32f_power_spectrum_32f(
+            logPowerOutput, complexFFTInput, normalizationFactor * sqrtf(rbw), num_points);
+    else
+        volk_32fc_s32f_power_spectrum_32f(
+            logPowerOutput, complexFFTInput, normalizationFactor, num_points);
+}
+#endif /* LV_HAVE_AVX */
+
+#if LV_HAVE_AVX && LV_HAVE_FMA
+
+static inline void
+volk_32fc_s32f_x2_power_spectral_density_32f_a_avx_fma(float* logPowerOutput,
+                                                         const lv_32fc_t* complexFFTInput,
+                                                         const float normalizationFactor,
+                                                         const float rbw,
+                                                         unsigned int num_points)
+{
+    if (rbw != 1.0f)
+        volk_32fc_s32f_power_spectrum_32f(
+            logPowerOutput, complexFFTInput, normalizationFactor * sqrtf(rbw), num_points);
+    else
+        volk_32fc_s32f_power_spectrum_32f(
+            logPowerOutput, complexFFTInput, normalizationFactor, num_points);
+}
+#endif /* LV_HAVE_AVX && LV_HAVE_FMA */
+
+#if LV_HAVE_AVX2 && LV_HAVE_FMA
+
+static inline void
+volk_32fc_s32f_x2_power_spectral_density_32f_a_avx2_fma(float* logPowerOutput,
+                                                          const lv_32fc_t* complexFFTInput,
+                                                          const float normalizationFactor,
+                                                          const float rbw,
+                                                          unsigned int num_points)
+{
+    if (rbw != 1.0f)
+        volk_32fc_s32f_power_spectrum_32f(
+            logPowerOutput, complexFFTInput, normalizationFactor * sqrtf(rbw), num_points);
+    else
+        volk_32fc_s32f_power_spectrum_32f(
+            logPowerOutput, complexFFTInput, normalizationFactor, num_points);
+}
+#endif /* LV_HAVE_AVX2 && LV_HAVE_FMA */
+
+#ifdef LV_HAVE_AVX512F
+
+static inline void
+volk_32fc_s32f_x2_power_spectral_density_32f_a_avx512f(float* logPowerOutput,
+                                                         const lv_32fc_t* complexFFTInput,
+                                                         const float normalizationFactor,
+                                                         const float rbw,
+                                                         unsigned int num_points)
+{
+    if (rbw != 1.0f)
+        volk_32fc_s32f_power_spectrum_32f(
+            logPowerOutput, complexFFTInput, normalizationFactor * sqrtf(rbw), num_points);
+    else
+        volk_32fc_s32f_power_spectrum_32f(
+            logPowerOutput, complexFFTInput, normalizationFactor, num_points);
+}
+#endif /* LV_HAVE_AVX512F */
+
+#if LV_HAVE_AVX512F && LV_HAVE_AVX512DQ
+
+static inline void
+volk_32fc_s32f_x2_power_spectral_density_32f_a_avx512dq(float* logPowerOutput,
+                                                          const lv_32fc_t* complexFFTInput,
+                                                          const float normalizationFactor,
+                                                          const float rbw,
+                                                          unsigned int num_points)
+{
+    if (rbw != 1.0f)
+        volk_32fc_s32f_power_spectrum_32f(
+            logPowerOutput, complexFFTInput, normalizationFactor * sqrtf(rbw), num_points);
+    else
+        volk_32fc_s32f_power_spectrum_32f(
+            logPowerOutput, complexFFTInput, normalizationFactor, num_points);
+}
+#endif /* LV_HAVE_AVX512F && LV_HAVE_AVX512DQ */
 
 #endif /* INCLUDED_volk_32fc_s32f_x2_power_spectral_density_32f_a_H */

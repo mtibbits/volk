@@ -102,6 +102,52 @@ volk_32fc_x2_s32fc_multiply_conjugate_add2_32fc_generic(lv_32fc_t* cVector,
 #endif /* LV_HAVE_GENERIC */
 
 
+#ifdef LV_HAVE_SSE
+#include <xmmintrin.h>
+
+static inline void
+volk_32fc_x2_s32fc_multiply_conjugate_add2_32fc_u_sse(lv_32fc_t* cVector,
+                                                       const lv_32fc_t* aVector,
+                                                       const lv_32fc_t* bVector,
+                                                       const lv_32fc_t* scalar,
+                                                       unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int halfPoints = num_points / 2;
+
+    const __m128 conjugator = _mm_setr_ps(0, -0.f, 0, -0.f);
+    lv_32fc_t v_scalar[2] = { *scalar, *scalar };
+    __m128 s = _mm_loadu_ps((const float*)v_scalar);
+    __m128 s_swap = _mm_shuffle_ps(s, s, 0xB1);
+    __m128 s_swap_conj = _mm_xor_ps(s_swap, conjugator);
+
+    const lv_32fc_t* a = aVector;
+    const lv_32fc_t* b = bVector;
+    lv_32fc_t* c = cVector;
+
+    for (; number < halfPoints; number++) {
+        __m128 x = _mm_loadu_ps((const float*)b);
+        __m128 y = _mm_loadu_ps((const float*)a);
+
+        __m128 breal = _mm_shuffle_ps(x, x, _MM_SHUFFLE(2, 2, 0, 0));
+        __m128 bimag = _mm_shuffle_ps(x, x, _MM_SHUFFLE(3, 3, 1, 1));
+
+        __m128 z = _mm_add_ps(_mm_mul_ps(s, breal), _mm_mul_ps(s_swap_conj, bimag));
+        z = _mm_add_ps(y, z);
+        _mm_storeu_ps((float*)c, z);
+
+        a += 2;
+        b += 2;
+        c += 2;
+    }
+
+    if ((num_points % 2) != 0) {
+        *c = *a + lv_conj(*b) * (*scalar);
+    }
+}
+#endif /* LV_HAVE_SSE */
+
+
 #ifdef LV_HAVE_SSE3
 #include <pmmintrin.h>
 #include <volk/volk_sse3_intrinsics.h>
@@ -188,6 +234,53 @@ volk_32fc_x2_s32fc_multiply_conjugate_add2_32fc_u_avx(lv_32fc_t* cVector,
     }
 }
 #endif /* LV_HAVE_AVX */
+
+
+#if LV_HAVE_AVX && LV_HAVE_FMA
+#include <immintrin.h>
+
+static inline void
+volk_32fc_x2_s32fc_multiply_conjugate_add2_32fc_u_avx_fma(lv_32fc_t* cVector,
+                                                           const lv_32fc_t* aVector,
+                                                           const lv_32fc_t* bVector,
+                                                           const lv_32fc_t* scalar,
+                                                           unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int quarterPoints = num_points / 4;
+
+    const lv_32fc_t* a = aVector;
+    const lv_32fc_t* b = bVector;
+    lv_32fc_t* c = cVector;
+
+    lv_32fc_t v_scalar[4] = { *scalar, *scalar, *scalar, *scalar };
+    const __m256 s = _mm256_loadu_ps((const float*)v_scalar);
+
+    const __m256 s_swap = _mm256_permute_ps(s, 0xB1);
+    const __m256 conjugator =
+        _mm256_setr_ps(0, -0.f, 0, -0.f, 0, -0.f, 0, -0.f);
+    const __m256 s_swap_conj = _mm256_xor_ps(s_swap, conjugator);
+
+    for (; number < quarterPoints; number++) {
+        const __m256 x = _mm256_loadu_ps((const float*)b);
+        const __m256 y = _mm256_loadu_ps((const float*)a);
+        const __m256 breal = _mm256_moveldup_ps(x);
+        const __m256 bimag = _mm256_movehdup_ps(x);
+
+        __m256 z = _mm256_mul_ps(s, breal);
+        z = _mm256_fmadd_ps(s_swap_conj, bimag, z);
+        z = _mm256_add_ps(y, z);
+        _mm256_storeu_ps((float*)c, z);
+
+        a += 4;
+        b += 4;
+        c += 4;
+    }
+
+    volk_32fc_x2_s32fc_multiply_conjugate_add2_32fc_generic(
+        c, a, b, scalar, num_points - quarterPoints * 4);
+}
+#endif /* LV_HAVE_AVX && LV_HAVE_FMA */
 
 
 #if LV_HAVE_AVX2 && LV_HAVE_FMA
@@ -455,6 +548,52 @@ volk_32fc_x2_s32fc_multiply_conjugate_add2_32fc_rvvseg(lv_32fc_t* cVector,
 #ifndef INCLUDED_volk_32fc_x2_s32fc_multiply_conjugate_add2_32fc_a_H
 #define INCLUDED_volk_32fc_x2_s32fc_multiply_conjugate_add2_32fc_a_H
 
+#ifdef LV_HAVE_SSE
+#include <xmmintrin.h>
+
+static inline void
+volk_32fc_x2_s32fc_multiply_conjugate_add2_32fc_a_sse(lv_32fc_t* cVector,
+                                                       const lv_32fc_t* aVector,
+                                                       const lv_32fc_t* bVector,
+                                                       const lv_32fc_t* scalar,
+                                                       unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int halfPoints = num_points / 2;
+
+    const __m128 conjugator = _mm_setr_ps(0, -0.f, 0, -0.f);
+    lv_32fc_t v_scalar[2] = { *scalar, *scalar };
+    __m128 s = _mm_loadu_ps((const float*)v_scalar);
+    __m128 s_swap = _mm_shuffle_ps(s, s, 0xB1);
+    __m128 s_swap_conj = _mm_xor_ps(s_swap, conjugator);
+
+    const lv_32fc_t* a = aVector;
+    const lv_32fc_t* b = bVector;
+    lv_32fc_t* c = cVector;
+
+    for (; number < halfPoints; number++) {
+        __m128 x = _mm_load_ps((const float*)b);
+        __m128 y = _mm_load_ps((const float*)a);
+
+        __m128 breal = _mm_shuffle_ps(x, x, _MM_SHUFFLE(2, 2, 0, 0));
+        __m128 bimag = _mm_shuffle_ps(x, x, _MM_SHUFFLE(3, 3, 1, 1));
+
+        __m128 z = _mm_add_ps(_mm_mul_ps(s, breal), _mm_mul_ps(s_swap_conj, bimag));
+        z = _mm_add_ps(y, z);
+        _mm_store_ps((float*)c, z);
+
+        a += 2;
+        b += 2;
+        c += 2;
+    }
+
+    if ((num_points % 2) != 0) {
+        *c = *a + lv_conj(*b) * (*scalar);
+    }
+}
+#endif /* LV_HAVE_SSE */
+
+
 #ifdef LV_HAVE_SSE3
 #include <pmmintrin.h>
 #include <volk/volk_sse3_intrinsics.h>
@@ -541,6 +680,53 @@ volk_32fc_x2_s32fc_multiply_conjugate_add2_32fc_a_avx(lv_32fc_t* cVector,
     }
 }
 #endif /* LV_HAVE_AVX */
+
+#if LV_HAVE_AVX && LV_HAVE_FMA
+#include <immintrin.h>
+
+static inline void
+volk_32fc_x2_s32fc_multiply_conjugate_add2_32fc_a_avx_fma(lv_32fc_t* cVector,
+                                                           const lv_32fc_t* aVector,
+                                                           const lv_32fc_t* bVector,
+                                                           const lv_32fc_t* scalar,
+                                                           unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int quarterPoints = num_points / 4;
+
+    const lv_32fc_t* a = aVector;
+    const lv_32fc_t* b = bVector;
+    lv_32fc_t* c = cVector;
+
+    lv_32fc_t v_scalar[4] = { *scalar, *scalar, *scalar, *scalar };
+    const __m256 s = _mm256_loadu_ps((const float*)v_scalar);
+
+    const __m256 s_swap = _mm256_permute_ps(s, 0xB1);
+    const __m256 conjugator =
+        _mm256_setr_ps(0, -0.f, 0, -0.f, 0, -0.f, 0, -0.f);
+    const __m256 s_swap_conj = _mm256_xor_ps(s_swap, conjugator);
+
+    for (; number < quarterPoints; number++) {
+        const __m256 x = _mm256_load_ps((const float*)b);
+        const __m256 y = _mm256_load_ps((const float*)a);
+        const __m256 breal = _mm256_moveldup_ps(x);
+        const __m256 bimag = _mm256_movehdup_ps(x);
+
+        __m256 z = _mm256_mul_ps(s, breal);
+        z = _mm256_fmadd_ps(s_swap_conj, bimag, z);
+        z = _mm256_add_ps(y, z);
+        _mm256_store_ps((float*)c, z);
+
+        a += 4;
+        b += 4;
+        c += 4;
+    }
+
+    volk_32fc_x2_s32fc_multiply_conjugate_add2_32fc_generic(
+        c, a, b, scalar, num_points - quarterPoints * 4);
+}
+#endif /* LV_HAVE_AVX && LV_HAVE_FMA */
+
 
 #if LV_HAVE_AVX2 && LV_HAVE_FMA
 #include <immintrin.h>

@@ -143,6 +143,26 @@ static inline void volk_32f_s32f_convertpuppet_8u_a_avx512f(uint8_t* output,
 }
 #endif
 
+#ifdef LV_HAVE_AVX512BW
+static inline void volk_32f_s32f_convertpuppet_8u_u_avx512bw(uint8_t* output,
+                                                              const float* input,
+                                                              float scale,
+                                                              unsigned int num_points)
+{
+    volk_32f_s32f_x2_convert_8u_u_avx512bw(output, input, scale, 128.0, num_points);
+}
+#endif
+
+#ifdef LV_HAVE_AVX512BW
+static inline void volk_32f_s32f_convertpuppet_8u_a_avx512bw(uint8_t* output,
+                                                              const float* input,
+                                                              float scale,
+                                                              unsigned int num_points)
+{
+    volk_32f_s32f_x2_convert_8u_a_avx512bw(output, input, scale, 128.0, num_points);
+}
+#endif
+
 #ifdef LV_HAVE_NEON
 static inline void volk_32f_s32f_convertpuppet_8u_neon(uint8_t* output,
                                                        const float* input,

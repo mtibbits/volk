@@ -373,6 +373,43 @@ volk_32u_reverse_32u_u_avx512bw(uint32_t* out,
 }
 #endif /* LV_HAVE_AVX512BW */
 
+#ifdef LV_HAVE_AVX512VBMI
+#include <immintrin.h>
+
+static inline void
+volk_32u_reverse_32u_u_avx512vbmi(uint32_t* out,
+                                   const uint32_t* in,
+                                   unsigned int num_points)
+{
+    /* Byte-reverse within each 32-bit word using cross-lane byte permutation */
+    const __m512i byte_rev = _mm512_set_epi8(
+        60, 61, 62, 63, 56, 57, 58, 59, 52, 53, 54, 55, 48, 49, 50, 51,
+        44, 45, 46, 47, 40, 41, 42, 43, 36, 37, 38, 39, 32, 33, 34, 35,
+        28, 29, 30, 31, 24, 25, 26, 27, 20, 21, 22, 23, 16, 17, 18, 19,
+        12, 13, 14, 15,  8,  9, 10, 11,  4,  5,  6,  7,  0,  1,  2,  3);
+    /* Nibble-reverse LUT: maps each nibble to its bit-reversed value */
+    const __m512i nibble_rev = _mm512_broadcast_i32x4(_mm_setr_epi8(
+        0x0, 0x8, 0x4, 0xC, 0x2, 0xA, 0x6, 0xE, 0x1, 0x9, 0x5, 0xD, 0x3, 0xB, 0x7, 0xF));
+    const __m512i lo_mask = _mm512_set1_epi8(0x0F);
+
+    const unsigned int sixteenthPoints = num_points / 16;
+    unsigned int number = 0;
+    for (; number < sixteenthPoints; ++number) {
+        __m512i v = _mm512_loadu_si512((const __m512i*)(in + number * 16));
+        /* Reverse byte order within each 32-bit word */
+        v = _mm512_permutexvar_epi8(byte_rev, v);
+        /* Reverse bits within each byte via nibble LUT */
+        __m512i lo = _mm512_and_si512(v, lo_mask);
+        __m512i hi = _mm512_and_si512(_mm512_srli_epi16(v, 4), lo_mask);
+        v = _mm512_or_si512(_mm512_slli_epi16(_mm512_shuffle_epi8(nibble_rev, lo), 4),
+                            _mm512_shuffle_epi8(nibble_rev, hi));
+        _mm512_storeu_si512((__m512i*)(out + number * 16), v);
+    }
+    number = sixteenthPoints * 16;
+    volk_32u_reverse_32u_generic(out + number, in + number, num_points - number);
+}
+#endif /* LV_HAVE_AVX512VBMI */
+
 #ifdef LV_HAVE_NEON
 #include <arm_neon.h>
 
@@ -600,5 +637,42 @@ volk_32u_reverse_32u_a_avx512bw(uint32_t* out,
     volk_32u_reverse_32u_generic(out + number, in + number, num_points - number);
 }
 #endif /* LV_HAVE_AVX512BW */
+
+#ifdef LV_HAVE_AVX512VBMI
+#include <immintrin.h>
+
+static inline void
+volk_32u_reverse_32u_a_avx512vbmi(uint32_t* out,
+                                   const uint32_t* in,
+                                   unsigned int num_points)
+{
+    /* Byte-reverse within each 32-bit word using cross-lane byte permutation */
+    const __m512i byte_rev = _mm512_set_epi8(
+        60, 61, 62, 63, 56, 57, 58, 59, 52, 53, 54, 55, 48, 49, 50, 51,
+        44, 45, 46, 47, 40, 41, 42, 43, 36, 37, 38, 39, 32, 33, 34, 35,
+        28, 29, 30, 31, 24, 25, 26, 27, 20, 21, 22, 23, 16, 17, 18, 19,
+        12, 13, 14, 15,  8,  9, 10, 11,  4,  5,  6,  7,  0,  1,  2,  3);
+    /* Nibble-reverse LUT: maps each nibble to its bit-reversed value */
+    const __m512i nibble_rev = _mm512_broadcast_i32x4(_mm_setr_epi8(
+        0x0, 0x8, 0x4, 0xC, 0x2, 0xA, 0x6, 0xE, 0x1, 0x9, 0x5, 0xD, 0x3, 0xB, 0x7, 0xF));
+    const __m512i lo_mask = _mm512_set1_epi8(0x0F);
+
+    const unsigned int sixteenthPoints = num_points / 16;
+    unsigned int number = 0;
+    for (; number < sixteenthPoints; ++number) {
+        __m512i v = _mm512_load_si512((const __m512i*)(in + number * 16));
+        /* Reverse byte order within each 32-bit word */
+        v = _mm512_permutexvar_epi8(byte_rev, v);
+        /* Reverse bits within each byte via nibble LUT */
+        __m512i lo = _mm512_and_si512(v, lo_mask);
+        __m512i hi = _mm512_and_si512(_mm512_srli_epi16(v, 4), lo_mask);
+        v = _mm512_or_si512(_mm512_slli_epi16(_mm512_shuffle_epi8(nibble_rev, lo), 4),
+                            _mm512_shuffle_epi8(nibble_rev, hi));
+        _mm512_store_si512((__m512i*)(out + number * 16), v);
+    }
+    number = sixteenthPoints * 16;
+    volk_32u_reverse_32u_generic(out + number, in + number, num_points - number);
+}
+#endif /* LV_HAVE_AVX512VBMI */
 
 #endif /* INCLUDED_VOLK_32u_REVERSE_32u_A_H */

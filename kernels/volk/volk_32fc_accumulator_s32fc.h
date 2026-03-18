@@ -144,6 +144,82 @@ static inline void volk_32fc_accumulator_s32fc_u_avx(lv_32fc_t* result,
 }
 #endif /* LV_HAVE_AVX */
 
+#ifdef LV_HAVE_AVX2
+#include <immintrin.h>
+
+static inline void volk_32fc_accumulator_s32fc_u_avx2(lv_32fc_t* result,
+                                                       const lv_32fc_t* inputBuffer,
+                                                       unsigned int num_points)
+{
+    lv_32fc_t returnValue = lv_cmake(0.f, 0.f);
+    unsigned int number = 0;
+    const unsigned int quarterPoints = num_points / 4;
+
+    const lv_32fc_t* aPtr = inputBuffer;
+    __VOLK_ATTR_ALIGNED(32) float tempBuffer[8];
+
+    __m256 accumulator = _mm256_setzero_ps();
+    __m256 aVal = _mm256_setzero_ps();
+
+    for (; number < quarterPoints; number++) {
+        aVal = _mm256_loadu_ps((const float*)aPtr);
+        accumulator = _mm256_add_ps(accumulator, aVal);
+        aPtr += 4;
+    }
+
+    _mm256_store_ps(tempBuffer, accumulator);
+
+    returnValue = lv_cmake(tempBuffer[0], tempBuffer[1]);
+    returnValue += lv_cmake(tempBuffer[2], tempBuffer[3]);
+    returnValue += lv_cmake(tempBuffer[4], tempBuffer[5]);
+    returnValue += lv_cmake(tempBuffer[6], tempBuffer[7]);
+
+    number = quarterPoints * 4;
+    for (; number < num_points; number++) {
+        returnValue += (*aPtr++);
+    }
+    *result = returnValue;
+}
+#endif /* LV_HAVE_AVX2 */
+
+#if LV_HAVE_AVX2 && LV_HAVE_FMA
+#include <immintrin.h>
+
+static inline void volk_32fc_accumulator_s32fc_u_avx2_fma(lv_32fc_t* result,
+                                                           const lv_32fc_t* inputBuffer,
+                                                           unsigned int num_points)
+{
+    lv_32fc_t returnValue = lv_cmake(0.f, 0.f);
+    unsigned int number = 0;
+    const unsigned int quarterPoints = num_points / 4;
+
+    const lv_32fc_t* aPtr = inputBuffer;
+    __VOLK_ATTR_ALIGNED(32) float tempBuffer[8];
+
+    __m256 accumulator = _mm256_setzero_ps();
+    __m256 aVal = _mm256_setzero_ps();
+
+    for (; number < quarterPoints; number++) {
+        aVal = _mm256_loadu_ps((const float*)aPtr);
+        accumulator = _mm256_add_ps(accumulator, aVal);
+        aPtr += 4;
+    }
+
+    _mm256_store_ps(tempBuffer, accumulator);
+
+    returnValue = lv_cmake(tempBuffer[0], tempBuffer[1]);
+    returnValue += lv_cmake(tempBuffer[2], tempBuffer[3]);
+    returnValue += lv_cmake(tempBuffer[4], tempBuffer[5]);
+    returnValue += lv_cmake(tempBuffer[6], tempBuffer[7]);
+
+    number = quarterPoints * 4;
+    for (; number < num_points; number++) {
+        returnValue += (*aPtr++);
+    }
+    *result = returnValue;
+}
+#endif /* LV_HAVE_AVX2 && LV_HAVE_FMA */
+
 #ifdef LV_HAVE_AVX512F
 #include <immintrin.h>
 
@@ -333,6 +409,34 @@ static inline void volk_32fc_accumulator_s32fc_rvv(lv_32fc_t* result,
 }
 #endif /* LV_HAVE_RVV */
 
+#ifdef LV_HAVE_RVVSEG
+#include <riscv_vector.h>
+#include <volk/volk_rvv_intrinsics.h>
+
+static inline void volk_32fc_accumulator_s32fc_rvvseg(lv_32fc_t* result,
+                                                       const lv_32fc_t* inputBuffer,
+                                                       unsigned int num_points)
+{
+    size_t vlmax = __riscv_vsetvlmax_e32m4();
+    vfloat32m4_t vsum_r = __riscv_vfmv_v_f_f32m4(0, vlmax);
+    vfloat32m4_t vsum_i = __riscv_vfmv_v_f_f32m4(0, vlmax);
+    size_t n = num_points;
+    for (size_t vl; n > 0; n -= vl, inputBuffer += vl) {
+        vl = __riscv_vsetvl_e32m4(n < vlmax ? n : vlmax);
+        vfloat32m4x2_t vc =
+            __riscv_vlseg2e32_v_f32m4x2((const float*)inputBuffer, vl);
+        vsum_r = __riscv_vfadd_tu(vsum_r, vsum_r, __riscv_vget_f32m4(vc, 0), vl);
+        vsum_i = __riscv_vfadd_tu(vsum_i, vsum_i, __riscv_vget_f32m4(vc, 1), vl);
+    }
+    vlmax = __riscv_vsetvlmax_e32m1();
+    vfloat32m1_t vr = RISCV_SHRINK4(vfadd, f, 32, vsum_r);
+    vfloat32m1_t vi = RISCV_SHRINK4(vfadd, f, 32, vsum_i);
+    vfloat32m1_t z = __riscv_vfmv_s_f_f32m1(0, vlmax);
+    *result = lv_cmake(__riscv_vfmv_f(__riscv_vfredusum(vr, z, vlmax)),
+                       __riscv_vfmv_f(__riscv_vfredusum(vi, z, vlmax)));
+}
+#endif /* LV_HAVE_RVVSEG */
+
 #endif /* INCLUDED_volk_32fc_accumulator_s32fc_u_H */
 
 #ifndef INCLUDED_volk_32fc_accumulator_s32fc_a_H
@@ -411,6 +515,82 @@ static inline void volk_32fc_accumulator_s32fc_a_avx(lv_32fc_t* result,
     *result = returnValue;
 }
 #endif /* LV_HAVE_AVX */
+
+#ifdef LV_HAVE_AVX2
+#include <immintrin.h>
+
+static inline void volk_32fc_accumulator_s32fc_a_avx2(lv_32fc_t* result,
+                                                       const lv_32fc_t* inputBuffer,
+                                                       unsigned int num_points)
+{
+    lv_32fc_t returnValue = lv_cmake(0.f, 0.f);
+    unsigned int number = 0;
+    const unsigned int quarterPoints = num_points / 4;
+
+    const lv_32fc_t* aPtr = inputBuffer;
+    __VOLK_ATTR_ALIGNED(32) float tempBuffer[8];
+
+    __m256 accumulator = _mm256_setzero_ps();
+    __m256 aVal = _mm256_setzero_ps();
+
+    for (; number < quarterPoints; number++) {
+        aVal = _mm256_load_ps((const float*)aPtr);
+        accumulator = _mm256_add_ps(accumulator, aVal);
+        aPtr += 4;
+    }
+
+    _mm256_store_ps(tempBuffer, accumulator);
+
+    returnValue = lv_cmake(tempBuffer[0], tempBuffer[1]);
+    returnValue += lv_cmake(tempBuffer[2], tempBuffer[3]);
+    returnValue += lv_cmake(tempBuffer[4], tempBuffer[5]);
+    returnValue += lv_cmake(tempBuffer[6], tempBuffer[7]);
+
+    number = quarterPoints * 4;
+    for (; number < num_points; number++) {
+        returnValue += (*aPtr++);
+    }
+    *result = returnValue;
+}
+#endif /* LV_HAVE_AVX2 */
+
+#if LV_HAVE_AVX2 && LV_HAVE_FMA
+#include <immintrin.h>
+
+static inline void volk_32fc_accumulator_s32fc_a_avx2_fma(lv_32fc_t* result,
+                                                           const lv_32fc_t* inputBuffer,
+                                                           unsigned int num_points)
+{
+    lv_32fc_t returnValue = lv_cmake(0.f, 0.f);
+    unsigned int number = 0;
+    const unsigned int quarterPoints = num_points / 4;
+
+    const lv_32fc_t* aPtr = inputBuffer;
+    __VOLK_ATTR_ALIGNED(32) float tempBuffer[8];
+
+    __m256 accumulator = _mm256_setzero_ps();
+    __m256 aVal = _mm256_setzero_ps();
+
+    for (; number < quarterPoints; number++) {
+        aVal = _mm256_load_ps((const float*)aPtr);
+        accumulator = _mm256_add_ps(accumulator, aVal);
+        aPtr += 4;
+    }
+
+    _mm256_store_ps(tempBuffer, accumulator);
+
+    returnValue = lv_cmake(tempBuffer[0], tempBuffer[1]);
+    returnValue += lv_cmake(tempBuffer[2], tempBuffer[3]);
+    returnValue += lv_cmake(tempBuffer[4], tempBuffer[5]);
+    returnValue += lv_cmake(tempBuffer[6], tempBuffer[7]);
+
+    number = quarterPoints * 4;
+    for (; number < num_points; number++) {
+        returnValue += (*aPtr++);
+    }
+    *result = returnValue;
+}
+#endif /* LV_HAVE_AVX2 && LV_HAVE_FMA */
 
 #ifdef LV_HAVE_AVX512F
 #include <immintrin.h>

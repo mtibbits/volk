@@ -73,6 +73,44 @@ static inline void volk_32fc_s32fc_rotator2puppet_32fc_u_sse(lv_32fc_t* outVecto
 #endif /* LV_HAVE_SSE */
 
 
+#ifdef LV_HAVE_SSE3
+#include <pmmintrin.h>
+
+static inline void volk_32fc_s32fc_rotator2puppet_32fc_a_sse3(lv_32fc_t* outVector,
+                                                               const lv_32fc_t* inVector,
+                                                               const lv_32fc_t* phase_inc,
+                                                               unsigned int num_points)
+{
+    lv_32fc_t phase[1] = { lv_cmake(.3f, .95393f) };
+    (*phase) /= hypotf(lv_creal(*phase), lv_cimag(*phase));
+    const lv_32fc_t phase_inc_n =
+        *phase_inc / hypotf(lv_creal(*phase_inc), lv_cimag(*phase_inc));
+    volk_32fc_s32fc_x2_rotator2_32fc_a_sse3(
+        outVector, inVector, &phase_inc_n, phase, num_points);
+}
+
+#endif /* LV_HAVE_SSE3 */
+
+
+#ifdef LV_HAVE_SSE3
+#include <pmmintrin.h>
+
+static inline void volk_32fc_s32fc_rotator2puppet_32fc_u_sse3(lv_32fc_t* outVector,
+                                                               const lv_32fc_t* inVector,
+                                                               const lv_32fc_t* phase_inc,
+                                                               unsigned int num_points)
+{
+    lv_32fc_t phase[1] = { lv_cmake(.3f, .95393f) };
+    (*phase) /= hypotf(lv_creal(*phase), lv_cimag(*phase));
+    const lv_32fc_t phase_inc_n =
+        *phase_inc / hypotf(lv_creal(*phase_inc), lv_cimag(*phase_inc));
+    volk_32fc_s32fc_x2_rotator2_32fc_u_sse3(
+        outVector, inVector, &phase_inc_n, phase, num_points);
+}
+
+#endif /* LV_HAVE_SSE3 */
+
+
 #ifdef LV_HAVE_NEON
 #include <arm_neon.h>
 #include <volk/volk_neon_intrinsics.h>

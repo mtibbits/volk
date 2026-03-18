@@ -209,6 +209,94 @@ volk_32f_index_max_32u_u_sse4_1(uint32_t* target, const float* src0, uint32_t nu
 #endif /*LV_HAVE_SSE4_1*/
 
 
+#ifdef LV_HAVE_AVX
+#include <immintrin.h>
+
+static inline void
+volk_32f_index_max_32u_u_avx(uint32_t* target, const float* src0, uint32_t num_points)
+{
+    if (num_points > 0) {
+        uint32_t number = 0;
+        const uint32_t eighthPoints = num_points / 8;
+
+        const float* inputPtr = src0;
+
+        /* Track indices as two 128-bit halves (lo = lanes 0-3, hi = lanes 4-7) */
+        __m128i indexIncrementValues = _mm_set1_epi32(8);
+        __m128i curIdxLo = _mm_set_epi32(-5, -6, -7, -8);
+        __m128i curIdxHi = _mm_set_epi32(-1, -2, -3, -4);
+
+        float max = src0[0];
+        uint32_t index = 0;
+        __m256 maxValues = _mm256_set1_ps(max);
+        __m128i maxIdxLo = _mm_setzero_si128();
+        __m128i maxIdxHi = _mm_setzero_si128();
+
+        __VOLK_ATTR_ALIGNED(32) float maxValuesBuffer[8];
+        __VOLK_ATTR_ALIGNED(16) uint32_t maxIdxLoBuffer[4];
+        __VOLK_ATTR_ALIGNED(16) uint32_t maxIdxHiBuffer[4];
+
+        for (; number < eighthPoints; number++) {
+            __m256 currentValues = _mm256_loadu_ps(inputPtr);
+            inputPtr += 8;
+
+            /* Increment indices */
+            curIdxLo = _mm_add_epi32(curIdxLo, indexIncrementValues);
+            curIdxHi = _mm_add_epi32(curIdxHi, indexIncrementValues);
+
+            /* Compare using AVX 256-bit float compare */
+            __m256 compareResults = _mm256_cmp_ps(currentValues, maxValues, _CMP_GT_OS);
+
+            /* Split compare mask to 128-bit halves for integer blend (SSE4.1) */
+            __m128i cmpLo = _mm_castps_si128(_mm256_castps256_ps128(compareResults));
+            __m128i cmpHi = _mm_castps_si128(_mm256_extractf128_ps(compareResults, 1));
+
+            /* Blend indices using SSE4.1 (available on all AVX CPUs) */
+            maxIdxLo = _mm_blendv_epi8(maxIdxLo, curIdxLo, cmpLo);
+            maxIdxHi = _mm_blendv_epi8(maxIdxHi, curIdxHi, cmpHi);
+
+            /* Blend max values */
+            maxValues = _mm256_blendv_ps(maxValues, currentValues, compareResults);
+        }
+
+        /* Extract results */
+        _mm256_store_ps(maxValuesBuffer, maxValues);
+        _mm_store_si128((__m128i*)maxIdxLoBuffer, maxIdxLo);
+        _mm_store_si128((__m128i*)maxIdxHiBuffer, maxIdxHi);
+
+        for (number = 0; number < 4; number++) {
+            if (maxValuesBuffer[number] > max) {
+                index = maxIdxLoBuffer[number];
+                max = maxValuesBuffer[number];
+            } else if (maxValuesBuffer[number] == max) {
+                if (index > maxIdxLoBuffer[number])
+                    index = maxIdxLoBuffer[number];
+            }
+        }
+        for (number = 0; number < 4; number++) {
+            if (maxValuesBuffer[number + 4] > max) {
+                index = maxIdxHiBuffer[number];
+                max = maxValuesBuffer[number + 4];
+            } else if (maxValuesBuffer[number + 4] == max) {
+                if (index > maxIdxHiBuffer[number])
+                    index = maxIdxHiBuffer[number];
+            }
+        }
+
+        number = eighthPoints * 8;
+        for (; number < num_points; number++) {
+            if (src0[number] > max) {
+                index = number;
+                max = src0[number];
+            }
+        }
+        target[0] = index;
+    }
+}
+
+#endif /*LV_HAVE_AVX*/
+
+
 #ifdef LV_HAVE_AVX2
 #include <immintrin.h>
 
@@ -636,6 +724,94 @@ volk_32f_index_max_32u_a_sse4_1(uint32_t* target, const float* src0, uint32_t nu
 }
 
 #endif /*LV_HAVE_SSE4_1*/
+
+
+#ifdef LV_HAVE_AVX
+#include <immintrin.h>
+
+static inline void
+volk_32f_index_max_32u_a_avx(uint32_t* target, const float* src0, uint32_t num_points)
+{
+    if (num_points > 0) {
+        uint32_t number = 0;
+        const uint32_t eighthPoints = num_points / 8;
+
+        const float* inputPtr = src0;
+
+        /* Track indices as two 128-bit halves (lo = lanes 0-3, hi = lanes 4-7) */
+        __m128i indexIncrementValues = _mm_set1_epi32(8);
+        __m128i curIdxLo = _mm_set_epi32(-5, -6, -7, -8);
+        __m128i curIdxHi = _mm_set_epi32(-1, -2, -3, -4);
+
+        float max = src0[0];
+        uint32_t index = 0;
+        __m256 maxValues = _mm256_set1_ps(max);
+        __m128i maxIdxLo = _mm_setzero_si128();
+        __m128i maxIdxHi = _mm_setzero_si128();
+
+        __VOLK_ATTR_ALIGNED(32) float maxValuesBuffer[8];
+        __VOLK_ATTR_ALIGNED(16) uint32_t maxIdxLoBuffer[4];
+        __VOLK_ATTR_ALIGNED(16) uint32_t maxIdxHiBuffer[4];
+
+        for (; number < eighthPoints; number++) {
+            __m256 currentValues = _mm256_load_ps(inputPtr);
+            inputPtr += 8;
+
+            /* Increment indices */
+            curIdxLo = _mm_add_epi32(curIdxLo, indexIncrementValues);
+            curIdxHi = _mm_add_epi32(curIdxHi, indexIncrementValues);
+
+            /* Compare using AVX 256-bit float compare */
+            __m256 compareResults = _mm256_cmp_ps(currentValues, maxValues, _CMP_GT_OS);
+
+            /* Split compare mask to 128-bit halves for integer blend (SSE4.1) */
+            __m128i cmpLo = _mm_castps_si128(_mm256_castps256_ps128(compareResults));
+            __m128i cmpHi = _mm_castps_si128(_mm256_extractf128_ps(compareResults, 1));
+
+            /* Blend indices using SSE4.1 (available on all AVX CPUs) */
+            maxIdxLo = _mm_blendv_epi8(maxIdxLo, curIdxLo, cmpLo);
+            maxIdxHi = _mm_blendv_epi8(maxIdxHi, curIdxHi, cmpHi);
+
+            /* Blend max values */
+            maxValues = _mm256_blendv_ps(maxValues, currentValues, compareResults);
+        }
+
+        /* Extract results */
+        _mm256_store_ps(maxValuesBuffer, maxValues);
+        _mm_store_si128((__m128i*)maxIdxLoBuffer, maxIdxLo);
+        _mm_store_si128((__m128i*)maxIdxHiBuffer, maxIdxHi);
+
+        for (number = 0; number < 4; number++) {
+            if (maxValuesBuffer[number] > max) {
+                index = maxIdxLoBuffer[number];
+                max = maxValuesBuffer[number];
+            } else if (maxValuesBuffer[number] == max) {
+                if (index > maxIdxLoBuffer[number])
+                    index = maxIdxLoBuffer[number];
+            }
+        }
+        for (number = 0; number < 4; number++) {
+            if (maxValuesBuffer[number + 4] > max) {
+                index = maxIdxHiBuffer[number];
+                max = maxValuesBuffer[number + 4];
+            } else if (maxValuesBuffer[number + 4] == max) {
+                if (index > maxIdxHiBuffer[number])
+                    index = maxIdxHiBuffer[number];
+            }
+        }
+
+        number = eighthPoints * 8;
+        for (; number < num_points; number++) {
+            if (src0[number] > max) {
+                index = number;
+                max = src0[number];
+            }
+        }
+        target[0] = index;
+    }
+}
+
+#endif /*LV_HAVE_AVX*/
 
 
 #ifdef LV_HAVE_AVX2

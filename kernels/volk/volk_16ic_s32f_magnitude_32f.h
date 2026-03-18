@@ -155,6 +155,61 @@ static inline void volk_16ic_s32f_magnitude_32f_u_sse(float* magnitudeVector,
 
 #endif /* LV_HAVE_SSE */
 
+#ifdef LV_HAVE_SSE2
+#include <emmintrin.h>
+
+static inline void volk_16ic_s32f_magnitude_32f_u_sse2(float* magnitudeVector,
+                                                        const lv_16sc_t* complexVector,
+                                                        const float scalar,
+                                                        unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int quarterPoints = num_points / 4;
+
+    const int16_t* complexVectorPtr = (const int16_t*)complexVector;
+    float* magnitudeVectorPtr = magnitudeVector;
+
+    const float fInvScalar = 1.0f / scalar;
+    __m128 invScalar = _mm_set_ps1(fInvScalar);
+
+    for (; number < quarterPoints; number++) {
+        /* Load 4 complex int16 samples (8 x int16) */
+        __m128i raw = _mm_loadu_si128((const __m128i*)complexVectorPtr);
+        complexVectorPtr += 8;
+
+        /* Sign-extend int16 -> int32 using SSE2 arithmetic shift */
+        __m128i sign = _mm_srai_epi16(raw, 15);
+        __m128i lo32 = _mm_unpacklo_epi16(raw, sign); /* [I0,Q0,I1,Q1] as int32 */
+        __m128i hi32 = _mm_unpackhi_epi16(raw, sign); /* [I2,Q2,I3,Q3] as int32 */
+
+        /* Convert to float */
+        __m128 flo = _mm_cvtepi32_ps(lo32);
+        __m128 fhi = _mm_cvtepi32_ps(hi32);
+
+        /* Deinterleave real and imaginary */
+        __m128 re = _mm_shuffle_ps(flo, fhi, 0x88); /* [I0,I1,I2,I3] */
+        __m128 im = _mm_shuffle_ps(flo, fhi, 0xdd); /* [Q0,Q1,Q2,Q3] */
+
+        /* Scale by 1/scalar */
+        re = _mm_mul_ps(re, invScalar);
+        im = _mm_mul_ps(im, invScalar);
+
+        /* mag = sqrt(re^2 + im^2) */
+        __m128 reSquared = _mm_mul_ps(re, re);
+        __m128 imSquared = _mm_mul_ps(im, im);
+        __m128 magSquared = _mm_add_ps(reSquared, imSquared);
+        __m128 result = _mm_sqrt_ps(magSquared);
+
+        _mm_storeu_ps(magnitudeVectorPtr, result);
+        magnitudeVectorPtr += 4;
+    }
+
+    number = quarterPoints * 4;
+    volk_16ic_s32f_magnitude_32f_generic(
+        magnitudeVector + number, complexVector + number, scalar, num_points - number);
+}
+#endif /* LV_HAVE_SSE2 */
+
 #ifdef LV_HAVE_SSE3
 #include <pmmintrin.h>
 
@@ -213,6 +268,107 @@ static inline void volk_16ic_s32f_magnitude_32f_u_sse3(float* magnitudeVector,
         magnitudeVector + number, complexVector + number, scalar, num_points - number);
 }
 #endif /* LV_HAVE_SSE3 */
+
+#ifdef LV_HAVE_AVX
+#include <immintrin.h>
+
+static inline void volk_16ic_s32f_magnitude_32f_u_avx(float* magnitudeVector,
+                                                       const lv_16sc_t* complexVector,
+                                                       const float scalar,
+                                                       unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int eighthPoints = num_points / 8;
+
+    const int16_t* complexVectorPtr = (const int16_t*)complexVector;
+    float* magnitudeVectorPtr = magnitudeVector;
+
+    const float fInvScalar = 1.0f / scalar;
+    __m256 invScalar = _mm256_set1_ps(fInvScalar);
+
+    for (; number < eighthPoints; number++) {
+        /* Load 8 complex int16 samples as two 128-bit halves.
+         * Each 128-bit register holds 4 complex samples packed as int32 per sample. */
+        __m128i v0 = _mm_loadu_si128((const __m128i*)complexVectorPtr);
+        __m128i v1 = _mm_loadu_si128((const __m128i*)(complexVectorPtr + 8));
+        complexVectorPtr += 16;
+
+        /* Sign-extend: real = lower 16 bits, imag = upper 16 bits */
+        __m128i i0 = _mm_srai_epi32(_mm_slli_epi32(v0, 16), 16);
+        __m128i q0 = _mm_srai_epi32(v0, 16);
+        __m128i i1 = _mm_srai_epi32(_mm_slli_epi32(v1, 16), 16);
+        __m128i q1 = _mm_srai_epi32(v1, 16);
+
+        /* Convert to float and scale; combine pairs into 256-bit vectors */
+        __m256 re = _mm256_mul_ps(
+            _mm256_set_m128(_mm_cvtepi32_ps(i1), _mm_cvtepi32_ps(i0)), invScalar);
+        __m256 im = _mm256_mul_ps(
+            _mm256_set_m128(_mm_cvtepi32_ps(q1), _mm_cvtepi32_ps(q0)), invScalar);
+
+        /* mag = sqrt(re^2 + im^2) */
+        __m256 reSquared = _mm256_mul_ps(re, re);
+        __m256 imSquared = _mm256_mul_ps(im, im);
+        __m256 magSquared = _mm256_add_ps(reSquared, imSquared);
+        __m256 result = _mm256_sqrt_ps(magSquared);
+
+        _mm256_storeu_ps(magnitudeVectorPtr, result);
+        magnitudeVectorPtr += 8;
+    }
+
+    number = eighthPoints * 8;
+    volk_16ic_s32f_magnitude_32f_generic(
+        magnitudeVector + number, complexVector + number, scalar, num_points - number);
+}
+#endif /* LV_HAVE_AVX */
+
+#if LV_HAVE_AVX && LV_HAVE_FMA
+#include <immintrin.h>
+
+static inline void volk_16ic_s32f_magnitude_32f_u_avx_fma(float* magnitudeVector,
+                                                            const lv_16sc_t* complexVector,
+                                                            const float scalar,
+                                                            unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int eighthPoints = num_points / 8;
+
+    const int16_t* complexVectorPtr = (const int16_t*)complexVector;
+    float* magnitudeVectorPtr = magnitudeVector;
+
+    const float fInvScalar = 1.0f / scalar;
+    __m256 invScalar = _mm256_set1_ps(fInvScalar);
+
+    for (; number < eighthPoints; number++) {
+        /* Load 8 complex int16 samples as two 128-bit halves. */
+        __m128i v0 = _mm_loadu_si128((const __m128i*)complexVectorPtr);
+        __m128i v1 = _mm_loadu_si128((const __m128i*)(complexVectorPtr + 8));
+        complexVectorPtr += 16;
+
+        /* Sign-extend: real = lower 16 bits, imag = upper 16 bits */
+        __m128i i0 = _mm_srai_epi32(_mm_slli_epi32(v0, 16), 16);
+        __m128i q0 = _mm_srai_epi32(v0, 16);
+        __m128i i1 = _mm_srai_epi32(_mm_slli_epi32(v1, 16), 16);
+        __m128i q1 = _mm_srai_epi32(v1, 16);
+
+        /* Convert to float and scale; combine pairs into 256-bit vectors */
+        __m256 re = _mm256_mul_ps(
+            _mm256_set_m128(_mm_cvtepi32_ps(i1), _mm_cvtepi32_ps(i0)), invScalar);
+        __m256 im = _mm256_mul_ps(
+            _mm256_set_m128(_mm_cvtepi32_ps(q1), _mm_cvtepi32_ps(q0)), invScalar);
+
+        /* mag = sqrt(re^2 + im^2) using FMA */
+        __m256 magSquared = _mm256_fmadd_ps(im, im, _mm256_mul_ps(re, re));
+        __m256 result = _mm256_sqrt_ps(magSquared);
+
+        _mm256_storeu_ps(magnitudeVectorPtr, result);
+        magnitudeVectorPtr += 8;
+    }
+
+    number = eighthPoints * 8;
+    volk_16ic_s32f_magnitude_32f_generic(
+        magnitudeVector + number, complexVector + number, scalar, num_points - number);
+}
+#endif /* LV_HAVE_AVX && LV_HAVE_FMA */
 
 #ifdef LV_HAVE_AVX2
 #include <immintrin.h>
@@ -274,6 +430,55 @@ static inline void volk_16ic_s32f_magnitude_32f_u_avx2(float* magnitudeVector,
     }
 }
 #endif /* LV_HAVE_AVX2 */
+
+#if LV_HAVE_AVX2 && LV_HAVE_FMA
+#include <immintrin.h>
+#include <volk/volk_avx2_fma_intrinsics.h>
+
+static inline void volk_16ic_s32f_magnitude_32f_u_avx2_fma(float* magnitudeVector,
+                                                            const lv_16sc_t* complexVector,
+                                                            const float scalar,
+                                                            unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int eighthPoints = num_points / 8;
+
+    const int16_t* complexVectorPtr = (const int16_t*)complexVector;
+    float* magnitudeVectorPtr = magnitudeVector;
+
+    const float fInvScalar = 1.0f / scalar;
+    __m256 invScalar = _mm256_set1_ps(fInvScalar);
+
+    for (; number < eighthPoints; number++) {
+        __m256i raw = _mm256_loadu_si256((const __m256i*)complexVectorPtr);
+        complexVectorPtr += 16;
+
+        __m128i lo_half = _mm256_extracti128_si256(raw, 0);
+        __m128i hi_half = _mm256_extracti128_si256(raw, 1);
+
+        __m256 cplxValue1 = _mm256_mul_ps(
+            _mm256_cvtepi32_ps(_mm256_cvtepi16_epi32(lo_half)), invScalar);
+        __m256 cplxValue2 = _mm256_mul_ps(
+            _mm256_cvtepi32_ps(_mm256_cvtepi16_epi32(hi_half)), invScalar);
+
+        __m256 result = _mm256_magnitudesquared_ps_avx2_fma(cplxValue1, cplxValue2);
+
+        result = _mm256_sqrt_ps(result);
+
+        _mm256_storeu_ps(magnitudeVectorPtr, result);
+        magnitudeVectorPtr += 8;
+    }
+
+    number = eighthPoints * 8;
+    magnitudeVectorPtr = &magnitudeVector[number];
+    complexVectorPtr = (const int16_t*)&complexVector[number];
+    for (; number < num_points; number++) {
+        float val1Real = (float)(*complexVectorPtr++) * fInvScalar;
+        float val1Imag = (float)(*complexVectorPtr++) * fInvScalar;
+        *magnitudeVectorPtr++ = sqrtf((val1Real * val1Real) + (val1Imag * val1Imag));
+    }
+}
+#endif /* LV_HAVE_AVX2 && LV_HAVE_FMA */
 
 #ifdef LV_HAVE_AVX512F
 #include <immintrin.h>
@@ -579,6 +784,61 @@ static inline void volk_16ic_s32f_magnitude_32f_a_sse(float* magnitudeVector,
 
 #endif /* LV_HAVE_SSE */
 
+#ifdef LV_HAVE_SSE2
+#include <emmintrin.h>
+
+static inline void volk_16ic_s32f_magnitude_32f_a_sse2(float* magnitudeVector,
+                                                        const lv_16sc_t* complexVector,
+                                                        const float scalar,
+                                                        unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int quarterPoints = num_points / 4;
+
+    const int16_t* complexVectorPtr = (const int16_t*)complexVector;
+    float* magnitudeVectorPtr = magnitudeVector;
+
+    const float fInvScalar = 1.0f / scalar;
+    __m128 invScalar = _mm_set_ps1(fInvScalar);
+
+    for (; number < quarterPoints; number++) {
+        /* Load 4 complex int16 samples (8 x int16) */
+        __m128i raw = _mm_load_si128((const __m128i*)complexVectorPtr);
+        complexVectorPtr += 8;
+
+        /* Sign-extend int16 -> int32 using SSE2 arithmetic shift */
+        __m128i sign = _mm_srai_epi16(raw, 15);
+        __m128i lo32 = _mm_unpacklo_epi16(raw, sign); /* [I0,Q0,I1,Q1] as int32 */
+        __m128i hi32 = _mm_unpackhi_epi16(raw, sign); /* [I2,Q2,I3,Q3] as int32 */
+
+        /* Convert to float */
+        __m128 flo = _mm_cvtepi32_ps(lo32);
+        __m128 fhi = _mm_cvtepi32_ps(hi32);
+
+        /* Deinterleave real and imaginary */
+        __m128 re = _mm_shuffle_ps(flo, fhi, 0x88); /* [I0,I1,I2,I3] */
+        __m128 im = _mm_shuffle_ps(flo, fhi, 0xdd); /* [Q0,Q1,Q2,Q3] */
+
+        /* Scale by 1/scalar */
+        re = _mm_mul_ps(re, invScalar);
+        im = _mm_mul_ps(im, invScalar);
+
+        /* mag = sqrt(re^2 + im^2) */
+        __m128 reSquared = _mm_mul_ps(re, re);
+        __m128 imSquared = _mm_mul_ps(im, im);
+        __m128 magSquared = _mm_add_ps(reSquared, imSquared);
+        __m128 result = _mm_sqrt_ps(magSquared);
+
+        _mm_store_ps(magnitudeVectorPtr, result);
+        magnitudeVectorPtr += 4;
+    }
+
+    number = quarterPoints * 4;
+    volk_16ic_s32f_magnitude_32f_generic(
+        magnitudeVector + number, complexVector + number, scalar, num_points - number);
+}
+#endif /* LV_HAVE_SSE2 */
+
 #ifdef LV_HAVE_SSE3
 #include <pmmintrin.h>
 
@@ -643,6 +903,107 @@ static inline void volk_16ic_s32f_magnitude_32f_a_sse3(float* magnitudeVector,
 }
 #endif /* LV_HAVE_SSE3 */
 
+#ifdef LV_HAVE_AVX
+#include <immintrin.h>
+
+static inline void volk_16ic_s32f_magnitude_32f_a_avx(float* magnitudeVector,
+                                                       const lv_16sc_t* complexVector,
+                                                       const float scalar,
+                                                       unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int eighthPoints = num_points / 8;
+
+    const int16_t* complexVectorPtr = (const int16_t*)complexVector;
+    float* magnitudeVectorPtr = magnitudeVector;
+
+    const float fInvScalar = 1.0f / scalar;
+    __m256 invScalar = _mm256_set1_ps(fInvScalar);
+
+    for (; number < eighthPoints; number++) {
+        /* Load 8 complex int16 samples as two 128-bit halves.
+         * Each 128-bit register holds 4 complex samples packed as int32 per sample. */
+        __m128i v0 = _mm_load_si128((const __m128i*)complexVectorPtr);
+        __m128i v1 = _mm_load_si128((const __m128i*)(complexVectorPtr + 8));
+        complexVectorPtr += 16;
+
+        /* Sign-extend: real = lower 16 bits, imag = upper 16 bits */
+        __m128i i0 = _mm_srai_epi32(_mm_slli_epi32(v0, 16), 16);
+        __m128i q0 = _mm_srai_epi32(v0, 16);
+        __m128i i1 = _mm_srai_epi32(_mm_slli_epi32(v1, 16), 16);
+        __m128i q1 = _mm_srai_epi32(v1, 16);
+
+        /* Convert to float and scale; combine pairs into 256-bit vectors */
+        __m256 re = _mm256_mul_ps(
+            _mm256_set_m128(_mm_cvtepi32_ps(i1), _mm_cvtepi32_ps(i0)), invScalar);
+        __m256 im = _mm256_mul_ps(
+            _mm256_set_m128(_mm_cvtepi32_ps(q1), _mm_cvtepi32_ps(q0)), invScalar);
+
+        /* mag = sqrt(re^2 + im^2) */
+        __m256 reSquared = _mm256_mul_ps(re, re);
+        __m256 imSquared = _mm256_mul_ps(im, im);
+        __m256 magSquared = _mm256_add_ps(reSquared, imSquared);
+        __m256 result = _mm256_sqrt_ps(magSquared);
+
+        _mm256_store_ps(magnitudeVectorPtr, result);
+        magnitudeVectorPtr += 8;
+    }
+
+    number = eighthPoints * 8;
+    volk_16ic_s32f_magnitude_32f_generic(
+        magnitudeVector + number, complexVector + number, scalar, num_points - number);
+}
+#endif /* LV_HAVE_AVX */
+
+#if LV_HAVE_AVX && LV_HAVE_FMA
+#include <immintrin.h>
+
+static inline void volk_16ic_s32f_magnitude_32f_a_avx_fma(float* magnitudeVector,
+                                                            const lv_16sc_t* complexVector,
+                                                            const float scalar,
+                                                            unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int eighthPoints = num_points / 8;
+
+    const int16_t* complexVectorPtr = (const int16_t*)complexVector;
+    float* magnitudeVectorPtr = magnitudeVector;
+
+    const float fInvScalar = 1.0f / scalar;
+    __m256 invScalar = _mm256_set1_ps(fInvScalar);
+
+    for (; number < eighthPoints; number++) {
+        /* Load 8 complex int16 samples as two 128-bit halves. */
+        __m128i v0 = _mm_load_si128((const __m128i*)complexVectorPtr);
+        __m128i v1 = _mm_load_si128((const __m128i*)(complexVectorPtr + 8));
+        complexVectorPtr += 16;
+
+        /* Sign-extend: real = lower 16 bits, imag = upper 16 bits */
+        __m128i i0 = _mm_srai_epi32(_mm_slli_epi32(v0, 16), 16);
+        __m128i q0 = _mm_srai_epi32(v0, 16);
+        __m128i i1 = _mm_srai_epi32(_mm_slli_epi32(v1, 16), 16);
+        __m128i q1 = _mm_srai_epi32(v1, 16);
+
+        /* Convert to float and scale; combine pairs into 256-bit vectors */
+        __m256 re = _mm256_mul_ps(
+            _mm256_set_m128(_mm_cvtepi32_ps(i1), _mm_cvtepi32_ps(i0)), invScalar);
+        __m256 im = _mm256_mul_ps(
+            _mm256_set_m128(_mm_cvtepi32_ps(q1), _mm_cvtepi32_ps(q0)), invScalar);
+
+        /* mag = sqrt(re^2 + im^2) using FMA */
+        __m256 magSquared = _mm256_fmadd_ps(im, im, _mm256_mul_ps(re, re));
+        __m256 result = _mm256_sqrt_ps(magSquared);
+
+        _mm256_store_ps(magnitudeVectorPtr, result);
+        magnitudeVectorPtr += 8;
+    }
+
+    number = eighthPoints * 8;
+    volk_16ic_s32f_magnitude_32f_generic(
+        magnitudeVector + number, complexVector + number, scalar, num_points - number);
+}
+#endif /* LV_HAVE_AVX && LV_HAVE_FMA */
+
 #ifdef LV_HAVE_AVX2
 #include <immintrin.h>
 
@@ -704,6 +1065,54 @@ static inline void volk_16ic_s32f_magnitude_32f_a_avx2(float* magnitudeVector,
 }
 #endif /* LV_HAVE_AVX2 */
 
+#if LV_HAVE_AVX2 && LV_HAVE_FMA
+#include <immintrin.h>
+#include <volk/volk_avx2_fma_intrinsics.h>
+
+static inline void volk_16ic_s32f_magnitude_32f_a_avx2_fma(float* magnitudeVector,
+                                                            const lv_16sc_t* complexVector,
+                                                            const float scalar,
+                                                            unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int eighthPoints = num_points / 8;
+
+    const int16_t* complexVectorPtr = (const int16_t*)complexVector;
+    float* magnitudeVectorPtr = magnitudeVector;
+
+    const float fInvScalar = 1.0f / scalar;
+    __m256 invScalar = _mm256_set1_ps(fInvScalar);
+
+    for (; number < eighthPoints; number++) {
+        __m256i raw = _mm256_load_si256((const __m256i*)complexVectorPtr);
+        complexVectorPtr += 16;
+
+        __m128i lo_half = _mm256_extracti128_si256(raw, 0);
+        __m128i hi_half = _mm256_extracti128_si256(raw, 1);
+
+        __m256 cplxValue1 = _mm256_mul_ps(
+            _mm256_cvtepi32_ps(_mm256_cvtepi16_epi32(lo_half)), invScalar);
+        __m256 cplxValue2 = _mm256_mul_ps(
+            _mm256_cvtepi32_ps(_mm256_cvtepi16_epi32(hi_half)), invScalar);
+
+        __m256 result = _mm256_magnitudesquared_ps_avx2_fma(cplxValue1, cplxValue2);
+
+        result = _mm256_sqrt_ps(result);
+
+        _mm256_store_ps(magnitudeVectorPtr, result);
+        magnitudeVectorPtr += 8;
+    }
+
+    number = eighthPoints * 8;
+    magnitudeVectorPtr = &magnitudeVector[number];
+    complexVectorPtr = (const int16_t*)&complexVector[number];
+    for (; number < num_points; number++) {
+        float val1Real = (float)(*complexVectorPtr++) * fInvScalar;
+        float val1Imag = (float)(*complexVectorPtr++) * fInvScalar;
+        *magnitudeVectorPtr++ = sqrtf((val1Real * val1Real) + (val1Imag * val1Imag));
+    }
+}
+#endif /* LV_HAVE_AVX2 && LV_HAVE_FMA */
 
 #ifdef LV_HAVE_AVX512F
 #include <immintrin.h>

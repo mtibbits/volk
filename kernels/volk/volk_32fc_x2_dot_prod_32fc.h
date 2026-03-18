@@ -122,6 +122,60 @@ static inline void volk_32fc_x2_dot_prod_32fc_generic(lv_32fc_t* result,
 #endif /*LV_HAVE_GENERIC*/
 
 
+#ifdef LV_HAVE_SSE
+
+#include <xmmintrin.h>
+
+static inline void volk_32fc_x2_dot_prod_32fc_u_sse(lv_32fc_t* result,
+                                                     const lv_32fc_t* input,
+                                                     const lv_32fc_t* taps,
+                                                     unsigned int num_points)
+{
+    const unsigned int halfPoints = num_points / 2;
+    unsigned int number = 0;
+
+    const __m128 neg_mask = _mm_setr_ps(-0.f, 0.f, -0.f, 0.f);
+    __m128 dotProdVal = _mm_setzero_ps();
+
+    const lv_32fc_t* a = input;
+    const lv_32fc_t* b = taps;
+
+    for (; number < halfPoints; number++) {
+        __m128 x = _mm_loadu_ps((const float*)a);
+        __m128 y = _mm_loadu_ps((const float*)b);
+
+        __m128 yl = _mm_shuffle_ps(y, y, _MM_SHUFFLE(2, 2, 0, 0));
+        __m128 yh = _mm_shuffle_ps(y, y, _MM_SHUFFLE(3, 3, 1, 1));
+
+        __m128 tmp1 = _mm_mul_ps(x, yl);
+        x = _mm_shuffle_ps(x, x, 0xB1);
+        __m128 tmp2 = _mm_mul_ps(x, yh);
+
+        dotProdVal = _mm_add_ps(dotProdVal,
+                                _mm_add_ps(tmp1, _mm_xor_ps(tmp2, neg_mask)));
+
+        a += 2;
+        b += 2;
+    }
+
+    dotProdVal = _mm_add_ps(dotProdVal,
+                            _mm_shuffle_ps(dotProdVal, dotProdVal, _MM_SHUFFLE(1, 0, 3, 2)));
+
+    __VOLK_ATTR_ALIGNED(16) lv_32fc_t dotProductVector[2];
+    _mm_storeu_ps((float*)dotProductVector, dotProdVal);
+
+    lv_32fc_t dotProduct = dotProductVector[0];
+
+    if (num_points & 1) {
+        dotProduct += input[num_points - 1] * taps[num_points - 1];
+    }
+
+    *result = dotProduct;
+}
+
+#endif /* LV_HAVE_SSE */
+
+
 #ifdef LV_HAVE_SSE3
 
 #include <pmmintrin.h>
@@ -315,6 +369,138 @@ static inline void volk_32fc_x2_dot_prod_32fc_u_avx_fma(lv_32fc_t* result,
 }
 
 #endif /*LV_HAVE_AVX && LV_HAVE_FMA*/
+
+#if LV_HAVE_AVX2 && LV_HAVE_FMA
+#include <immintrin.h>
+
+static inline void volk_32fc_x2_dot_prod_32fc_u_avx2_fma(lv_32fc_t* result,
+                                                          const lv_32fc_t* input,
+                                                          const lv_32fc_t* taps,
+                                                          unsigned int num_points)
+{
+    __m256 dotProdVal0 = _mm256_setzero_ps();
+    __m256 dotProdVal1 = _mm256_setzero_ps();
+    __m256 dotProdVal2 = _mm256_setzero_ps();
+    __m256 dotProdVal3 = _mm256_setzero_ps();
+
+    for (long unsigned i = 0; i < (num_points & ~15u); i += 16) {
+        __m256 x0 = _mm256_loadu_ps((const float*)&input[i]);
+        __m256 y0 = _mm256_loadu_ps((const float*)&taps[i]);
+        __m256 yl0 = _mm256_moveldup_ps(y0);
+        __m256 yh0 = _mm256_movehdup_ps(y0);
+        __m256 x0s = _mm256_permute_ps(x0, 0xB1);
+        dotProdVal0 = _mm256_add_ps(
+            dotProdVal0, _mm256_fmaddsub_ps(x0, yl0, _mm256_mul_ps(x0s, yh0)));
+
+        __m256 x1 = _mm256_loadu_ps((const float*)&input[i + 4]);
+        __m256 y1 = _mm256_loadu_ps((const float*)&taps[i + 4]);
+        __m256 yl1 = _mm256_moveldup_ps(y1);
+        __m256 yh1 = _mm256_movehdup_ps(y1);
+        __m256 x1s = _mm256_permute_ps(x1, 0xB1);
+        dotProdVal1 = _mm256_add_ps(
+            dotProdVal1, _mm256_fmaddsub_ps(x1, yl1, _mm256_mul_ps(x1s, yh1)));
+
+        __m256 x2 = _mm256_loadu_ps((const float*)&input[i + 8]);
+        __m256 y2 = _mm256_loadu_ps((const float*)&taps[i + 8]);
+        __m256 yl2 = _mm256_moveldup_ps(y2);
+        __m256 yh2 = _mm256_movehdup_ps(y2);
+        __m256 x2s = _mm256_permute_ps(x2, 0xB1);
+        dotProdVal2 = _mm256_add_ps(
+            dotProdVal2, _mm256_fmaddsub_ps(x2, yl2, _mm256_mul_ps(x2s, yh2)));
+
+        __m256 x3 = _mm256_loadu_ps((const float*)&input[i + 12]);
+        __m256 y3 = _mm256_loadu_ps((const float*)&taps[i + 12]);
+        __m256 yl3 = _mm256_moveldup_ps(y3);
+        __m256 yh3 = _mm256_movehdup_ps(y3);
+        __m256 x3s = _mm256_permute_ps(x3, 0xB1);
+        dotProdVal3 = _mm256_add_ps(
+            dotProdVal3, _mm256_fmaddsub_ps(x3, yl3, _mm256_mul_ps(x3s, yh3)));
+    }
+
+    dotProdVal0 = _mm256_add_ps(dotProdVal0, dotProdVal1);
+    dotProdVal2 = _mm256_add_ps(dotProdVal2, dotProdVal3);
+    __m256 sum = _mm256_add_ps(dotProdVal0, dotProdVal2);
+
+    sum = _mm256_add_ps(sum, _mm256_permute2f128_ps(sum, sum, 0x01));
+    sum = _mm256_add_ps(sum, _mm256_permute_ps(sum, _MM_SHUFFLE(1, 0, 3, 2)));
+    _mm_storel_pi((__m64*)result, _mm256_castps256_ps128(sum));
+
+    if (num_points & 15u) {
+        lv_32fc_t tail_result;
+        volk_32fc_x2_dot_prod_32fc_generic(&tail_result,
+                                           input + (num_points & ~15u),
+                                           taps + (num_points & ~15u),
+                                           num_points & 15u);
+        *result += tail_result;
+    }
+}
+
+#endif /* LV_HAVE_AVX2 && LV_HAVE_FMA */
+
+#ifdef LV_HAVE_AVX2
+#include <immintrin.h>
+
+static inline void volk_32fc_x2_dot_prod_32fc_u_avx2(lv_32fc_t* result,
+                                                       const lv_32fc_t* input,
+                                                       const lv_32fc_t* taps,
+                                                       unsigned int num_points)
+{
+
+    unsigned int isodd = num_points & 3;
+    unsigned int i = 0;
+    lv_32fc_t dotProduct;
+    memset(&dotProduct, 0x0, 2 * sizeof(float));
+
+    unsigned int number = 0;
+    const unsigned int quarterPoints = num_points / 4;
+
+    __m256 x, y, yl, yh, z, tmp1, tmp2, dotProdVal;
+
+    const lv_32fc_t* a = input;
+    const lv_32fc_t* b = taps;
+
+    dotProdVal = _mm256_setzero_ps();
+
+    for (; number < quarterPoints; number++) {
+
+        x = _mm256_loadu_ps((const float*)a); // Load a,b,e,f as ar,ai,br,bi,er,ei,fr,fi
+        y = _mm256_loadu_ps((const float*)b); // Load c,d,g,h as cr,ci,dr,di,gr,gi,hr,hi
+
+        yl = _mm256_moveldup_ps(y); // Load yl with cr,cr,dr,dr,gr,gr,hr,hr
+        yh = _mm256_movehdup_ps(y); // Load yh with ci,ci,di,di,gi,gi,hi,hi
+
+        tmp1 = x;
+
+        x = _mm256_shuffle_ps(x, x, 0xB1); // Re-arrange x to be ai,ar,bi,br,ei,er,fi,fr
+
+        tmp2 = _mm256_mul_ps(x, yh); // tmp2 = ai*ci,ar*ci,bi*di,br*di ...
+
+        z = _mm256_fmaddsub_ps(
+            tmp1, yl, tmp2); // ar*cr-ai*ci, ai*cr+ar*ci, br*dr-bi*di, bi*dr+br*di
+
+        dotProdVal = _mm256_add_ps(dotProdVal,
+                                   z); // Add the complex multiplication results together
+
+        a += 4;
+        b += 4;
+    }
+
+    __VOLK_ATTR_ALIGNED(32) lv_32fc_t dotProductVector[4];
+
+    _mm256_storeu_ps((float*)dotProductVector,
+                     dotProdVal); // Store the results back into the dot product vector
+
+    dotProduct += (dotProductVector[0] + dotProductVector[1] + dotProductVector[2] +
+                   dotProductVector[3]);
+
+    for (i = num_points - isodd; i < num_points; i++) {
+        dotProduct += input[i] * taps[i];
+    }
+
+    *result = dotProduct;
+}
+
+#endif /*LV_HAVE_AVX2*/
 
 #ifdef LV_HAVE_NEON
 #include <arm_neon.h>
@@ -833,6 +1019,60 @@ static inline void volk_32fc_x2_dot_prod_32fc_u_avx512f(lv_32fc_t* result,
 #include <volk/volk_complex.h>
 
 
+#ifdef LV_HAVE_SSE
+
+#include <xmmintrin.h>
+
+static inline void volk_32fc_x2_dot_prod_32fc_a_sse(lv_32fc_t* result,
+                                                     const lv_32fc_t* input,
+                                                     const lv_32fc_t* taps,
+                                                     unsigned int num_points)
+{
+    const unsigned int halfPoints = num_points / 2;
+    unsigned int number = 0;
+
+    const __m128 neg_mask = _mm_setr_ps(-0.f, 0.f, -0.f, 0.f);
+    __m128 dotProdVal = _mm_setzero_ps();
+
+    const lv_32fc_t* a = input;
+    const lv_32fc_t* b = taps;
+
+    for (; number < halfPoints; number++) {
+        __m128 x = _mm_load_ps((const float*)a);
+        __m128 y = _mm_load_ps((const float*)b);
+
+        __m128 yl = _mm_shuffle_ps(y, y, _MM_SHUFFLE(2, 2, 0, 0));
+        __m128 yh = _mm_shuffle_ps(y, y, _MM_SHUFFLE(3, 3, 1, 1));
+
+        __m128 tmp1 = _mm_mul_ps(x, yl);
+        x = _mm_shuffle_ps(x, x, 0xB1);
+        __m128 tmp2 = _mm_mul_ps(x, yh);
+
+        dotProdVal = _mm_add_ps(dotProdVal,
+                                _mm_add_ps(tmp1, _mm_xor_ps(tmp2, neg_mask)));
+
+        a += 2;
+        b += 2;
+    }
+
+    dotProdVal = _mm_add_ps(dotProdVal,
+                            _mm_shuffle_ps(dotProdVal, dotProdVal, _MM_SHUFFLE(1, 0, 3, 2)));
+
+    __VOLK_ATTR_ALIGNED(16) lv_32fc_t dotProductVector[2];
+    _mm_store_ps((float*)dotProductVector, dotProdVal);
+
+    lv_32fc_t dotProduct = dotProductVector[0];
+
+    if (num_points & 1) {
+        dotProduct += input[num_points - 1] * taps[num_points - 1];
+    }
+
+    *result = dotProduct;
+}
+
+#endif /* LV_HAVE_SSE */
+
+
 #ifdef LV_HAVE_SSE3
 
 #include <pmmintrin.h>
@@ -1029,6 +1269,138 @@ static inline void volk_32fc_x2_dot_prod_32fc_a_avx_fma(lv_32fc_t* result,
 }
 
 #endif /*LV_HAVE_AVX && LV_HAVE_FMA*/
+
+#if LV_HAVE_AVX2 && LV_HAVE_FMA
+#include <immintrin.h>
+
+static inline void volk_32fc_x2_dot_prod_32fc_a_avx2_fma(lv_32fc_t* result,
+                                                          const lv_32fc_t* input,
+                                                          const lv_32fc_t* taps,
+                                                          unsigned int num_points)
+{
+    __m256 dotProdVal0 = _mm256_setzero_ps();
+    __m256 dotProdVal1 = _mm256_setzero_ps();
+    __m256 dotProdVal2 = _mm256_setzero_ps();
+    __m256 dotProdVal3 = _mm256_setzero_ps();
+
+    for (long unsigned i = 0; i < (num_points & ~15u); i += 16) {
+        __m256 x0 = _mm256_load_ps((const float*)&input[i]);
+        __m256 y0 = _mm256_load_ps((const float*)&taps[i]);
+        __m256 yl0 = _mm256_moveldup_ps(y0);
+        __m256 yh0 = _mm256_movehdup_ps(y0);
+        __m256 x0s = _mm256_permute_ps(x0, 0xB1);
+        dotProdVal0 = _mm256_add_ps(
+            dotProdVal0, _mm256_fmaddsub_ps(x0, yl0, _mm256_mul_ps(x0s, yh0)));
+
+        __m256 x1 = _mm256_load_ps((const float*)&input[i + 4]);
+        __m256 y1 = _mm256_load_ps((const float*)&taps[i + 4]);
+        __m256 yl1 = _mm256_moveldup_ps(y1);
+        __m256 yh1 = _mm256_movehdup_ps(y1);
+        __m256 x1s = _mm256_permute_ps(x1, 0xB1);
+        dotProdVal1 = _mm256_add_ps(
+            dotProdVal1, _mm256_fmaddsub_ps(x1, yl1, _mm256_mul_ps(x1s, yh1)));
+
+        __m256 x2 = _mm256_load_ps((const float*)&input[i + 8]);
+        __m256 y2 = _mm256_load_ps((const float*)&taps[i + 8]);
+        __m256 yl2 = _mm256_moveldup_ps(y2);
+        __m256 yh2 = _mm256_movehdup_ps(y2);
+        __m256 x2s = _mm256_permute_ps(x2, 0xB1);
+        dotProdVal2 = _mm256_add_ps(
+            dotProdVal2, _mm256_fmaddsub_ps(x2, yl2, _mm256_mul_ps(x2s, yh2)));
+
+        __m256 x3 = _mm256_load_ps((const float*)&input[i + 12]);
+        __m256 y3 = _mm256_load_ps((const float*)&taps[i + 12]);
+        __m256 yl3 = _mm256_moveldup_ps(y3);
+        __m256 yh3 = _mm256_movehdup_ps(y3);
+        __m256 x3s = _mm256_permute_ps(x3, 0xB1);
+        dotProdVal3 = _mm256_add_ps(
+            dotProdVal3, _mm256_fmaddsub_ps(x3, yl3, _mm256_mul_ps(x3s, yh3)));
+    }
+
+    dotProdVal0 = _mm256_add_ps(dotProdVal0, dotProdVal1);
+    dotProdVal2 = _mm256_add_ps(dotProdVal2, dotProdVal3);
+    __m256 sum = _mm256_add_ps(dotProdVal0, dotProdVal2);
+
+    sum = _mm256_add_ps(sum, _mm256_permute2f128_ps(sum, sum, 0x01));
+    sum = _mm256_add_ps(sum, _mm256_permute_ps(sum, _MM_SHUFFLE(1, 0, 3, 2)));
+    _mm_storel_pi((__m64*)result, _mm256_castps256_ps128(sum));
+
+    if (num_points & 15u) {
+        lv_32fc_t tail_result;
+        volk_32fc_x2_dot_prod_32fc_generic(&tail_result,
+                                           input + (num_points & ~15u),
+                                           taps + (num_points & ~15u),
+                                           num_points & 15u);
+        *result += tail_result;
+    }
+}
+
+#endif /* LV_HAVE_AVX2 && LV_HAVE_FMA */
+
+#ifdef LV_HAVE_AVX2
+#include <immintrin.h>
+
+static inline void volk_32fc_x2_dot_prod_32fc_a_avx2(lv_32fc_t* result,
+                                                       const lv_32fc_t* input,
+                                                       const lv_32fc_t* taps,
+                                                       unsigned int num_points)
+{
+
+    unsigned int isodd = num_points & 3;
+    unsigned int i = 0;
+    lv_32fc_t dotProduct;
+    memset(&dotProduct, 0x0, 2 * sizeof(float));
+
+    unsigned int number = 0;
+    const unsigned int quarterPoints = num_points / 4;
+
+    __m256 x, y, yl, yh, z, tmp1, tmp2, dotProdVal;
+
+    const lv_32fc_t* a = input;
+    const lv_32fc_t* b = taps;
+
+    dotProdVal = _mm256_setzero_ps();
+
+    for (; number < quarterPoints; number++) {
+
+        x = _mm256_load_ps((const float*)a); // Load a,b,e,f as ar,ai,br,bi,er,ei,fr,fi
+        y = _mm256_load_ps((const float*)b); // Load c,d,g,h as cr,ci,dr,di,gr,gi,hr,hi
+
+        yl = _mm256_moveldup_ps(y); // Load yl with cr,cr,dr,dr,gr,gr,hr,hr
+        yh = _mm256_movehdup_ps(y); // Load yh with ci,ci,di,di,gi,gi,hi,hi
+
+        tmp1 = x;
+
+        x = _mm256_shuffle_ps(x, x, 0xB1); // Re-arrange x to be ai,ar,bi,br,ei,er,fi,fr
+
+        tmp2 = _mm256_mul_ps(x, yh); // tmp2 = ai*ci,ar*ci,bi*di,br*di ...
+
+        z = _mm256_fmaddsub_ps(
+            tmp1, yl, tmp2); // ar*cr-ai*ci, ai*cr+ar*ci, br*dr-bi*di, bi*dr+br*di
+
+        dotProdVal = _mm256_add_ps(dotProdVal,
+                                   z); // Add the complex multiplication results together
+
+        a += 4;
+        b += 4;
+    }
+
+    __VOLK_ATTR_ALIGNED(32) lv_32fc_t dotProductVector[4];
+
+    _mm256_store_ps((float*)dotProductVector,
+                    dotProdVal); // Store the results back into the dot product vector
+
+    dotProduct += (dotProductVector[0] + dotProductVector[1] + dotProductVector[2] +
+                   dotProductVector[3]);
+
+    for (i = num_points - isodd; i < num_points; i++) {
+        dotProduct += input[i] * taps[i];
+    }
+
+    *result = dotProduct;
+}
+
+#endif /*LV_HAVE_AVX2*/
 
 #ifdef LV_HAVE_AVX512F
 #include <immintrin.h>

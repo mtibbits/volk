@@ -353,6 +353,34 @@ static inline void volk_16i_x5_add_quad_16i_x4_u_avx512bw(short* target0,
 }
 #endif /* LV_HAVE_AVX512BW */
 
+#ifdef LV_HAVE_RVV
+#include <riscv_vector.h>
+
+static inline void volk_16i_x5_add_quad_16i_x4_rvv(short* target0,
+                                                     short* target1,
+                                                     short* target2,
+                                                     short* target3,
+                                                     const short* src0,
+                                                     const short* src1,
+                                                     const short* src2,
+                                                     const short* src3,
+                                                     const short* src4,
+                                                     unsigned int num_points)
+{
+    size_t n = (size_t)num_points;
+    for (size_t vl; n > 0; n -= vl, src0 += vl, src1 += vl, src2 += vl, src3 += vl,
+                           src4 += vl, target0 += vl, target1 += vl, target2 += vl,
+                           target3 += vl) {
+        vl = __riscv_vsetvl_e16m4(n);
+        vint16m4_t base = __riscv_vle16_v_i16m4(src0, vl);
+        __riscv_vse16(target0, __riscv_vadd(base, __riscv_vle16_v_i16m4(src1, vl), vl), vl);
+        __riscv_vse16(target1, __riscv_vadd(base, __riscv_vle16_v_i16m4(src2, vl), vl), vl);
+        __riscv_vse16(target2, __riscv_vadd(base, __riscv_vle16_v_i16m4(src3, vl), vl), vl);
+        __riscv_vse16(target3, __riscv_vadd(base, __riscv_vle16_v_i16m4(src4, vl), vl), vl);
+    }
+}
+#endif /* LV_HAVE_RVV */
+
 #endif /* INCLUDED_volk_16i_x5_add_quad_16i_x4_u_H */
 
 #ifndef INCLUDED_volk_16i_x5_add_quad_16i_x4_a_H

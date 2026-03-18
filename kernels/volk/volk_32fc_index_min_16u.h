@@ -183,12 +183,11 @@ static inline void volk_32fc_index_min_16u_u_sse3(uint16_t* target,
     union bit128 holderi;
     float sq_dist = 0.0;
 
-    union bit128 xmm5, xmm4;
+    union bit128 xmm5;
     __m128 xmm1, xmm2, xmm3;
     __m128i xmm8, xmm11, xmm12, xmm9, xmm10;
 
     xmm5.int_vec = _mm_setzero_si128();
-    xmm4.int_vec = _mm_setzero_si128();
     holderf.int_vec = _mm_setzero_si128();
     holderi.int_vec = _mm_setzero_si128();
 

@@ -158,6 +158,53 @@ static inline void volk_32f_binary_slicer_8i_u_sse2(int8_t* cVector,
 #endif /* LV_HAVE_SSE2 */
 
 
+#ifdef LV_HAVE_AVX
+#include <immintrin.h>
+
+static inline void volk_32f_binary_slicer_8i_u_avx(int8_t* cVector,
+                                                   const float* aVector,
+                                                   unsigned int num_points)
+{
+    int8_t* cPtr = cVector;
+    const float* aPtr = aVector;
+    unsigned int number = 0;
+    unsigned int n16points = num_points / 16;
+
+    const __m256 zero_val = _mm256_setzero_ps();
+
+    for (number = 0; number < n16points; number++) {
+        /* Load 16 floats using two 256-bit loads */
+        __m256 a0_val = _mm256_loadu_ps(aPtr);
+        __m256 a1_val = _mm256_loadu_ps(aPtr + 8);
+
+        /* Compare >= 0 using AVX */
+        __m256 res0_f = _mm256_cmp_ps(a0_val, zero_val, _CMP_GE_OS);
+        __m256 res1_f = _mm256_cmp_ps(a1_val, zero_val, _CMP_GE_OS);
+
+        /* Split to 128-bit halves for integer ops (AVX has no 256-bit integer ops) */
+        __m128i r0_lo = _mm_srli_epi32(_mm_cvtps_epi32(_mm256_castps256_ps128(res0_f)), 31);
+        __m128i r0_hi = _mm_srli_epi32(_mm_cvtps_epi32(_mm256_extractf128_ps(res0_f, 1)), 31);
+        __m128i r1_lo = _mm_srli_epi32(_mm_cvtps_epi32(_mm256_castps256_ps128(res1_f)), 31);
+        __m128i r1_hi = _mm_srli_epi32(_mm_cvtps_epi32(_mm256_extractf128_ps(res1_f, 1)), 31);
+
+        /* Pack to int16: each packs_epi32 gives 8 int16 */
+        __m128i p0 = _mm_packs_epi32(r0_lo, r0_hi);
+        __m128i p1 = _mm_packs_epi32(r1_lo, r1_hi);
+
+        /* Pack to int8: 16 int8 values */
+        __m128i packed = _mm_packs_epi16(p0, p1);
+
+        _mm_storeu_si128((__m128i*)cPtr, packed);
+
+        aPtr += 16;
+        cPtr += 16;
+    }
+
+    volk_32f_binary_slicer_8i_generic(cPtr, aPtr, num_points - n16points * 16);
+}
+#endif /* LV_HAVE_AVX */
+
+
 #ifdef LV_HAVE_AVX2
 #include <immintrin.h>
 
@@ -306,6 +353,37 @@ static inline void volk_32f_binary_slicer_8i_u_avx512f(int8_t* cVector,
     volk_32f_binary_slicer_8i_generic(cPtr, aPtr, num_points - n64points * 64);
 }
 #endif /* LV_HAVE_AVX512F */
+
+
+#ifdef LV_HAVE_AVX512BW
+#include <immintrin.h>
+
+static inline void volk_32f_binary_slicer_8i_u_avx512bw(int8_t* cVector,
+                                                         const float* aVector,
+                                                         unsigned int num_points)
+{
+    int8_t* cPtr = cVector;
+    const float* aPtr = aVector;
+    unsigned int number = 0;
+    const unsigned int n64points = num_points / 64;
+    const __m512 zero = _mm512_setzero_ps();
+
+    for (; number < n64points; number++) {
+        __mmask16 m0 = _mm512_cmp_ps_mask(_mm512_loadu_ps(aPtr), zero, _CMP_GE_OQ);
+        __mmask16 m1 = _mm512_cmp_ps_mask(_mm512_loadu_ps(aPtr + 16), zero, _CMP_GE_OQ);
+        __mmask16 m2 = _mm512_cmp_ps_mask(_mm512_loadu_ps(aPtr + 32), zero, _CMP_GE_OQ);
+        __mmask16 m3 = _mm512_cmp_ps_mask(_mm512_loadu_ps(aPtr + 48), zero, _CMP_GE_OQ);
+        aPtr += 64;
+
+        __mmask64 mask64 = (__mmask64)m0 | ((__mmask64)m1 << 16) |
+                           ((__mmask64)m2 << 32) | ((__mmask64)m3 << 48);
+        _mm512_storeu_si512((__m512i*)cPtr, _mm512_maskz_set1_epi8(mask64, 1));
+        cPtr += 64;
+    }
+
+    volk_32f_binary_slicer_8i_generic(cPtr, aPtr, num_points - n64points * 64);
+}
+#endif /* LV_HAVE_AVX512BW */
 
 
 #ifdef LV_HAVE_NEON
@@ -464,6 +542,53 @@ static inline void volk_32f_binary_slicer_8i_a_sse2(int8_t* cVector,
 #endif /* LV_HAVE_SSE2 */
 
 
+#ifdef LV_HAVE_AVX
+#include <immintrin.h>
+
+static inline void volk_32f_binary_slicer_8i_a_avx(int8_t* cVector,
+                                                   const float* aVector,
+                                                   unsigned int num_points)
+{
+    int8_t* cPtr = cVector;
+    const float* aPtr = aVector;
+    unsigned int number = 0;
+    unsigned int n16points = num_points / 16;
+
+    const __m256 zero_val = _mm256_setzero_ps();
+
+    for (number = 0; number < n16points; number++) {
+        /* Load 16 floats using two 256-bit aligned loads */
+        __m256 a0_val = _mm256_load_ps(aPtr);
+        __m256 a1_val = _mm256_load_ps(aPtr + 8);
+
+        /* Compare >= 0 using AVX */
+        __m256 res0_f = _mm256_cmp_ps(a0_val, zero_val, _CMP_GE_OS);
+        __m256 res1_f = _mm256_cmp_ps(a1_val, zero_val, _CMP_GE_OS);
+
+        /* Split to 128-bit halves for integer ops (AVX has no 256-bit integer ops) */
+        __m128i r0_lo = _mm_srli_epi32(_mm_cvtps_epi32(_mm256_castps256_ps128(res0_f)), 31);
+        __m128i r0_hi = _mm_srli_epi32(_mm_cvtps_epi32(_mm256_extractf128_ps(res0_f, 1)), 31);
+        __m128i r1_lo = _mm_srli_epi32(_mm_cvtps_epi32(_mm256_castps256_ps128(res1_f)), 31);
+        __m128i r1_hi = _mm_srli_epi32(_mm_cvtps_epi32(_mm256_extractf128_ps(res1_f, 1)), 31);
+
+        /* Pack to int16: each packs_epi32 gives 8 int16 */
+        __m128i p0 = _mm_packs_epi32(r0_lo, r0_hi);
+        __m128i p1 = _mm_packs_epi32(r1_lo, r1_hi);
+
+        /* Pack to int8: 16 int8 values */
+        __m128i packed = _mm_packs_epi16(p0, p1);
+
+        _mm_store_si128((__m128i*)cPtr, packed);
+
+        aPtr += 16;
+        cPtr += 16;
+    }
+
+    volk_32f_binary_slicer_8i_generic(cPtr, aPtr, num_points - n16points * 16);
+}
+#endif /* LV_HAVE_AVX */
+
+
 #ifdef LV_HAVE_AVX2
 #include <immintrin.h>
 
@@ -612,6 +737,37 @@ static inline void volk_32f_binary_slicer_8i_a_avx512f(int8_t* cVector,
     volk_32f_binary_slicer_8i_generic(cPtr, aPtr, num_points - n64points * 64);
 }
 #endif /* LV_HAVE_AVX512F */
+
+
+#ifdef LV_HAVE_AVX512BW
+#include <immintrin.h>
+
+static inline void volk_32f_binary_slicer_8i_a_avx512bw(int8_t* cVector,
+                                                         const float* aVector,
+                                                         unsigned int num_points)
+{
+    int8_t* cPtr = cVector;
+    const float* aPtr = aVector;
+    unsigned int number = 0;
+    const unsigned int n64points = num_points / 64;
+    const __m512 zero = _mm512_setzero_ps();
+
+    for (; number < n64points; number++) {
+        __mmask16 m0 = _mm512_cmp_ps_mask(_mm512_load_ps(aPtr), zero, _CMP_GE_OQ);
+        __mmask16 m1 = _mm512_cmp_ps_mask(_mm512_load_ps(aPtr + 16), zero, _CMP_GE_OQ);
+        __mmask16 m2 = _mm512_cmp_ps_mask(_mm512_load_ps(aPtr + 32), zero, _CMP_GE_OQ);
+        __mmask16 m3 = _mm512_cmp_ps_mask(_mm512_load_ps(aPtr + 48), zero, _CMP_GE_OQ);
+        aPtr += 64;
+
+        __mmask64 mask64 = (__mmask64)m0 | ((__mmask64)m1 << 16) |
+                           ((__mmask64)m2 << 32) | ((__mmask64)m3 << 48);
+        _mm512_store_si512((__m512i*)cPtr, _mm512_maskz_set1_epi8(mask64, 1));
+        cPtr += 64;
+    }
+
+    volk_32f_binary_slicer_8i_generic(cPtr, aPtr, num_points - n64points * 64);
+}
+#endif /* LV_HAVE_AVX512BW */
 
 
 #endif /* INCLUDED_volk_32f_binary_slicer_8i_a_H */

@@ -178,6 +178,42 @@ static inline void volk_32fc_conjugate_32fc_u_avx(lv_32fc_t* cVector,
 }
 #endif /* LV_HAVE_AVX */
 
+#ifdef LV_HAVE_AVX2
+#include <immintrin.h>
+
+static inline void volk_32fc_conjugate_32fc_u_avx2(lv_32fc_t* cVector,
+                                                  const lv_32fc_t* aVector,
+                                                  unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int quarterPoints = num_points / 4;
+
+    __m256 x;
+    lv_32fc_t* c = cVector;
+    const lv_32fc_t* a = aVector;
+
+    __m256 conjugator = _mm256_setr_ps(0, -0.f, 0, -0.f, 0, -0.f, 0, -0.f);
+
+    for (; number < quarterPoints; number++) {
+
+        x = _mm256_loadu_ps((const float*)a); // Load the complex data as ar,ai,br,bi
+
+        x = _mm256_xor_ps(x, conjugator); // conjugate register
+
+        _mm256_storeu_ps((float*)c, x); // Store the results back into the C container
+
+        a += 4;
+        c += 4;
+    }
+
+    number = quarterPoints * 4;
+
+    for (; number < num_points; number++) {
+        *c++ = lv_conj(*a++);
+    }
+}
+#endif /* LV_HAVE_AVX2 */
+
 #ifdef LV_HAVE_AVX512F
 #include <immintrin.h>
 
@@ -301,6 +337,42 @@ static inline void volk_32fc_conjugate_32fc_rvv(lv_32fc_t* cVector,
 }
 #endif /* LV_HAVE_RVV */
 
+#ifdef LV_HAVE_RVVSEG
+#include <riscv_vector.h>
+
+static inline void volk_32fc_conjugate_32fc_rvvseg(lv_32fc_t* cVector,
+                                                    const lv_32fc_t* aVector,
+                                                    unsigned int num_points)
+{
+    size_t n = num_points;
+    for (size_t vl; n > 0; n -= vl, aVector += vl, cVector += vl) {
+        vl = __riscv_vsetvl_e32m4(n);
+        vfloat32m4x2_t vc =
+            __riscv_vlseg2e32_v_f32m4x2((const float*)aVector, vl);
+        vfloat32m4_t vr = __riscv_vget_f32m4(vc, 0);
+        vfloat32m4_t vi = __riscv_vfneg(__riscv_vget_f32m4(vc, 1), vl);
+        __riscv_vsseg2e32_v_f32m4x2(
+            (float*)cVector, __riscv_vcreate_v_f32m4x2(vr, vi), vl);
+    }
+}
+#endif /* LV_HAVE_RVVSEG */
+
+#ifdef LV_HAVE_ORC
+
+extern void volk_32fc_conjugate_32fc_a_orc_impl(lv_32fc_t* cVector,
+                                                 const lv_32fc_t* aVector,
+                                                 const float negone,
+                                                 int num_points);
+
+static inline void volk_32fc_conjugate_32fc_u_orc(lv_32fc_t* cVector,
+                                                   const lv_32fc_t* aVector,
+                                                   unsigned int num_points)
+{
+    volk_32fc_conjugate_32fc_a_orc_impl(cVector, aVector, -1.0f, num_points);
+}
+
+#endif /* LV_HAVE_ORC */
+
 #endif /* INCLUDED_volk_32fc_conjugate_32fc_u_H */
 #ifndef INCLUDED_volk_32fc_conjugate_32fc_a_H
 #define INCLUDED_volk_32fc_conjugate_32fc_a_H
@@ -411,6 +483,42 @@ static inline void volk_32fc_conjugate_32fc_a_avx(lv_32fc_t* cVector,
     }
 }
 #endif /* LV_HAVE_AVX */
+
+#ifdef LV_HAVE_AVX2
+#include <immintrin.h>
+
+static inline void volk_32fc_conjugate_32fc_a_avx2(lv_32fc_t* cVector,
+                                                  const lv_32fc_t* aVector,
+                                                  unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int quarterPoints = num_points / 4;
+
+    __m256 x;
+    lv_32fc_t* c = cVector;
+    const lv_32fc_t* a = aVector;
+
+    __m256 conjugator = _mm256_setr_ps(0, -0.f, 0, -0.f, 0, -0.f, 0, -0.f);
+
+    for (; number < quarterPoints; number++) {
+
+        x = _mm256_load_ps((const float*)a); // Load the complex data as ar,ai,br,bi
+
+        x = _mm256_xor_ps(x, conjugator); // conjugate register
+
+        _mm256_store_ps((float*)c, x); // Store the results back into the C container
+
+        a += 4;
+        c += 4;
+    }
+
+    number = quarterPoints * 4;
+
+    for (; number < num_points; number++) {
+        *c++ = lv_conj(*a++);
+    }
+}
+#endif /* LV_HAVE_AVX2 */
 
 #ifdef LV_HAVE_AVX512F
 #include <immintrin.h>

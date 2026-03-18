@@ -293,6 +293,31 @@ static inline void volk_16i_x4_quad_max_star_16i_neon(short* target,
 }
 #endif /* LV_HAVE_NEON */
 
+#ifdef LV_HAVE_RVV
+#include <riscv_vector.h>
+
+static inline void volk_16i_x4_quad_max_star_16i_rvv(short* target,
+                                                      const short* src0,
+                                                      const short* src1,
+                                                      const short* src2,
+                                                      const short* src3,
+                                                      unsigned int num_points)
+{
+    size_t n = (size_t)num_points;
+    for (size_t vl; n > 0;
+         n -= vl, src0 += vl, src1 += vl, src2 += vl, src3 += vl, target += vl) {
+        vl = __riscv_vsetvl_e16m4(n);
+        vint16m4_t v0 = __riscv_vle16_v_i16m4(src0, vl);
+        vint16m4_t v1 = __riscv_vle16_v_i16m4(src1, vl);
+        vint16m4_t v2 = __riscv_vle16_v_i16m4(src2, vl);
+        vint16m4_t v3 = __riscv_vle16_v_i16m4(src3, vl);
+        vint16m4_t m01 = __riscv_vmax(v0, v1, vl);
+        vint16m4_t m23 = __riscv_vmax(v2, v3, vl);
+        __riscv_vse16(target, __riscv_vmax(m01, m23, vl), vl);
+    }
+}
+#endif /* LV_HAVE_RVV */
+
 #endif /* INCLUDED_volk_16i_x4_quad_max_star_16i_u_H */
 
 #ifndef INCLUDED_volk_16i_x4_quad_max_star_16i_a_H

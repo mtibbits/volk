@@ -355,6 +355,322 @@ static inline void volk_32f_x2_pow_32f_u_sse4_1(float* cVector,
 
 #endif /* LV_HAVE_SSE4_1 for unaligned */
 
+#ifdef LV_HAVE_AVX
+#include <immintrin.h>
+
+#define POLY0_AVX(x, c0) _mm256_set1_ps(c0)
+#define POLY1_AVX(x, c0, c1) \
+    _mm256_add_ps(_mm256_mul_ps(POLY0_AVX(x, c1), x), _mm256_set1_ps(c0))
+#define POLY2_AVX(x, c0, c1, c2) \
+    _mm256_add_ps(_mm256_mul_ps(POLY1_AVX(x, c1, c2), x), _mm256_set1_ps(c0))
+#define POLY3_AVX(x, c0, c1, c2, c3) \
+    _mm256_add_ps(_mm256_mul_ps(POLY2_AVX(x, c1, c2, c3), x), _mm256_set1_ps(c0))
+#define POLY4_AVX(x, c0, c1, c2, c3, c4) \
+    _mm256_add_ps(_mm256_mul_ps(POLY3_AVX(x, c1, c2, c3, c4), x), _mm256_set1_ps(c0))
+#define POLY5_AVX(x, c0, c1, c2, c3, c4, c5) \
+    _mm256_add_ps(_mm256_mul_ps(POLY4_AVX(x, c1, c2, c3, c4, c5), x), _mm256_set1_ps(c0))
+
+static inline void volk_32f_x2_pow_32f_u_avx(float* cVector,
+                                             const float* bVector,
+                                             const float* aVector,
+                                             unsigned int num_points)
+{
+    float* cPtr = cVector;
+    const float* bPtr = bVector;
+    const float* aPtr = aVector;
+
+    unsigned int number = 0;
+    const unsigned int eighthPoints = num_points / 8;
+
+    __m256 aVal, bVal, cVal, logarithm, mantissa, frac, leadingOne;
+    __m256 tmp, fx, mask, pow2n, z, y;
+    __m256 one, exp_hi, exp_lo, ln2, log2EF, half, exp_C1, exp_C2;
+    __m256 exp_p0, exp_p1, exp_p2, exp_p3, exp_p4, exp_p5;
+    /* 128-bit integer constants for bit manipulation (plain AVX has no 256-bit integer ops) */
+    __m128i bias_128, pi32_0x7f_128;
+
+    one = _mm256_set1_ps(1.0f);
+    exp_hi = _mm256_set1_ps(88.3762626647949f);
+    exp_lo = _mm256_set1_ps(-88.3762626647949f);
+    ln2 = _mm256_set1_ps(0.6931471805f);
+    log2EF = _mm256_set1_ps(1.44269504088896341f);
+    half = _mm256_set1_ps(0.5f);
+    exp_C1 = _mm256_set1_ps(0.693359375f);
+    exp_C2 = _mm256_set1_ps(-2.12194440e-4f);
+    bias_128 = _mm_set1_epi32(127);
+    pi32_0x7f_128 = _mm_set1_epi32(0x7f);
+
+    exp_p0 = _mm256_set1_ps(1.9875691500e-4f);
+    exp_p1 = _mm256_set1_ps(1.3981999507e-3f);
+    exp_p2 = _mm256_set1_ps(8.3334519073e-3f);
+    exp_p3 = _mm256_set1_ps(4.1665795894e-2f);
+    exp_p4 = _mm256_set1_ps(1.6666665459e-1f);
+    exp_p5 = _mm256_set1_ps(5.0000001201e-1f);
+
+    for (; number < eighthPoints; number++) {
+        /* First compute the logarithm */
+        aVal = _mm256_loadu_ps(aPtr);
+        leadingOne = _mm256_set1_ps(1.0f);
+
+        /* Extract exponent: split to 128-bit halves for integer ops */
+        __m128i av_lo = _mm256_castsi256_si128(_mm256_castps_si256(aVal));
+        __m128i av_hi = _mm_castps_si128(_mm256_extractf128_ps(aVal, 1));
+        __m128i exp_lo_i = _mm_sub_epi32(
+            _mm_srli_epi32(_mm_and_si128(av_lo, _mm_set1_epi32(0x7f800000)), 23), bias_128);
+        __m128i exp_hi_i = _mm_sub_epi32(
+            _mm_srli_epi32(_mm_and_si128(av_hi, _mm_set1_epi32(0x7f800000)), 23), bias_128);
+        logarithm = _mm256_insertf128_ps(_mm256_castps128_ps256(_mm_cvtepi32_ps(exp_lo_i)),
+                                         _mm_cvtepi32_ps(exp_hi_i), 1);
+
+        /* Extract mantissa: (aVal & 0x7fffff) | leadingOne bits */
+        __m128i frac_lo_i = _mm_or_si128(_mm_and_si128(av_lo, _mm_set1_epi32(0x7fffff)),
+                                          _mm_set1_epi32(0x3f800000));
+        __m128i frac_hi_i = _mm_or_si128(_mm_and_si128(av_hi, _mm_set1_epi32(0x7fffff)),
+                                          _mm_set1_epi32(0x3f800000));
+        frac = _mm256_insertf128_ps(_mm256_castps128_ps256(_mm_castsi128_ps(frac_lo_i)),
+                                    _mm_castsi128_ps(frac_hi_i), 1);
+
+#if POW_POLY_DEGREE == 6
+        mantissa = POLY5_AVX(frac,
+                             3.1157899f,
+                             -3.3241990f,
+                             2.5988452f,
+                             -1.2315303f,
+                             3.1821337e-1f,
+                             -3.4436006e-2f);
+#elif POW_POLY_DEGREE == 5
+        mantissa = POLY4_AVX(frac,
+                             2.8882704548164776201f,
+                             -2.52074962577807006663f,
+                             1.48116647521213171641f,
+                             -0.465725644288844778798f,
+                             0.0596515482674574969533f);
+#elif POW_POLY_DEGREE == 4
+        mantissa = POLY3_AVX(frac,
+                             2.61761038894603480148f,
+                             -1.75647175389045657003f,
+                             0.688243882994381274313f,
+                             -0.107254423828329604454f);
+#elif POW_POLY_DEGREE == 3
+        mantissa = POLY2_AVX(frac,
+                             2.28330284476918490682f,
+                             -1.04913055217340124191f,
+                             0.204446009836232697516f);
+#else
+#error
+#endif
+
+        logarithm =
+            _mm256_add_ps(_mm256_mul_ps(mantissa, _mm256_sub_ps(frac, leadingOne)), logarithm);
+        logarithm = _mm256_mul_ps(logarithm, ln2);
+
+        /* Now calculate b*lna */
+        bVal = _mm256_loadu_ps(bPtr);
+        bVal = _mm256_mul_ps(bVal, logarithm);
+
+        /* Now compute exp(b*lna) */
+        bVal = _mm256_max_ps(_mm256_min_ps(bVal, exp_hi), exp_lo);
+
+        fx = _mm256_add_ps(_mm256_mul_ps(bVal, log2EF), half);
+
+        /* floor(fx): truncate then correct */
+        __m256 fx_trunc = _mm256_cvtepi32_ps(_mm256_cvttps_epi32(fx));
+        mask = _mm256_and_ps(_mm256_cmp_ps(fx_trunc, fx, _CMP_GT_OS), one);
+        fx = _mm256_sub_ps(fx_trunc, mask);
+
+        tmp = _mm256_sub_ps(bVal, _mm256_mul_ps(fx, exp_C1));
+        bVal = _mm256_sub_ps(tmp, _mm256_mul_ps(fx, exp_C2));
+        z = _mm256_mul_ps(bVal, bVal);
+
+        y = _mm256_add_ps(_mm256_mul_ps(exp_p0, bVal), exp_p1);
+        y = _mm256_add_ps(_mm256_mul_ps(y, bVal), exp_p2);
+        y = _mm256_add_ps(_mm256_mul_ps(y, bVal), exp_p3);
+        y = _mm256_add_ps(_mm256_mul_ps(y, bVal), exp_p4);
+        y = _mm256_add_ps(_mm256_mul_ps(y, bVal), exp_p5);
+        y = _mm256_add_ps(_mm256_mul_ps(y, z), bVal);
+        y = _mm256_add_ps(y, one);
+
+        /* Build 2^n: split to 128-bit halves for integer ops */
+        __m128i fx_lo_i = _mm_cvttps_epi32(_mm256_castps256_ps128(fx));
+        __m128i fx_hi_i = _mm_cvttps_epi32(_mm256_extractf128_ps(fx, 1));
+        fx_lo_i = _mm_slli_epi32(_mm_add_epi32(fx_lo_i, pi32_0x7f_128), 23);
+        fx_hi_i = _mm_slli_epi32(_mm_add_epi32(fx_hi_i, pi32_0x7f_128), 23);
+        pow2n = _mm256_insertf128_ps(_mm256_castps128_ps256(_mm_castsi128_ps(fx_lo_i)),
+                                      _mm_castsi128_ps(fx_hi_i), 1);
+
+        cVal = _mm256_mul_ps(y, pow2n);
+
+        _mm256_storeu_ps(cPtr, cVal);
+
+        aPtr += 8;
+        bPtr += 8;
+        cPtr += 8;
+    }
+
+    number = eighthPoints * 8;
+    volk_32f_x2_pow_32f_generic(cPtr, bPtr, aPtr, num_points - number);
+}
+
+#endif /* LV_HAVE_AVX for unaligned */
+
+#if LV_HAVE_AVX && LV_HAVE_FMA
+#include <immintrin.h>
+
+#define POLY0_AVX_FMA(x, c0) _mm256_set1_ps(c0)
+#define POLY1_AVX_FMA(x, c0, c1) \
+    _mm256_fmadd_ps(POLY0_AVX_FMA(x, c1), x, _mm256_set1_ps(c0))
+#define POLY2_AVX_FMA(x, c0, c1, c2) \
+    _mm256_fmadd_ps(POLY1_AVX_FMA(x, c1, c2), x, _mm256_set1_ps(c0))
+#define POLY3_AVX_FMA(x, c0, c1, c2, c3) \
+    _mm256_fmadd_ps(POLY2_AVX_FMA(x, c1, c2, c3), x, _mm256_set1_ps(c0))
+#define POLY4_AVX_FMA(x, c0, c1, c2, c3, c4) \
+    _mm256_fmadd_ps(POLY3_AVX_FMA(x, c1, c2, c3, c4), x, _mm256_set1_ps(c0))
+#define POLY5_AVX_FMA(x, c0, c1, c2, c3, c4, c5) \
+    _mm256_fmadd_ps(POLY4_AVX_FMA(x, c1, c2, c3, c4, c5), x, _mm256_set1_ps(c0))
+
+static inline void volk_32f_x2_pow_32f_u_avx_fma(float* cVector,
+                                                  const float* bVector,
+                                                  const float* aVector,
+                                                  unsigned int num_points)
+{
+    float* cPtr = cVector;
+    const float* bPtr = bVector;
+    const float* aPtr = aVector;
+
+    unsigned int number = 0;
+    const unsigned int eighthPoints = num_points / 8;
+
+    __m256 aVal, bVal, cVal, logarithm, mantissa, frac, leadingOne;
+    __m256 tmp, fx, mask, pow2n, z, y;
+    __m256 one, exp_hi, exp_lo, ln2, log2EF, half, exp_C1, exp_C2;
+    __m256 exp_p0, exp_p1, exp_p2, exp_p3, exp_p4, exp_p5;
+    /* 128-bit integer constants for bit manipulation (plain AVX has no 256-bit integer ops) */
+    __m128i bias_128, pi32_0x7f_128;
+
+    one = _mm256_set1_ps(1.0f);
+    exp_hi = _mm256_set1_ps(88.3762626647949f);
+    exp_lo = _mm256_set1_ps(-88.3762626647949f);
+    ln2 = _mm256_set1_ps(0.6931471805f);
+    log2EF = _mm256_set1_ps(1.44269504088896341f);
+    half = _mm256_set1_ps(0.5f);
+    exp_C1 = _mm256_set1_ps(0.693359375f);
+    exp_C2 = _mm256_set1_ps(-2.12194440e-4f);
+    bias_128 = _mm_set1_epi32(127);
+    pi32_0x7f_128 = _mm_set1_epi32(0x7f);
+
+    exp_p0 = _mm256_set1_ps(1.9875691500e-4f);
+    exp_p1 = _mm256_set1_ps(1.3981999507e-3f);
+    exp_p2 = _mm256_set1_ps(8.3334519073e-3f);
+    exp_p3 = _mm256_set1_ps(4.1665795894e-2f);
+    exp_p4 = _mm256_set1_ps(1.6666665459e-1f);
+    exp_p5 = _mm256_set1_ps(5.0000001201e-1f);
+
+    for (; number < eighthPoints; number++) {
+        /* First compute the logarithm */
+        aVal = _mm256_loadu_ps(aPtr);
+        leadingOne = _mm256_set1_ps(1.0f);
+
+        /* Extract exponent: split to 128-bit halves for integer ops */
+        __m128i av_lo = _mm256_castsi256_si128(_mm256_castps_si256(aVal));
+        __m128i av_hi = _mm_castps_si128(_mm256_extractf128_ps(aVal, 1));
+        __m128i exp_lo_i = _mm_sub_epi32(
+            _mm_srli_epi32(_mm_and_si128(av_lo, _mm_set1_epi32(0x7f800000)), 23), bias_128);
+        __m128i exp_hi_i = _mm_sub_epi32(
+            _mm_srli_epi32(_mm_and_si128(av_hi, _mm_set1_epi32(0x7f800000)), 23), bias_128);
+        logarithm = _mm256_insertf128_ps(_mm256_castps128_ps256(_mm_cvtepi32_ps(exp_lo_i)),
+                                         _mm_cvtepi32_ps(exp_hi_i), 1);
+
+        /* Extract mantissa: (aVal & 0x7fffff) | leadingOne bits */
+        __m128i frac_lo_i = _mm_or_si128(_mm_and_si128(av_lo, _mm_set1_epi32(0x7fffff)),
+                                          _mm_set1_epi32(0x3f800000));
+        __m128i frac_hi_i = _mm_or_si128(_mm_and_si128(av_hi, _mm_set1_epi32(0x7fffff)),
+                                          _mm_set1_epi32(0x3f800000));
+        frac = _mm256_insertf128_ps(_mm256_castps128_ps256(_mm_castsi128_ps(frac_lo_i)),
+                                    _mm_castsi128_ps(frac_hi_i), 1);
+
+#if POW_POLY_DEGREE == 6
+        mantissa = POLY5_AVX_FMA(frac,
+                             3.1157899f,
+                             -3.3241990f,
+                             2.5988452f,
+                             -1.2315303f,
+                             3.1821337e-1f,
+                             -3.4436006e-2f);
+#elif POW_POLY_DEGREE == 5
+        mantissa = POLY4_AVX_FMA(frac,
+                             2.8882704548164776201f,
+                             -2.52074962577807006663f,
+                             1.48116647521213171641f,
+                             -0.465725644288844778798f,
+                             0.0596515482674574969533f);
+#elif POW_POLY_DEGREE == 4
+        mantissa = POLY3_AVX_FMA(frac,
+                             2.61761038894603480148f,
+                             -1.75647175389045657003f,
+                             0.688243882994381274313f,
+                             -0.107254423828329604454f);
+#elif POW_POLY_DEGREE == 3
+        mantissa = POLY2_AVX_FMA(frac,
+                             2.28330284476918490682f,
+                             -1.04913055217340124191f,
+                             0.204446009836232697516f);
+#else
+#error
+#endif
+
+        logarithm =
+            _mm256_fmadd_ps(mantissa, _mm256_sub_ps(frac, leadingOne), logarithm);
+        logarithm = _mm256_mul_ps(logarithm, ln2);
+
+        /* Now calculate b*lna */
+        bVal = _mm256_loadu_ps(bPtr);
+        bVal = _mm256_mul_ps(bVal, logarithm);
+
+        /* Now compute exp(b*lna) */
+        bVal = _mm256_max_ps(_mm256_min_ps(bVal, exp_hi), exp_lo);
+
+        fx = _mm256_fmadd_ps(bVal, log2EF, half);
+
+        /* floor(fx): truncate then correct */
+        __m256 fx_trunc = _mm256_cvtepi32_ps(_mm256_cvttps_epi32(fx));
+        mask = _mm256_and_ps(_mm256_cmp_ps(fx_trunc, fx, _CMP_GT_OS), one);
+        fx = _mm256_sub_ps(fx_trunc, mask);
+
+        tmp = _mm256_fnmadd_ps(fx, exp_C1, bVal);
+        bVal = _mm256_fnmadd_ps(fx, exp_C2, tmp);
+        z = _mm256_mul_ps(bVal, bVal);
+
+        y = _mm256_fmadd_ps(exp_p0, bVal, exp_p1);
+        y = _mm256_fmadd_ps(y, bVal, exp_p2);
+        y = _mm256_fmadd_ps(y, bVal, exp_p3);
+        y = _mm256_fmadd_ps(y, bVal, exp_p4);
+        y = _mm256_fmadd_ps(y, bVal, exp_p5);
+        y = _mm256_fmadd_ps(y, z, bVal);
+        y = _mm256_add_ps(y, one);
+
+        /* Build 2^n: split to 128-bit halves for integer ops */
+        __m128i fx_lo_i = _mm_cvttps_epi32(_mm256_castps256_ps128(fx));
+        __m128i fx_hi_i = _mm_cvttps_epi32(_mm256_extractf128_ps(fx, 1));
+        fx_lo_i = _mm_slli_epi32(_mm_add_epi32(fx_lo_i, pi32_0x7f_128), 23);
+        fx_hi_i = _mm_slli_epi32(_mm_add_epi32(fx_hi_i, pi32_0x7f_128), 23);
+        pow2n = _mm256_insertf128_ps(_mm256_castps128_ps256(_mm_castsi128_ps(fx_lo_i)),
+                                      _mm_castsi128_ps(fx_hi_i), 1);
+
+        cVal = _mm256_mul_ps(y, pow2n);
+
+        _mm256_storeu_ps(cPtr, cVal);
+
+        aPtr += 8;
+        bPtr += 8;
+        cPtr += 8;
+    }
+
+    number = eighthPoints * 8;
+    volk_32f_x2_pow_32f_generic(cPtr, bPtr, aPtr, num_points - number);
+}
+
+#endif /* LV_HAVE_AVX && LV_HAVE_FMA for unaligned */
+
 #ifdef LV_HAVE_AVX2
 #include <immintrin.h>
 
@@ -793,6 +1109,139 @@ static inline void volk_32f_x2_pow_32f_u_avx512f(float* cVector,
 }
 
 #endif /* LV_HAVE_AVX512F for unaligned */
+
+#ifdef LV_HAVE_AVX512DQ
+#include <immintrin.h>
+
+static inline void volk_32f_x2_pow_32f_u_avx512dq(float* cVector,
+                                                    const float* bVector,
+                                                    const float* aVector,
+                                                    unsigned int num_points)
+{
+    float* cPtr = cVector;
+    const float* bPtr = bVector;
+    const float* aPtr = aVector;
+
+    unsigned int number = 0;
+    const unsigned int sixteenthPoints = num_points / 16;
+
+    __m512 aVal, bVal, cVal, logarithm, mantissa, frac, leadingOne;
+    __m512 tmp, fx, pow2n, z, y;
+    __m512 one, exp_hi, exp_lo, ln2, log2EF, half, exp_C1, exp_C2;
+    __m512 exp_p0, exp_p1, exp_p2, exp_p3, exp_p4, exp_p5;
+    __m512i bias, exponent, emm0, pi32_0x7f;
+
+    one = _mm512_set1_ps(1.0);
+    exp_hi = _mm512_set1_ps(88.3762626647949);
+    exp_lo = _mm512_set1_ps(-88.3762626647949);
+    ln2 = _mm512_set1_ps(0.6931471805);
+    log2EF = _mm512_set1_ps(1.44269504088896341);
+    half = _mm512_set1_ps(0.5);
+    exp_C1 = _mm512_set1_ps(0.693359375);
+    exp_C2 = _mm512_set1_ps(-2.12194440e-4);
+    pi32_0x7f = _mm512_set1_epi32(0x7f);
+
+    exp_p0 = _mm512_set1_ps(1.9875691500e-4);
+    exp_p1 = _mm512_set1_ps(1.3981999507e-3);
+    exp_p2 = _mm512_set1_ps(8.3334519073e-3);
+    exp_p3 = _mm512_set1_ps(4.1665795894e-2);
+    exp_p4 = _mm512_set1_ps(1.6666665459e-1);
+    exp_p5 = _mm512_set1_ps(5.0000001201e-1);
+
+    /* DQ: mantissa mask kept as float for _mm512_and_ps / _mm512_or_ps */
+    const __m512 mant_mask = _mm512_castsi512_ps(_mm512_set1_epi32(0x7fffff));
+
+    for (; number < sixteenthPoints; number++) {
+        /* First compute the logarithm */
+        aVal = _mm512_loadu_ps(aPtr);
+        bias = _mm512_set1_epi32(127);
+        leadingOne = _mm512_set1_ps(1.0f);
+        exponent = _mm512_sub_epi32(
+            _mm512_srli_epi32(
+                _mm512_and_si512(_mm512_castps_si512(aVal), _mm512_set1_epi32(0x7f800000)),
+                23),
+            bias);
+        logarithm = _mm512_cvtepi32_ps(exponent);
+
+        /* DQ: use float-domain OR/AND for fraction construction */
+        frac = _mm512_or_ps(leadingOne, _mm512_and_ps(aVal, mant_mask));
+
+#if POW_POLY_DEGREE == 6
+        mantissa = POLY5_AVX512(frac,
+                                3.1157899f,
+                                -3.3241990f,
+                                2.5988452f,
+                                -1.2315303f,
+                                3.1821337e-1f,
+                                -3.4436006e-2f);
+#elif POW_POLY_DEGREE == 5
+        mantissa = POLY4_AVX512(frac,
+                                2.8882704548164776201f,
+                                -2.52074962577807006663f,
+                                1.48116647521213171641f,
+                                -0.465725644288844778798f,
+                                0.0596515482674574969533f);
+#elif POW_POLY_DEGREE == 4
+        mantissa = POLY3_AVX512(frac,
+                                2.61761038894603480148f,
+                                -1.75647175389045657003f,
+                                0.688243882994381274313f,
+                                -0.107254423828329604454f);
+#elif POW_POLY_DEGREE == 3
+        mantissa = POLY2_AVX512(frac,
+                                2.28330284476918490682f,
+                                -1.04913055217340124191f,
+                                0.204446009836232697516f);
+#else
+#error
+#endif
+
+        logarithm =
+            _mm512_fmadd_ps(mantissa, _mm512_sub_ps(frac, leadingOne), logarithm);
+        logarithm = _mm512_mul_ps(logarithm, ln2);
+
+        /* Now calculate b*lna */
+        bVal = _mm512_loadu_ps(bPtr);
+        bVal = _mm512_mul_ps(bVal, logarithm);
+
+        /* Now compute exp(b*lna) */
+        bVal = _mm512_max_ps(_mm512_min_ps(bVal, exp_hi), exp_lo);
+
+        fx = _mm512_fmadd_ps(bVal, log2EF, half);
+
+        /* floor(fx) */
+        fx = _mm512_floor_ps(fx);
+
+        tmp = _mm512_fnmadd_ps(fx, exp_C1, bVal);
+        bVal = _mm512_fnmadd_ps(fx, exp_C2, tmp);
+        z = _mm512_mul_ps(bVal, bVal);
+
+        y = _mm512_fmadd_ps(exp_p0, bVal, exp_p1);
+        y = _mm512_fmadd_ps(y, bVal, exp_p2);
+        y = _mm512_fmadd_ps(y, bVal, exp_p3);
+        y = _mm512_fmadd_ps(y, bVal, exp_p4);
+        y = _mm512_fmadd_ps(y, bVal, exp_p5);
+        y = _mm512_fmadd_ps(y, z, bVal);
+        y = _mm512_add_ps(y, one);
+
+        emm0 =
+            _mm512_slli_epi32(_mm512_add_epi32(_mm512_cvttps_epi32(fx), pi32_0x7f), 23);
+
+        pow2n = _mm512_castsi512_ps(emm0);
+        cVal = _mm512_mul_ps(y, pow2n);
+
+        _mm512_storeu_ps(cPtr, cVal);
+
+        aPtr += 16;
+        bPtr += 16;
+        cPtr += 16;
+    }
+
+    number = sixteenthPoints * 16;
+    volk_32f_x2_pow_32f_generic(cPtr, bPtr, aPtr, num_points - number);
+}
+
+#endif /* LV_HAVE_AVX512DQ for unaligned */
 
 #ifdef LV_HAVE_NEON
 #include <arm_neon.h>
@@ -1432,6 +1881,298 @@ static inline void volk_32f_x2_pow_32f_a_sse4_1(float* cVector,
 
 #endif /* LV_HAVE_SSE4_1 for aligned */
 
+#ifdef LV_HAVE_AVX
+#include <immintrin.h>
+
+static inline void volk_32f_x2_pow_32f_a_avx(float* cVector,
+                                             const float* bVector,
+                                             const float* aVector,
+                                             unsigned int num_points)
+{
+    float* cPtr = cVector;
+    const float* bPtr = bVector;
+    const float* aPtr = aVector;
+
+    unsigned int number = 0;
+    const unsigned int eighthPoints = num_points / 8;
+
+    __m256 aVal, bVal, cVal, logarithm, mantissa, frac, leadingOne;
+    __m256 tmp, fx, mask, pow2n, z, y;
+    __m256 one, exp_hi, exp_lo, ln2, log2EF, half, exp_C1, exp_C2;
+    __m256 exp_p0, exp_p1, exp_p2, exp_p3, exp_p4, exp_p5;
+    /* 128-bit integer constants for bit manipulation (plain AVX has no 256-bit integer ops) */
+    __m128i bias_128, pi32_0x7f_128;
+
+    one = _mm256_set1_ps(1.0f);
+    exp_hi = _mm256_set1_ps(88.3762626647949f);
+    exp_lo = _mm256_set1_ps(-88.3762626647949f);
+    ln2 = _mm256_set1_ps(0.6931471805f);
+    log2EF = _mm256_set1_ps(1.44269504088896341f);
+    half = _mm256_set1_ps(0.5f);
+    exp_C1 = _mm256_set1_ps(0.693359375f);
+    exp_C2 = _mm256_set1_ps(-2.12194440e-4f);
+    bias_128 = _mm_set1_epi32(127);
+    pi32_0x7f_128 = _mm_set1_epi32(0x7f);
+
+    exp_p0 = _mm256_set1_ps(1.9875691500e-4f);
+    exp_p1 = _mm256_set1_ps(1.3981999507e-3f);
+    exp_p2 = _mm256_set1_ps(8.3334519073e-3f);
+    exp_p3 = _mm256_set1_ps(4.1665795894e-2f);
+    exp_p4 = _mm256_set1_ps(1.6666665459e-1f);
+    exp_p5 = _mm256_set1_ps(5.0000001201e-1f);
+
+    for (; number < eighthPoints; number++) {
+        /* First compute the logarithm */
+        aVal = _mm256_load_ps(aPtr);
+        leadingOne = _mm256_set1_ps(1.0f);
+
+        /* Extract exponent: split to 128-bit halves for integer ops */
+        __m128i av_lo = _mm256_castsi256_si128(_mm256_castps_si256(aVal));
+        __m128i av_hi = _mm_castps_si128(_mm256_extractf128_ps(aVal, 1));
+        __m128i exp_lo_i = _mm_sub_epi32(
+            _mm_srli_epi32(_mm_and_si128(av_lo, _mm_set1_epi32(0x7f800000)), 23), bias_128);
+        __m128i exp_hi_i = _mm_sub_epi32(
+            _mm_srli_epi32(_mm_and_si128(av_hi, _mm_set1_epi32(0x7f800000)), 23), bias_128);
+        logarithm = _mm256_insertf128_ps(_mm256_castps128_ps256(_mm_cvtepi32_ps(exp_lo_i)),
+                                         _mm_cvtepi32_ps(exp_hi_i), 1);
+
+        /* Extract mantissa: (aVal & 0x7fffff) | leadingOne bits */
+        __m128i frac_lo_i = _mm_or_si128(_mm_and_si128(av_lo, _mm_set1_epi32(0x7fffff)),
+                                          _mm_set1_epi32(0x3f800000));
+        __m128i frac_hi_i = _mm_or_si128(_mm_and_si128(av_hi, _mm_set1_epi32(0x7fffff)),
+                                          _mm_set1_epi32(0x3f800000));
+        frac = _mm256_insertf128_ps(_mm256_castps128_ps256(_mm_castsi128_ps(frac_lo_i)),
+                                    _mm_castsi128_ps(frac_hi_i), 1);
+
+#if POW_POLY_DEGREE == 6
+        mantissa = POLY5_AVX(frac,
+                             3.1157899f,
+                             -3.3241990f,
+                             2.5988452f,
+                             -1.2315303f,
+                             3.1821337e-1f,
+                             -3.4436006e-2f);
+#elif POW_POLY_DEGREE == 5
+        mantissa = POLY4_AVX(frac,
+                             2.8882704548164776201f,
+                             -2.52074962577807006663f,
+                             1.48116647521213171641f,
+                             -0.465725644288844778798f,
+                             0.0596515482674574969533f);
+#elif POW_POLY_DEGREE == 4
+        mantissa = POLY3_AVX(frac,
+                             2.61761038894603480148f,
+                             -1.75647175389045657003f,
+                             0.688243882994381274313f,
+                             -0.107254423828329604454f);
+#elif POW_POLY_DEGREE == 3
+        mantissa = POLY2_AVX(frac,
+                             2.28330284476918490682f,
+                             -1.04913055217340124191f,
+                             0.204446009836232697516f);
+#else
+#error
+#endif
+
+        logarithm =
+            _mm256_add_ps(_mm256_mul_ps(mantissa, _mm256_sub_ps(frac, leadingOne)), logarithm);
+        logarithm = _mm256_mul_ps(logarithm, ln2);
+
+        /* Now calculate b*lna */
+        bVal = _mm256_load_ps(bPtr);
+        bVal = _mm256_mul_ps(bVal, logarithm);
+
+        /* Now compute exp(b*lna) */
+        bVal = _mm256_max_ps(_mm256_min_ps(bVal, exp_hi), exp_lo);
+
+        fx = _mm256_add_ps(_mm256_mul_ps(bVal, log2EF), half);
+
+        /* floor(fx): truncate then correct */
+        __m256 fx_trunc = _mm256_cvtepi32_ps(_mm256_cvttps_epi32(fx));
+        mask = _mm256_and_ps(_mm256_cmp_ps(fx_trunc, fx, _CMP_GT_OS), one);
+        fx = _mm256_sub_ps(fx_trunc, mask);
+
+        tmp = _mm256_sub_ps(bVal, _mm256_mul_ps(fx, exp_C1));
+        bVal = _mm256_sub_ps(tmp, _mm256_mul_ps(fx, exp_C2));
+        z = _mm256_mul_ps(bVal, bVal);
+
+        y = _mm256_add_ps(_mm256_mul_ps(exp_p0, bVal), exp_p1);
+        y = _mm256_add_ps(_mm256_mul_ps(y, bVal), exp_p2);
+        y = _mm256_add_ps(_mm256_mul_ps(y, bVal), exp_p3);
+        y = _mm256_add_ps(_mm256_mul_ps(y, bVal), exp_p4);
+        y = _mm256_add_ps(_mm256_mul_ps(y, bVal), exp_p5);
+        y = _mm256_add_ps(_mm256_mul_ps(y, z), bVal);
+        y = _mm256_add_ps(y, one);
+
+        /* Build 2^n: split to 128-bit halves for integer ops */
+        __m128i fx_lo_i = _mm_cvttps_epi32(_mm256_castps256_ps128(fx));
+        __m128i fx_hi_i = _mm_cvttps_epi32(_mm256_extractf128_ps(fx, 1));
+        fx_lo_i = _mm_slli_epi32(_mm_add_epi32(fx_lo_i, pi32_0x7f_128), 23);
+        fx_hi_i = _mm_slli_epi32(_mm_add_epi32(fx_hi_i, pi32_0x7f_128), 23);
+        pow2n = _mm256_insertf128_ps(_mm256_castps128_ps256(_mm_castsi128_ps(fx_lo_i)),
+                                      _mm_castsi128_ps(fx_hi_i), 1);
+
+        cVal = _mm256_mul_ps(y, pow2n);
+
+        _mm256_store_ps(cPtr, cVal);
+
+        aPtr += 8;
+        bPtr += 8;
+        cPtr += 8;
+    }
+
+    number = eighthPoints * 8;
+    volk_32f_x2_pow_32f_generic(cPtr, bPtr, aPtr, num_points - number);
+}
+
+#endif /* LV_HAVE_AVX for aligned */
+
+#if LV_HAVE_AVX && LV_HAVE_FMA
+#include <immintrin.h>
+
+static inline void volk_32f_x2_pow_32f_a_avx_fma(float* cVector,
+                                                  const float* bVector,
+                                                  const float* aVector,
+                                                  unsigned int num_points)
+{
+    float* cPtr = cVector;
+    const float* bPtr = bVector;
+    const float* aPtr = aVector;
+
+    unsigned int number = 0;
+    const unsigned int eighthPoints = num_points / 8;
+
+    __m256 aVal, bVal, cVal, logarithm, mantissa, frac, leadingOne;
+    __m256 tmp, fx, mask, pow2n, z, y;
+    __m256 one, exp_hi, exp_lo, ln2, log2EF, half, exp_C1, exp_C2;
+    __m256 exp_p0, exp_p1, exp_p2, exp_p3, exp_p4, exp_p5;
+    /* 128-bit integer constants for bit manipulation (plain AVX has no 256-bit integer ops) */
+    __m128i bias_128, pi32_0x7f_128;
+
+    one = _mm256_set1_ps(1.0f);
+    exp_hi = _mm256_set1_ps(88.3762626647949f);
+    exp_lo = _mm256_set1_ps(-88.3762626647949f);
+    ln2 = _mm256_set1_ps(0.6931471805f);
+    log2EF = _mm256_set1_ps(1.44269504088896341f);
+    half = _mm256_set1_ps(0.5f);
+    exp_C1 = _mm256_set1_ps(0.693359375f);
+    exp_C2 = _mm256_set1_ps(-2.12194440e-4f);
+    bias_128 = _mm_set1_epi32(127);
+    pi32_0x7f_128 = _mm_set1_epi32(0x7f);
+
+    exp_p0 = _mm256_set1_ps(1.9875691500e-4f);
+    exp_p1 = _mm256_set1_ps(1.3981999507e-3f);
+    exp_p2 = _mm256_set1_ps(8.3334519073e-3f);
+    exp_p3 = _mm256_set1_ps(4.1665795894e-2f);
+    exp_p4 = _mm256_set1_ps(1.6666665459e-1f);
+    exp_p5 = _mm256_set1_ps(5.0000001201e-1f);
+
+    for (; number < eighthPoints; number++) {
+        /* First compute the logarithm */
+        aVal = _mm256_load_ps(aPtr);
+        leadingOne = _mm256_set1_ps(1.0f);
+
+        /* Extract exponent: split to 128-bit halves for integer ops */
+        __m128i av_lo = _mm256_castsi256_si128(_mm256_castps_si256(aVal));
+        __m128i av_hi = _mm_castps_si128(_mm256_extractf128_ps(aVal, 1));
+        __m128i exp_lo_i = _mm_sub_epi32(
+            _mm_srli_epi32(_mm_and_si128(av_lo, _mm_set1_epi32(0x7f800000)), 23), bias_128);
+        __m128i exp_hi_i = _mm_sub_epi32(
+            _mm_srli_epi32(_mm_and_si128(av_hi, _mm_set1_epi32(0x7f800000)), 23), bias_128);
+        logarithm = _mm256_insertf128_ps(_mm256_castps128_ps256(_mm_cvtepi32_ps(exp_lo_i)),
+                                         _mm_cvtepi32_ps(exp_hi_i), 1);
+
+        /* Extract mantissa: (aVal & 0x7fffff) | leadingOne bits */
+        __m128i frac_lo_i = _mm_or_si128(_mm_and_si128(av_lo, _mm_set1_epi32(0x7fffff)),
+                                          _mm_set1_epi32(0x3f800000));
+        __m128i frac_hi_i = _mm_or_si128(_mm_and_si128(av_hi, _mm_set1_epi32(0x7fffff)),
+                                          _mm_set1_epi32(0x3f800000));
+        frac = _mm256_insertf128_ps(_mm256_castps128_ps256(_mm_castsi128_ps(frac_lo_i)),
+                                    _mm_castsi128_ps(frac_hi_i), 1);
+
+#if POW_POLY_DEGREE == 6
+        mantissa = POLY5_AVX_FMA(frac,
+                             3.1157899f,
+                             -3.3241990f,
+                             2.5988452f,
+                             -1.2315303f,
+                             3.1821337e-1f,
+                             -3.4436006e-2f);
+#elif POW_POLY_DEGREE == 5
+        mantissa = POLY4_AVX_FMA(frac,
+                             2.8882704548164776201f,
+                             -2.52074962577807006663f,
+                             1.48116647521213171641f,
+                             -0.465725644288844778798f,
+                             0.0596515482674574969533f);
+#elif POW_POLY_DEGREE == 4
+        mantissa = POLY3_AVX_FMA(frac,
+                             2.61761038894603480148f,
+                             -1.75647175389045657003f,
+                             0.688243882994381274313f,
+                             -0.107254423828329604454f);
+#elif POW_POLY_DEGREE == 3
+        mantissa = POLY2_AVX_FMA(frac,
+                             2.28330284476918490682f,
+                             -1.04913055217340124191f,
+                             0.204446009836232697516f);
+#else
+#error
+#endif
+
+        logarithm =
+            _mm256_fmadd_ps(mantissa, _mm256_sub_ps(frac, leadingOne), logarithm);
+        logarithm = _mm256_mul_ps(logarithm, ln2);
+
+        /* Now calculate b*lna */
+        bVal = _mm256_load_ps(bPtr);
+        bVal = _mm256_mul_ps(bVal, logarithm);
+
+        /* Now compute exp(b*lna) */
+        bVal = _mm256_max_ps(_mm256_min_ps(bVal, exp_hi), exp_lo);
+
+        fx = _mm256_fmadd_ps(bVal, log2EF, half);
+
+        /* floor(fx): truncate then correct */
+        __m256 fx_trunc = _mm256_cvtepi32_ps(_mm256_cvttps_epi32(fx));
+        mask = _mm256_and_ps(_mm256_cmp_ps(fx_trunc, fx, _CMP_GT_OS), one);
+        fx = _mm256_sub_ps(fx_trunc, mask);
+
+        tmp = _mm256_fnmadd_ps(fx, exp_C1, bVal);
+        bVal = _mm256_fnmadd_ps(fx, exp_C2, tmp);
+        z = _mm256_mul_ps(bVal, bVal);
+
+        y = _mm256_fmadd_ps(exp_p0, bVal, exp_p1);
+        y = _mm256_fmadd_ps(y, bVal, exp_p2);
+        y = _mm256_fmadd_ps(y, bVal, exp_p3);
+        y = _mm256_fmadd_ps(y, bVal, exp_p4);
+        y = _mm256_fmadd_ps(y, bVal, exp_p5);
+        y = _mm256_fmadd_ps(y, z, bVal);
+        y = _mm256_add_ps(y, one);
+
+        /* Build 2^n: split to 128-bit halves for integer ops */
+        __m128i fx_lo_i = _mm_cvttps_epi32(_mm256_castps256_ps128(fx));
+        __m128i fx_hi_i = _mm_cvttps_epi32(_mm256_extractf128_ps(fx, 1));
+        fx_lo_i = _mm_slli_epi32(_mm_add_epi32(fx_lo_i, pi32_0x7f_128), 23);
+        fx_hi_i = _mm_slli_epi32(_mm_add_epi32(fx_hi_i, pi32_0x7f_128), 23);
+        pow2n = _mm256_insertf128_ps(_mm256_castps128_ps256(_mm_castsi128_ps(fx_lo_i)),
+                                      _mm_castsi128_ps(fx_hi_i), 1);
+
+        cVal = _mm256_mul_ps(y, pow2n);
+
+        _mm256_store_ps(cPtr, cVal);
+
+        aPtr += 8;
+        bPtr += 8;
+        cPtr += 8;
+    }
+
+    number = eighthPoints * 8;
+    volk_32f_x2_pow_32f_generic(cPtr, bPtr, aPtr, num_points - number);
+}
+
+#endif /* LV_HAVE_AVX && LV_HAVE_FMA for aligned */
+
 #ifdef LV_HAVE_AVX2
 #include <immintrin.h>
 
@@ -1869,5 +2610,138 @@ static inline void volk_32f_x2_pow_32f_a_avx512f(float* cVector,
 }
 
 #endif /* LV_HAVE_AVX512F for aligned */
+
+#ifdef LV_HAVE_AVX512DQ
+#include <immintrin.h>
+
+static inline void volk_32f_x2_pow_32f_a_avx512dq(float* cVector,
+                                                    const float* bVector,
+                                                    const float* aVector,
+                                                    unsigned int num_points)
+{
+    float* cPtr = cVector;
+    const float* bPtr = bVector;
+    const float* aPtr = aVector;
+
+    unsigned int number = 0;
+    const unsigned int sixteenthPoints = num_points / 16;
+
+    __m512 aVal, bVal, cVal, logarithm, mantissa, frac, leadingOne;
+    __m512 tmp, fx, pow2n, z, y;
+    __m512 one, exp_hi, exp_lo, ln2, log2EF, half, exp_C1, exp_C2;
+    __m512 exp_p0, exp_p1, exp_p2, exp_p3, exp_p4, exp_p5;
+    __m512i bias, exponent, emm0, pi32_0x7f;
+
+    one = _mm512_set1_ps(1.0);
+    exp_hi = _mm512_set1_ps(88.3762626647949);
+    exp_lo = _mm512_set1_ps(-88.3762626647949);
+    ln2 = _mm512_set1_ps(0.6931471805);
+    log2EF = _mm512_set1_ps(1.44269504088896341);
+    half = _mm512_set1_ps(0.5);
+    exp_C1 = _mm512_set1_ps(0.693359375);
+    exp_C2 = _mm512_set1_ps(-2.12194440e-4);
+    pi32_0x7f = _mm512_set1_epi32(0x7f);
+
+    exp_p0 = _mm512_set1_ps(1.9875691500e-4);
+    exp_p1 = _mm512_set1_ps(1.3981999507e-3);
+    exp_p2 = _mm512_set1_ps(8.3334519073e-3);
+    exp_p3 = _mm512_set1_ps(4.1665795894e-2);
+    exp_p4 = _mm512_set1_ps(1.6666665459e-1);
+    exp_p5 = _mm512_set1_ps(5.0000001201e-1);
+
+    /* DQ: mantissa mask kept as float for _mm512_and_ps / _mm512_or_ps */
+    const __m512 mant_mask = _mm512_castsi512_ps(_mm512_set1_epi32(0x7fffff));
+
+    for (; number < sixteenthPoints; number++) {
+        /* First compute the logarithm */
+        aVal = _mm512_load_ps(aPtr);
+        bias = _mm512_set1_epi32(127);
+        leadingOne = _mm512_set1_ps(1.0f);
+        exponent = _mm512_sub_epi32(
+            _mm512_srli_epi32(
+                _mm512_and_si512(_mm512_castps_si512(aVal), _mm512_set1_epi32(0x7f800000)),
+                23),
+            bias);
+        logarithm = _mm512_cvtepi32_ps(exponent);
+
+        /* DQ: use float-domain OR/AND for fraction construction */
+        frac = _mm512_or_ps(leadingOne, _mm512_and_ps(aVal, mant_mask));
+
+#if POW_POLY_DEGREE == 6
+        mantissa = POLY5_AVX512(frac,
+                                3.1157899f,
+                                -3.3241990f,
+                                2.5988452f,
+                                -1.2315303f,
+                                3.1821337e-1f,
+                                -3.4436006e-2f);
+#elif POW_POLY_DEGREE == 5
+        mantissa = POLY4_AVX512(frac,
+                                2.8882704548164776201f,
+                                -2.52074962577807006663f,
+                                1.48116647521213171641f,
+                                -0.465725644288844778798f,
+                                0.0596515482674574969533f);
+#elif POW_POLY_DEGREE == 4
+        mantissa = POLY3_AVX512(frac,
+                                2.61761038894603480148f,
+                                -1.75647175389045657003f,
+                                0.688243882994381274313f,
+                                -0.107254423828329604454f);
+#elif POW_POLY_DEGREE == 3
+        mantissa = POLY2_AVX512(frac,
+                                2.28330284476918490682f,
+                                -1.04913055217340124191f,
+                                0.204446009836232697516f);
+#else
+#error
+#endif
+
+        logarithm =
+            _mm512_fmadd_ps(mantissa, _mm512_sub_ps(frac, leadingOne), logarithm);
+        logarithm = _mm512_mul_ps(logarithm, ln2);
+
+        /* Now calculate b*lna */
+        bVal = _mm512_load_ps(bPtr);
+        bVal = _mm512_mul_ps(bVal, logarithm);
+
+        /* Now compute exp(b*lna) */
+        bVal = _mm512_max_ps(_mm512_min_ps(bVal, exp_hi), exp_lo);
+
+        fx = _mm512_fmadd_ps(bVal, log2EF, half);
+
+        /* floor(fx) */
+        fx = _mm512_floor_ps(fx);
+
+        tmp = _mm512_fnmadd_ps(fx, exp_C1, bVal);
+        bVal = _mm512_fnmadd_ps(fx, exp_C2, tmp);
+        z = _mm512_mul_ps(bVal, bVal);
+
+        y = _mm512_fmadd_ps(exp_p0, bVal, exp_p1);
+        y = _mm512_fmadd_ps(y, bVal, exp_p2);
+        y = _mm512_fmadd_ps(y, bVal, exp_p3);
+        y = _mm512_fmadd_ps(y, bVal, exp_p4);
+        y = _mm512_fmadd_ps(y, bVal, exp_p5);
+        y = _mm512_fmadd_ps(y, z, bVal);
+        y = _mm512_add_ps(y, one);
+
+        emm0 =
+            _mm512_slli_epi32(_mm512_add_epi32(_mm512_cvttps_epi32(fx), pi32_0x7f), 23);
+
+        pow2n = _mm512_castsi512_ps(emm0);
+        cVal = _mm512_mul_ps(y, pow2n);
+
+        _mm512_store_ps(cPtr, cVal);
+
+        aPtr += 16;
+        bPtr += 16;
+        cPtr += 16;
+    }
+
+    number = sixteenthPoints * 16;
+    volk_32f_x2_pow_32f_generic(cPtr, bPtr, aPtr, num_points - number);
+}
+
+#endif /* LV_HAVE_AVX512DQ for aligned */
 
 #endif /* INCLUDED_volk_32f_x2_pow_32f_a_H */

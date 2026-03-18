@@ -132,6 +132,37 @@ static inline void volk_32f_s32f_multiply_32f_u_avx(float* cVector,
 }
 #endif /* LV_HAVE_AVX */
 
+#ifdef LV_HAVE_AVX2
+#include <immintrin.h>
+
+static inline void volk_32f_s32f_multiply_32f_u_avx2(float* cVector,
+                                                    const float* aVector,
+                                                    const float scalar,
+                                                    unsigned int num_points)
+{
+    const unsigned int eighthPoints = num_points / 8;
+
+    float* cPtr = cVector;
+    const float* aPtr = aVector;
+
+    const __m256 bVal = _mm256_set1_ps(scalar);
+    for (unsigned int number = 0; number < eighthPoints; number++) {
+        __m256 aVal = _mm256_loadu_ps(aPtr);
+
+        __m256 cVal = _mm256_mul_ps(aVal, bVal);
+
+        _mm256_storeu_ps(cPtr, cVal); // Store the results back into the C container
+
+        aPtr += 8;
+        cPtr += 8;
+    }
+
+    for (unsigned int number = eighthPoints * 8; number < num_points; number++) {
+        *cPtr++ = (*aPtr++) * scalar;
+    }
+}
+#endif /* LV_HAVE_AVX2 */
+
 #ifdef LV_HAVE_AVX512F
 #include <immintrin.h>
 
@@ -332,6 +363,37 @@ static inline void volk_32f_s32f_multiply_32f_a_avx(float* cVector,
     }
 }
 #endif /* LV_HAVE_AVX */
+
+#ifdef LV_HAVE_AVX2
+#include <immintrin.h>
+
+static inline void volk_32f_s32f_multiply_32f_a_avx2(float* cVector,
+                                                    const float* aVector,
+                                                    const float scalar,
+                                                    unsigned int num_points)
+{
+    const unsigned int eighthPoints = num_points / 8;
+
+    float* cPtr = cVector;
+    const float* aPtr = aVector;
+
+    const __m256 bVal = _mm256_set1_ps(scalar);
+    for (unsigned int number = 0; number < eighthPoints; number++) {
+        __m256 aVal = _mm256_load_ps(aPtr);
+
+        __m256 cVal = _mm256_mul_ps(aVal, bVal);
+
+        _mm256_store_ps(cPtr, cVal); // Store the results back into the C container
+
+        aPtr += 8;
+        cPtr += 8;
+    }
+
+    for (unsigned int number = eighthPoints * 8; number < num_points; number++) {
+        *cPtr++ = (*aPtr++) * scalar;
+    }
+}
+#endif /* LV_HAVE_AVX2 */
 
 #ifdef LV_HAVE_AVX512F
 #include <immintrin.h>

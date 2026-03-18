@@ -265,6 +265,32 @@ static inline void volk_64u_byteswap_u_avx512bw(uint64_t* intsToSwap,
 #endif /* LV_HAVE_AVX512BW */
 
 
+#ifdef LV_HAVE_AVX512VBMI2
+#include <immintrin.h>
+
+static inline void volk_64u_byteswap_u_avx512vbmi2(uint64_t* intsToSwap,
+                                                     unsigned int num_points)
+{
+    uint32_t* inputPtr = (uint32_t*)intsToSwap;
+    const unsigned int nPerSet = 8;
+    const unsigned int nSets = num_points / nPerSet;
+
+    for (unsigned int number = 0; number < nSets; number++) {
+        __m512i v = _mm512_loadu_si512((__m512i*)inputPtr);
+        v = _mm512_shrdi_epi64(v, v, 32);
+        v = _mm512_shrdi_epi32(v, v, 16);
+        v = _mm512_shrdi_epi16(v, v, 8);
+        _mm512_storeu_si512((__m512i*)inputPtr, v);
+        inputPtr += 2 * nPerSet;
+    }
+
+    // Byteswap any remaining points:
+    volk_64u_byteswap_generic(intsToSwap + nSets * nPerSet,
+                              num_points - nSets * nPerSet);
+}
+#endif /* LV_HAVE_AVX512VBMI2 */
+
+
 #ifdef LV_HAVE_NEON
 #include <arm_neon.h>
 
@@ -312,6 +338,37 @@ static inline void volk_64u_byteswap_neon(uint64_t* intsToSwap, unsigned int num
     }
 }
 #endif /* LV_HAVE_NEON */
+
+
+#ifdef LV_HAVE_NEONV8
+#include <arm_neon.h>
+
+static inline void volk_64u_byteswap_neonv8(uint64_t* intsToSwap, unsigned int num_points)
+{
+    uint8_t* inputPtr = (uint8_t*)intsToSwap;
+    unsigned int number = 0;
+    const unsigned int eighth_points = num_points / 8;
+
+    for (; number < eighth_points; number++) {
+        uint8x16_t input0 = vld1q_u8(inputPtr);
+        uint8x16_t input1 = vld1q_u8(inputPtr + 16);
+        uint8x16_t input2 = vld1q_u8(inputPtr + 32);
+        uint8x16_t input3 = vld1q_u8(inputPtr + 48);
+
+        vst1q_u8(inputPtr, vrev64q_u8(input0));
+        vst1q_u8(inputPtr + 16, vrev64q_u8(input1));
+        vst1q_u8(inputPtr + 32, vrev64q_u8(input2));
+        vst1q_u8(inputPtr + 48, vrev64q_u8(input3));
+
+        inputPtr += 64;
+    }
+
+    number = eighth_points * 8;
+    for (; number < num_points; number++) {
+        intsToSwap[number] = __builtin_bswap64(intsToSwap[number]);
+    }
+}
+#endif /* LV_HAVE_NEONV8 */
 
 
 #ifdef LV_HAVE_RVV
@@ -362,6 +419,18 @@ static inline void volk_64u_byteswap_rva23(uint64_t* intsToSwap, unsigned int nu
     }
 }
 #endif /* LV_HAVE_RVA23 */
+
+#ifdef LV_HAVE_ORC
+
+extern void volk_64u_byteswap_a_orc_impl(uint64_t* intsToSwap, int num_points);
+
+static inline void volk_64u_byteswap_u_orc(uint64_t* intsToSwap,
+                                            unsigned int num_points)
+{
+    volk_64u_byteswap_a_orc_impl(intsToSwap, num_points);
+}
+
+#endif /* LV_HAVE_ORC */
 
 #endif /* INCLUDED_volk_64u_byteswap_u_H */
 
@@ -548,5 +617,31 @@ static inline void volk_64u_byteswap_a_avx512bw(uint64_t* intsToSwap,
                               num_points - nSets * nPerSet);
 }
 #endif /* LV_HAVE_AVX512BW */
+
+
+#ifdef LV_HAVE_AVX512VBMI2
+#include <immintrin.h>
+
+static inline void volk_64u_byteswap_a_avx512vbmi2(uint64_t* intsToSwap,
+                                                     unsigned int num_points)
+{
+    uint32_t* inputPtr = (uint32_t*)intsToSwap;
+    const unsigned int nPerSet = 8;
+    const unsigned int nSets = num_points / nPerSet;
+
+    for (unsigned int number = 0; number < nSets; number++) {
+        __m512i v = _mm512_load_si512((__m512i*)inputPtr);
+        v = _mm512_shrdi_epi64(v, v, 32);
+        v = _mm512_shrdi_epi32(v, v, 16);
+        v = _mm512_shrdi_epi16(v, v, 8);
+        _mm512_store_si512((__m512i*)inputPtr, v);
+        inputPtr += 2 * nPerSet;
+    }
+
+    // Byteswap any remaining points:
+    volk_64u_byteswap_generic(intsToSwap + nSets * nPerSet,
+                              num_points - nSets * nPerSet);
+}
+#endif /* LV_HAVE_AVX512VBMI2 */
 
 #endif /* INCLUDED_volk_64u_byteswap_a_H */

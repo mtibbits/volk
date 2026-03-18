@@ -199,6 +199,34 @@ volk_32f_invsqrt_32f_u_avx2(float* cVector, const float* aVector, unsigned int n
 }
 #endif /* LV_HAVE_AVX2 */
 
+#if LV_HAVE_AVX2 && LV_HAVE_FMA
+#include <immintrin.h>
+#include <volk/volk_avx2_fma_intrinsics.h>
+
+static inline void volk_32f_invsqrt_32f_u_avx2_fma(float* cVector,
+                                                    const float* aVector,
+                                                    unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int eighthPoints = num_points / 8;
+
+    float* cPtr = cVector;
+    const float* aPtr = aVector;
+    for (; number < eighthPoints; number++) {
+        __m256 aVal = _mm256_loadu_ps(aPtr);
+        __m256 cVal = _mm256_rsqrt_nr_avx2_fma(aVal);
+        _mm256_storeu_ps(cPtr, cVal);
+        aPtr += 8;
+        cPtr += 8;
+    }
+
+    number = eighthPoints * 8;
+    for (; number < num_points; number++) {
+        *cPtr++ = 1.0f / sqrtf(*aPtr++);
+    }
+}
+#endif /* LV_HAVE_AVX2 && LV_HAVE_FMA */
+
 #ifdef LV_HAVE_AVX512F
 #include <immintrin.h>
 #include <volk/volk_avx512_intrinsics.h>
@@ -415,6 +443,33 @@ volk_32f_invsqrt_32f_a_avx2(float* cVector, const float* aVector, unsigned int n
 }
 #endif /* LV_HAVE_AVX2 */
 
+#if LV_HAVE_AVX2 && LV_HAVE_FMA
+#include <immintrin.h>
+#include <volk/volk_avx2_fma_intrinsics.h>
+
+static inline void volk_32f_invsqrt_32f_a_avx2_fma(float* cVector,
+                                                    const float* aVector,
+                                                    unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int eighthPoints = num_points / 8;
+
+    float* cPtr = cVector;
+    const float* aPtr = aVector;
+    for (; number < eighthPoints; number++) {
+        __m256 aVal = _mm256_load_ps(aPtr);
+        __m256 cVal = _mm256_rsqrt_nr_avx2_fma(aVal);
+        _mm256_store_ps(cPtr, cVal);
+        aPtr += 8;
+        cPtr += 8;
+    }
+
+    number = eighthPoints * 8;
+    for (; number < num_points; number++) {
+        *cPtr++ = 1.0f / sqrtf(*aPtr++);
+    }
+}
+#endif /* LV_HAVE_AVX2 && LV_HAVE_FMA */
 
 #ifdef LV_HAVE_AVX512F
 #include <immintrin.h>

@@ -168,6 +168,243 @@ volk_32fc_s32f_power_spectrum_32f_u_sse2(float* logPowerOutput,
 
 #endif /* LV_HAVE_SSE2 */
 
+#ifdef LV_HAVE_SSE3
+#include <pmmintrin.h>
+#include <volk/volk_sse_intrinsics.h>
+
+static inline void
+volk_32fc_s32f_power_spectrum_32f_u_sse3(float* logPowerOutput,
+                                          const lv_32fc_t* complexFFTInput,
+                                          const float normalizationFactor,
+                                          unsigned int num_points)
+{
+    float* outPtr = logPowerOutput;
+    const float* inPtr = (const float*)complexFFTInput;
+
+    unsigned int number = 0;
+    const unsigned int quarterPoints = num_points / 4;
+
+    const float normFactSq = 1.0f / (normalizationFactor * normalizationFactor);
+
+    const __m128i exp_mask = _mm_set1_epi32(0x7f800000);
+    const __m128i mant_mask = _mm_set1_epi32(0x007fffff);
+    const __m128i one_bits = _mm_set1_epi32(0x3f800000);
+    const __m128i exp_bias = _mm_set1_epi32(127);
+    const __m128 one = _mm_set1_ps(1.0f);
+    const __m128 log2to10 = _mm_set1_ps((float)VOLK_LOG2TO10FACTOR);
+    const __m128 normFactSqVec = _mm_set1_ps(normFactSq);
+
+    for (; number < quarterPoints; number++) {
+        __m128 c0 = _mm_loadu_ps(inPtr);      /* re0,im0,re1,im1 */
+        __m128 c1 = _mm_loadu_ps(inPtr + 4);  /* re2,im2,re3,im3 */
+
+        /* SSE3 hadd: square each element then sum adjacent pairs */
+        __m128 c0sq = _mm_mul_ps(c0, c0);        /* re0²,im0²,re1²,im1² */
+        __m128 c1sq = _mm_mul_ps(c1, c1);        /* re2²,im2²,re3²,im3² */
+        __m128 mag_sq = _mm_hadd_ps(c0sq, c1sq); /* re0²+im0²,re1²+im1²,re2²+im2²,re3²+im3² */
+
+        mag_sq = _mm_mul_ps(mag_sq, normFactSqVec);
+
+        __m128i val_i = _mm_castps_si128(mag_sq);
+        __m128i exp_i = _mm_sub_epi32(
+            _mm_srli_epi32(_mm_and_si128(val_i, exp_mask), 23), exp_bias);
+        __m128 exp_f = _mm_cvtepi32_ps(exp_i);
+
+        __m128 frac = _mm_castsi128_ps(
+            _mm_or_si128(_mm_and_si128(val_i, mant_mask), one_bits));
+
+        __m128 poly = _mm_log2_poly_sse(frac);
+        __m128 log2_val = _mm_add_ps(exp_f, _mm_mul_ps(poly, _mm_sub_ps(frac, one)));
+
+        _mm_storeu_ps(outPtr, _mm_mul_ps(log2_val, log2to10));
+
+        inPtr += 8;
+        outPtr += 4;
+    }
+
+    number = quarterPoints * 4;
+    volk_32fc_s32f_power_spectrum_32f_generic(
+        outPtr, complexFFTInput + number, normalizationFactor, num_points - number);
+}
+
+#endif /* LV_HAVE_SSE3 */
+
+#ifdef LV_HAVE_AVX
+#include <immintrin.h>
+#include <volk/volk_sse_intrinsics.h>
+
+static inline void
+volk_32fc_s32f_power_spectrum_32f_u_avx(float* logPowerOutput,
+                                         const lv_32fc_t* complexFFTInput,
+                                         const float normalizationFactor,
+                                         unsigned int num_points)
+{
+    float* outPtr = logPowerOutput;
+    const float* inPtr = (const float*)complexFFTInput;
+
+    unsigned int number = 0;
+    const unsigned int eighthPoints = num_points / 8;
+
+    const float normFactSq = 1.0f / (normalizationFactor * normalizationFactor);
+    const __m128 normFactSqVec = _mm_set1_ps(normFactSq);
+
+    /* SSE2 integer constants used on each 128-bit half */
+    const __m128i exp_mask = _mm_set1_epi32(0x7f800000);
+    const __m128i mant_mask = _mm_set1_epi32(0x007fffff);
+    const __m128i one_bits = _mm_set1_epi32(0x3f800000);
+    const __m128i exp_bias = _mm_set1_epi32(127);
+    const __m128 one = _mm_set1_ps(1.0f);
+    const __m128 log2to10 = _mm_set1_ps((float)VOLK_LOG2TO10FACTOR);
+
+    for (; number < eighthPoints; number++) {
+        /* Load 16 floats = 8 complex samples via two 256-bit loads */
+        __m256 c0 = _mm256_loadu_ps(inPtr);       /* re0,im0,re1,im1,re2,im2,re3,im3 */
+        __m256 c1 = _mm256_loadu_ps(inPtr + 8);   /* re4,im4,re5,im5,re6,im6,re7,im7 */
+
+        /* Deinterleave per 128-bit lane using SSE shuffle on extracted halves */
+        __m128 c0_lo = _mm256_castps256_ps128(c0);
+        __m128 c0_hi = _mm256_extractf128_ps(c0, 1);
+        __m128 c1_lo = _mm256_castps256_ps128(c1);
+        __m128 c1_hi = _mm256_extractf128_ps(c1, 1);
+
+        /* re for samples 0-3 and 4-7 */
+        __m128 re_lo = _mm_shuffle_ps(c0_lo, c0_hi, _MM_SHUFFLE(2, 0, 2, 0));
+        __m128 re_hi = _mm_shuffle_ps(c1_lo, c1_hi, _MM_SHUFFLE(2, 0, 2, 0));
+        __m128 im_lo = _mm_shuffle_ps(c0_lo, c0_hi, _MM_SHUFFLE(3, 1, 3, 1));
+        __m128 im_hi = _mm_shuffle_ps(c1_lo, c1_hi, _MM_SHUFFLE(3, 1, 3, 1));
+
+        /* mag_sq = re*re + im*im, scaled */
+        __m128 mag_sq_lo = _mm_mul_ps(
+            _mm_add_ps(_mm_mul_ps(re_lo, re_lo), _mm_mul_ps(im_lo, im_lo)),
+            normFactSqVec);
+        __m128 mag_sq_hi = _mm_mul_ps(
+            _mm_add_ps(_mm_mul_ps(re_hi, re_hi), _mm_mul_ps(im_hi, im_hi)),
+            normFactSqVec);
+
+        /* Compute log2 on lo half */
+        __m128i val_i = _mm_castps_si128(mag_sq_lo);
+        __m128i exp_i = _mm_sub_epi32(
+            _mm_srli_epi32(_mm_and_si128(val_i, exp_mask), 23), exp_bias);
+        __m128 exp_f = _mm_cvtepi32_ps(exp_i);
+        __m128 frac = _mm_castsi128_ps(
+            _mm_or_si128(_mm_and_si128(val_i, mant_mask), one_bits));
+        __m128 poly = _mm_log2_poly_sse(frac);
+        __m128 log2_lo = _mm_add_ps(exp_f, _mm_mul_ps(poly, _mm_sub_ps(frac, one)));
+
+        /* Compute log2 on hi half */
+        val_i = _mm_castps_si128(mag_sq_hi);
+        exp_i = _mm_sub_epi32(
+            _mm_srli_epi32(_mm_and_si128(val_i, exp_mask), 23), exp_bias);
+        exp_f = _mm_cvtepi32_ps(exp_i);
+        frac = _mm_castsi128_ps(
+            _mm_or_si128(_mm_and_si128(val_i, mant_mask), one_bits));
+        poly = _mm_log2_poly_sse(frac);
+        __m128 log2_hi = _mm_add_ps(exp_f, _mm_mul_ps(poly, _mm_sub_ps(frac, one)));
+
+        /* Scale by log2to10 and store */
+        _mm_storeu_ps(outPtr,     _mm_mul_ps(log2_lo, log2to10));
+        _mm_storeu_ps(outPtr + 4, _mm_mul_ps(log2_hi, log2to10));
+
+        inPtr += 16;
+        outPtr += 8;
+    }
+
+    number = eighthPoints * 8;
+    volk_32fc_s32f_power_spectrum_32f_generic(
+        outPtr, complexFFTInput + number,
+        normalizationFactor, num_points - number);
+}
+
+#endif /* LV_HAVE_AVX */
+
+
+#if LV_HAVE_AVX && LV_HAVE_FMA
+#include <immintrin.h>
+#include <volk/volk_sse_intrinsics.h>
+
+static inline void
+volk_32fc_s32f_power_spectrum_32f_u_avx_fma(float* logPowerOutput,
+                                             const lv_32fc_t* complexFFTInput,
+                                             const float normalizationFactor,
+                                             unsigned int num_points)
+{
+    float* outPtr = logPowerOutput;
+    const float* inPtr = (const float*)complexFFTInput;
+
+    unsigned int number = 0;
+    const unsigned int eighthPoints = num_points / 8;
+
+    const float normFactSq = 1.0f / (normalizationFactor * normalizationFactor);
+    const __m128 normFactSqVec = _mm_set1_ps(normFactSq);
+
+    const __m128i exp_mask = _mm_set1_epi32(0x7f800000);
+    const __m128i mant_mask = _mm_set1_epi32(0x007fffff);
+    const __m128i one_bits = _mm_set1_epi32(0x3f800000);
+    const __m128i exp_bias = _mm_set1_epi32(127);
+    const __m128 one = _mm_set1_ps(1.0f);
+    const __m128 log2to10 = _mm_set1_ps((float)VOLK_LOG2TO10FACTOR);
+
+    for (; number < eighthPoints; number++) {
+        /* Load 16 floats = 8 complex samples via two 256-bit loads */
+        __m256 c0 = _mm256_loadu_ps(inPtr);
+        __m256 c1 = _mm256_loadu_ps(inPtr + 8);
+
+        /* Deinterleave per 128-bit lane */
+        __m128 c0_lo = _mm256_castps256_ps128(c0);
+        __m128 c0_hi = _mm256_extractf128_ps(c0, 1);
+        __m128 c1_lo = _mm256_castps256_ps128(c1);
+        __m128 c1_hi = _mm256_extractf128_ps(c1, 1);
+
+        __m128 re_lo = _mm_shuffle_ps(c0_lo, c0_hi, _MM_SHUFFLE(2, 0, 2, 0));
+        __m128 re_hi = _mm_shuffle_ps(c1_lo, c1_hi, _MM_SHUFFLE(2, 0, 2, 0));
+        __m128 im_lo = _mm_shuffle_ps(c0_lo, c0_hi, _MM_SHUFFLE(3, 1, 3, 1));
+        __m128 im_hi = _mm_shuffle_ps(c1_lo, c1_hi, _MM_SHUFFLE(3, 1, 3, 1));
+
+        /* mag_sq = re*re + im*im using FMA, scaled */
+        __m128 mag_sq_lo = _mm_mul_ps(
+            _mm_fmadd_ps(im_lo, im_lo, _mm_mul_ps(re_lo, re_lo)),
+            normFactSqVec);
+        __m128 mag_sq_hi = _mm_mul_ps(
+            _mm_fmadd_ps(im_hi, im_hi, _mm_mul_ps(re_hi, re_hi)),
+            normFactSqVec);
+
+        /* Compute log2 on lo half */
+        __m128i val_i = _mm_castps_si128(mag_sq_lo);
+        __m128i exp_i = _mm_sub_epi32(
+            _mm_srli_epi32(_mm_and_si128(val_i, exp_mask), 23), exp_bias);
+        __m128 exp_f = _mm_cvtepi32_ps(exp_i);
+        __m128 frac = _mm_castsi128_ps(
+            _mm_or_si128(_mm_and_si128(val_i, mant_mask), one_bits));
+        __m128 poly = _mm_log2_poly_sse(frac);
+        __m128 log2_lo = _mm_fmadd_ps(poly, _mm_sub_ps(frac, one), exp_f);
+
+        /* Compute log2 on hi half */
+        val_i = _mm_castps_si128(mag_sq_hi);
+        exp_i = _mm_sub_epi32(
+            _mm_srli_epi32(_mm_and_si128(val_i, exp_mask), 23), exp_bias);
+        exp_f = _mm_cvtepi32_ps(exp_i);
+        frac = _mm_castsi128_ps(
+            _mm_or_si128(_mm_and_si128(val_i, mant_mask), one_bits));
+        poly = _mm_log2_poly_sse(frac);
+        __m128 log2_hi = _mm_fmadd_ps(poly, _mm_sub_ps(frac, one), exp_f);
+
+        /* Scale by log2to10 and store */
+        _mm_storeu_ps(outPtr,     _mm_mul_ps(log2_lo, log2to10));
+        _mm_storeu_ps(outPtr + 4, _mm_mul_ps(log2_hi, log2to10));
+
+        inPtr += 16;
+        outPtr += 8;
+    }
+
+    number = eighthPoints * 8;
+    volk_32fc_s32f_power_spectrum_32f_generic(
+        outPtr, complexFFTInput + number,
+        normalizationFactor, num_points - number);
+}
+
+#endif /* LV_HAVE_AVX && LV_HAVE_FMA */
+
+
 #if LV_HAVE_AVX2 && LV_HAVE_FMA
 #include <immintrin.h>
 #include <volk/volk_avx2_fma_intrinsics.h>
@@ -299,6 +536,74 @@ volk_32fc_s32f_power_spectrum_32f_u_avx512f(float* logPowerOutput,
 
 #endif /* LV_HAVE_AVX512F */
 
+#if LV_HAVE_AVX512F && LV_HAVE_AVX512DQ
+#include <immintrin.h>
+#include <volk/volk_avx512_intrinsics.h>
+
+static inline void
+volk_32fc_s32f_power_spectrum_32f_u_avx512dq(float* logPowerOutput,
+                                              const lv_32fc_t* complexFFTInput,
+                                              const float normalizationFactor,
+                                              unsigned int num_points)
+{
+    float* outPtr = logPowerOutput;
+    const float* inPtr = (const float*)complexFFTInput;
+
+    unsigned int number = 0;
+    const unsigned int sixteenthPoints = num_points / 16;
+
+    const float normFactSq = 1.0f / (normalizationFactor * normalizationFactor);
+
+    /* Integer constants for exponent extraction (AVX512F) */
+    const __m512i exp_mask_i = _mm512_set1_epi32(0x7f800000);
+    const __m512i exp_bias = _mm512_set1_epi32(127);
+    /* Float-domain masks using AVX512DQ bitwise float ops */
+    const __m512 mant_mask_ps = _mm512_castsi512_ps(_mm512_set1_epi32(0x007fffff));
+    const __m512 one_ps = _mm512_set1_ps(1.0f);
+    const __m512 log2to10 = _mm512_set1_ps((float)VOLK_LOG2TO10FACTOR);
+    const __m512 normFactSqVec = _mm512_set1_ps(normFactSq);
+
+    const __m512i re_idx = _mm512_setr_epi32(
+        0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30);
+    const __m512i im_idx = _mm512_setr_epi32(
+        1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31);
+
+    for (; number < sixteenthPoints; number++) {
+        __m512 c0 = _mm512_loadu_ps(inPtr);
+        __m512 c1 = _mm512_loadu_ps(inPtr + 16);
+
+        __m512 re = _mm512_permutex2var_ps(c0, re_idx, c1);
+        __m512 im = _mm512_permutex2var_ps(c0, im_idx, c1);
+
+        __m512 mag_sq = _mm512_fmadd_ps(re, re, _mm512_mul_ps(im, im));
+        mag_sq = _mm512_mul_ps(mag_sq, normFactSqVec);
+
+        /* Exponent extraction via integer path (AVX512F) */
+        __m512i val_i = _mm512_castps_si512(mag_sq);
+        __m512i exp_i = _mm512_sub_epi32(
+            _mm512_srli_epi32(_mm512_and_si512(val_i, exp_mask_i), 23), exp_bias);
+        __m512 exp_f = _mm512_cvtepi32_ps(exp_i);
+
+        /* Mantissa extraction using AVX512DQ float-domain bitwise ops */
+        __m512 frac = _mm512_or_ps(_mm512_and_ps(mag_sq, mant_mask_ps), one_ps);
+
+        __m512 poly = _mm512_log2_poly_avx512(frac);
+        __m512 log2_val = _mm512_fmadd_ps(poly, _mm512_sub_ps(frac, one_ps), exp_f);
+
+        _mm512_storeu_ps(outPtr, _mm512_mul_ps(log2_val, log2to10));
+
+        inPtr += 32;
+        outPtr += 16;
+    }
+
+    number = sixteenthPoints * 16;
+    volk_32fc_s32f_power_spectrum_32f_generic(
+        outPtr, complexFFTInput + number,
+        normalizationFactor, num_points - number);
+}
+
+#endif /* LV_HAVE_AVX512F && LV_HAVE_AVX512DQ */
+
 #ifdef LV_HAVE_NEON
 #include <arm_neon.h>
 #include <volk/volk_neon_intrinsics.h>
@@ -350,6 +655,57 @@ volk_32fc_s32f_power_spectrum_32f_neon(float* logPowerOutput,
 }
 
 #endif /* LV_HAVE_NEON */
+
+
+#ifdef LV_HAVE_NEONV8
+#include <arm_neon.h>
+#include <volk/volk_neon_intrinsics.h>
+
+static inline void
+volk_32fc_s32f_power_spectrum_32f_neonv8(float* logPowerOutput,
+                                          const lv_32fc_t* complexFFTInput,
+                                          const float normalizationFactor,
+                                          unsigned int num_points)
+{
+    float* logPowerOutputPtr = logPowerOutput;
+    const lv_32fc_t* complexFFTInputPtr = complexFFTInput;
+    const float iNormalizationFactor = 1.0f / normalizationFactor;
+    unsigned int number;
+    unsigned int quarter_points = num_points / 4;
+    float32x4x2_t fft_vec;
+    float32x4_t log_pwr_vec;
+    float32x4_t mag_squared_vec;
+
+    const float inv_ln10_10 = 4.34294481903f; // 10.0/ln(10.)
+
+    for (number = 0; number < quarter_points; number++) {
+        fft_vec = vld2q_f32((const float*)complexFFTInputPtr);
+
+        fft_vec.val[0] = vmulq_n_f32(fft_vec.val[0], iNormalizationFactor);
+        fft_vec.val[1] = vmulq_n_f32(fft_vec.val[1], iNormalizationFactor);
+        /* Magnitude squared with FMA: re*re + im*im */
+        mag_squared_vec = vmulq_f32(fft_vec.val[0], fft_vec.val[0]);
+        mag_squared_vec = vfmaq_f32(mag_squared_vec, fft_vec.val[1], fft_vec.val[1]);
+        log_pwr_vec = vmulq_n_f32(_vlogq_f32(mag_squared_vec), inv_ln10_10);
+
+        vst1q_f32(logPowerOutputPtr, log_pwr_vec);
+
+        complexFFTInputPtr += 4;
+        logPowerOutputPtr += 4;
+    }
+
+    for (number = quarter_points * 4; number < num_points; number++) {
+        const float real = lv_creal(*complexFFTInputPtr) * iNormalizationFactor;
+        const float imag = lv_cimag(*complexFFTInputPtr) * iNormalizationFactor;
+
+        *logPowerOutputPtr =
+            VOLK_LOG2TO10FACTOR * volk_log2f_non_ieee(((real * real) + (imag * imag)));
+        complexFFTInputPtr++;
+        logPowerOutputPtr++;
+    }
+}
+
+#endif /* LV_HAVE_NEONV8 */
 
 
 #ifdef LV_HAVE_RVV
@@ -588,6 +944,244 @@ volk_32fc_s32f_power_spectrum_32f_a_sse2(float* logPowerOutput,
 
 #endif /* LV_HAVE_SSE2 */
 
+#ifdef LV_HAVE_SSE3
+#include <pmmintrin.h>
+#include <volk/volk_sse_intrinsics.h>
+
+static inline void
+volk_32fc_s32f_power_spectrum_32f_a_sse3(float* logPowerOutput,
+                                          const lv_32fc_t* complexFFTInput,
+                                          const float normalizationFactor,
+                                          unsigned int num_points)
+{
+    float* outPtr = logPowerOutput;
+    const float* inPtr = (const float*)complexFFTInput;
+
+    unsigned int number = 0;
+    const unsigned int quarterPoints = num_points / 4;
+
+    const float normFactSq = 1.0f / (normalizationFactor * normalizationFactor);
+
+    const __m128i exp_mask = _mm_set1_epi32(0x7f800000);
+    const __m128i mant_mask = _mm_set1_epi32(0x007fffff);
+    const __m128i one_bits = _mm_set1_epi32(0x3f800000);
+    const __m128i exp_bias = _mm_set1_epi32(127);
+    const __m128 one = _mm_set1_ps(1.0f);
+    const __m128 log2to10 = _mm_set1_ps((float)VOLK_LOG2TO10FACTOR);
+    const __m128 normFactSqVec = _mm_set1_ps(normFactSq);
+
+    for (; number < quarterPoints; number++) {
+        __m128 c0 = _mm_load_ps(inPtr);      /* re0,im0,re1,im1 */
+        __m128 c1 = _mm_load_ps(inPtr + 4);  /* re2,im2,re3,im3 */
+
+        /* SSE3 hadd: square each element then sum adjacent pairs */
+        __m128 c0sq = _mm_mul_ps(c0, c0);        /* re0²,im0²,re1²,im1² */
+        __m128 c1sq = _mm_mul_ps(c1, c1);        /* re2²,im2²,re3²,im3² */
+        __m128 mag_sq = _mm_hadd_ps(c0sq, c1sq); /* re0²+im0²,re1²+im1²,re2²+im2²,re3²+im3² */
+
+        mag_sq = _mm_mul_ps(mag_sq, normFactSqVec);
+
+        __m128i val_i = _mm_castps_si128(mag_sq);
+        __m128i exp_i = _mm_sub_epi32(
+            _mm_srli_epi32(_mm_and_si128(val_i, exp_mask), 23), exp_bias);
+        __m128 exp_f = _mm_cvtepi32_ps(exp_i);
+
+        __m128 frac = _mm_castsi128_ps(
+            _mm_or_si128(_mm_and_si128(val_i, mant_mask), one_bits));
+
+        __m128 poly = _mm_log2_poly_sse(frac);
+        __m128 log2_val = _mm_add_ps(exp_f, _mm_mul_ps(poly, _mm_sub_ps(frac, one)));
+
+        _mm_store_ps(outPtr, _mm_mul_ps(log2_val, log2to10));
+
+        inPtr += 8;
+        outPtr += 4;
+    }
+
+    number = quarterPoints * 4;
+    volk_32fc_s32f_power_spectrum_32f_generic(
+        outPtr, complexFFTInput + number,
+        normalizationFactor, num_points - number);
+}
+
+#endif /* LV_HAVE_SSE3 */
+
+#ifdef LV_HAVE_AVX
+#include <immintrin.h>
+#include <volk/volk_sse_intrinsics.h>
+
+static inline void
+volk_32fc_s32f_power_spectrum_32f_a_avx(float* logPowerOutput,
+                                         const lv_32fc_t* complexFFTInput,
+                                         const float normalizationFactor,
+                                         unsigned int num_points)
+{
+    float* outPtr = logPowerOutput;
+    const float* inPtr = (const float*)complexFFTInput;
+
+    unsigned int number = 0;
+    const unsigned int eighthPoints = num_points / 8;
+
+    const float normFactSq = 1.0f / (normalizationFactor * normalizationFactor);
+    const __m128 normFactSqVec = _mm_set1_ps(normFactSq);
+
+    /* SSE2 integer constants used on each 128-bit half */
+    const __m128i exp_mask = _mm_set1_epi32(0x7f800000);
+    const __m128i mant_mask = _mm_set1_epi32(0x007fffff);
+    const __m128i one_bits = _mm_set1_epi32(0x3f800000);
+    const __m128i exp_bias = _mm_set1_epi32(127);
+    const __m128 one = _mm_set1_ps(1.0f);
+    const __m128 log2to10 = _mm_set1_ps((float)VOLK_LOG2TO10FACTOR);
+
+    for (; number < eighthPoints; number++) {
+        /* Load 16 floats = 8 complex samples via two 256-bit aligned loads */
+        __m256 c0 = _mm256_load_ps(inPtr);       /* re0,im0,re1,im1,re2,im2,re3,im3 */
+        __m256 c1 = _mm256_load_ps(inPtr + 8);   /* re4,im4,re5,im5,re6,im6,re7,im7 */
+
+        /* Deinterleave per 128-bit lane using SSE shuffle on extracted halves */
+        __m128 c0_lo = _mm256_castps256_ps128(c0);
+        __m128 c0_hi = _mm256_extractf128_ps(c0, 1);
+        __m128 c1_lo = _mm256_castps256_ps128(c1);
+        __m128 c1_hi = _mm256_extractf128_ps(c1, 1);
+
+        /* re for samples 0-3 and 4-7 */
+        __m128 re_lo = _mm_shuffle_ps(c0_lo, c0_hi, _MM_SHUFFLE(2, 0, 2, 0));
+        __m128 re_hi = _mm_shuffle_ps(c1_lo, c1_hi, _MM_SHUFFLE(2, 0, 2, 0));
+        __m128 im_lo = _mm_shuffle_ps(c0_lo, c0_hi, _MM_SHUFFLE(3, 1, 3, 1));
+        __m128 im_hi = _mm_shuffle_ps(c1_lo, c1_hi, _MM_SHUFFLE(3, 1, 3, 1));
+
+        /* mag_sq = re*re + im*im, scaled */
+        __m128 mag_sq_lo = _mm_mul_ps(
+            _mm_add_ps(_mm_mul_ps(re_lo, re_lo), _mm_mul_ps(im_lo, im_lo)),
+            normFactSqVec);
+        __m128 mag_sq_hi = _mm_mul_ps(
+            _mm_add_ps(_mm_mul_ps(re_hi, re_hi), _mm_mul_ps(im_hi, im_hi)),
+            normFactSqVec);
+
+        /* Compute log2 on lo half */
+        __m128i val_i = _mm_castps_si128(mag_sq_lo);
+        __m128i exp_i = _mm_sub_epi32(
+            _mm_srli_epi32(_mm_and_si128(val_i, exp_mask), 23), exp_bias);
+        __m128 exp_f = _mm_cvtepi32_ps(exp_i);
+        __m128 frac = _mm_castsi128_ps(
+            _mm_or_si128(_mm_and_si128(val_i, mant_mask), one_bits));
+        __m128 poly = _mm_log2_poly_sse(frac);
+        __m128 log2_lo = _mm_add_ps(exp_f, _mm_mul_ps(poly, _mm_sub_ps(frac, one)));
+
+        /* Compute log2 on hi half */
+        val_i = _mm_castps_si128(mag_sq_hi);
+        exp_i = _mm_sub_epi32(
+            _mm_srli_epi32(_mm_and_si128(val_i, exp_mask), 23), exp_bias);
+        exp_f = _mm_cvtepi32_ps(exp_i);
+        frac = _mm_castsi128_ps(
+            _mm_or_si128(_mm_and_si128(val_i, mant_mask), one_bits));
+        poly = _mm_log2_poly_sse(frac);
+        __m128 log2_hi = _mm_add_ps(exp_f, _mm_mul_ps(poly, _mm_sub_ps(frac, one)));
+
+        /* Scale by log2to10 and store */
+        _mm_store_ps(outPtr,     _mm_mul_ps(log2_lo, log2to10));
+        _mm_store_ps(outPtr + 4, _mm_mul_ps(log2_hi, log2to10));
+
+        inPtr += 16;
+        outPtr += 8;
+    }
+
+    number = eighthPoints * 8;
+    volk_32fc_s32f_power_spectrum_32f_generic(
+        outPtr, complexFFTInput + number,
+        normalizationFactor, num_points - number);
+}
+
+#endif /* LV_HAVE_AVX */
+
+
+#if LV_HAVE_AVX && LV_HAVE_FMA
+#include <immintrin.h>
+#include <volk/volk_sse_intrinsics.h>
+
+static inline void
+volk_32fc_s32f_power_spectrum_32f_a_avx_fma(float* logPowerOutput,
+                                             const lv_32fc_t* complexFFTInput,
+                                             const float normalizationFactor,
+                                             unsigned int num_points)
+{
+    float* outPtr = logPowerOutput;
+    const float* inPtr = (const float*)complexFFTInput;
+
+    unsigned int number = 0;
+    const unsigned int eighthPoints = num_points / 8;
+
+    const float normFactSq = 1.0f / (normalizationFactor * normalizationFactor);
+    const __m128 normFactSqVec = _mm_set1_ps(normFactSq);
+
+    const __m128i exp_mask = _mm_set1_epi32(0x7f800000);
+    const __m128i mant_mask = _mm_set1_epi32(0x007fffff);
+    const __m128i one_bits = _mm_set1_epi32(0x3f800000);
+    const __m128i exp_bias = _mm_set1_epi32(127);
+    const __m128 one = _mm_set1_ps(1.0f);
+    const __m128 log2to10 = _mm_set1_ps((float)VOLK_LOG2TO10FACTOR);
+
+    for (; number < eighthPoints; number++) {
+        /* Load 16 floats = 8 complex samples via two 256-bit aligned loads */
+        __m256 c0 = _mm256_load_ps(inPtr);
+        __m256 c1 = _mm256_load_ps(inPtr + 8);
+
+        /* Deinterleave per 128-bit lane */
+        __m128 c0_lo = _mm256_castps256_ps128(c0);
+        __m128 c0_hi = _mm256_extractf128_ps(c0, 1);
+        __m128 c1_lo = _mm256_castps256_ps128(c1);
+        __m128 c1_hi = _mm256_extractf128_ps(c1, 1);
+
+        __m128 re_lo = _mm_shuffle_ps(c0_lo, c0_hi, _MM_SHUFFLE(2, 0, 2, 0));
+        __m128 re_hi = _mm_shuffle_ps(c1_lo, c1_hi, _MM_SHUFFLE(2, 0, 2, 0));
+        __m128 im_lo = _mm_shuffle_ps(c0_lo, c0_hi, _MM_SHUFFLE(3, 1, 3, 1));
+        __m128 im_hi = _mm_shuffle_ps(c1_lo, c1_hi, _MM_SHUFFLE(3, 1, 3, 1));
+
+        /* mag_sq = re*re + im*im using FMA, scaled */
+        __m128 mag_sq_lo = _mm_mul_ps(
+            _mm_fmadd_ps(im_lo, im_lo, _mm_mul_ps(re_lo, re_lo)),
+            normFactSqVec);
+        __m128 mag_sq_hi = _mm_mul_ps(
+            _mm_fmadd_ps(im_hi, im_hi, _mm_mul_ps(re_hi, re_hi)),
+            normFactSqVec);
+
+        /* Compute log2 on lo half */
+        __m128i val_i = _mm_castps_si128(mag_sq_lo);
+        __m128i exp_i = _mm_sub_epi32(
+            _mm_srli_epi32(_mm_and_si128(val_i, exp_mask), 23), exp_bias);
+        __m128 exp_f = _mm_cvtepi32_ps(exp_i);
+        __m128 frac = _mm_castsi128_ps(
+            _mm_or_si128(_mm_and_si128(val_i, mant_mask), one_bits));
+        __m128 poly = _mm_log2_poly_sse(frac);
+        __m128 log2_lo = _mm_fmadd_ps(poly, _mm_sub_ps(frac, one), exp_f);
+
+        /* Compute log2 on hi half */
+        val_i = _mm_castps_si128(mag_sq_hi);
+        exp_i = _mm_sub_epi32(
+            _mm_srli_epi32(_mm_and_si128(val_i, exp_mask), 23), exp_bias);
+        exp_f = _mm_cvtepi32_ps(exp_i);
+        frac = _mm_castsi128_ps(
+            _mm_or_si128(_mm_and_si128(val_i, mant_mask), one_bits));
+        poly = _mm_log2_poly_sse(frac);
+        __m128 log2_hi = _mm_fmadd_ps(poly, _mm_sub_ps(frac, one), exp_f);
+
+        /* Scale by log2to10 and store */
+        _mm_store_ps(outPtr,     _mm_mul_ps(log2_lo, log2to10));
+        _mm_store_ps(outPtr + 4, _mm_mul_ps(log2_hi, log2to10));
+
+        inPtr += 16;
+        outPtr += 8;
+    }
+
+    number = eighthPoints * 8;
+    volk_32fc_s32f_power_spectrum_32f_generic(
+        outPtr, complexFFTInput + number,
+        normalizationFactor, num_points - number);
+}
+
+#endif /* LV_HAVE_AVX && LV_HAVE_FMA */
+
+
 #if LV_HAVE_AVX2 && LV_HAVE_FMA
 #include <immintrin.h>
 #include <volk/volk_avx2_fma_intrinsics.h>
@@ -718,5 +1312,73 @@ volk_32fc_s32f_power_spectrum_32f_a_avx512f(float* logPowerOutput,
 }
 
 #endif /* LV_HAVE_AVX512F */
+
+#if LV_HAVE_AVX512F && LV_HAVE_AVX512DQ
+#include <immintrin.h>
+#include <volk/volk_avx512_intrinsics.h>
+
+static inline void
+volk_32fc_s32f_power_spectrum_32f_a_avx512dq(float* logPowerOutput,
+                                              const lv_32fc_t* complexFFTInput,
+                                              const float normalizationFactor,
+                                              unsigned int num_points)
+{
+    float* outPtr = logPowerOutput;
+    const float* inPtr = (const float*)complexFFTInput;
+
+    unsigned int number = 0;
+    const unsigned int sixteenthPoints = num_points / 16;
+
+    const float normFactSq = 1.0f / (normalizationFactor * normalizationFactor);
+
+    /* Integer constants for exponent extraction (AVX512F) */
+    const __m512i exp_mask_i = _mm512_set1_epi32(0x7f800000);
+    const __m512i exp_bias = _mm512_set1_epi32(127);
+    /* Float-domain masks using AVX512DQ bitwise float ops */
+    const __m512 mant_mask_ps = _mm512_castsi512_ps(_mm512_set1_epi32(0x007fffff));
+    const __m512 one_ps = _mm512_set1_ps(1.0f);
+    const __m512 log2to10 = _mm512_set1_ps((float)VOLK_LOG2TO10FACTOR);
+    const __m512 normFactSqVec = _mm512_set1_ps(normFactSq);
+
+    const __m512i re_idx = _mm512_setr_epi32(
+        0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30);
+    const __m512i im_idx = _mm512_setr_epi32(
+        1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31);
+
+    for (; number < sixteenthPoints; number++) {
+        __m512 c0 = _mm512_load_ps(inPtr);
+        __m512 c1 = _mm512_load_ps(inPtr + 16);
+
+        __m512 re = _mm512_permutex2var_ps(c0, re_idx, c1);
+        __m512 im = _mm512_permutex2var_ps(c0, im_idx, c1);
+
+        __m512 mag_sq = _mm512_fmadd_ps(re, re, _mm512_mul_ps(im, im));
+        mag_sq = _mm512_mul_ps(mag_sq, normFactSqVec);
+
+        /* Exponent extraction via integer path (AVX512F) */
+        __m512i val_i = _mm512_castps_si512(mag_sq);
+        __m512i exp_i = _mm512_sub_epi32(
+            _mm512_srli_epi32(_mm512_and_si512(val_i, exp_mask_i), 23), exp_bias);
+        __m512 exp_f = _mm512_cvtepi32_ps(exp_i);
+
+        /* Mantissa extraction using AVX512DQ float-domain bitwise ops */
+        __m512 frac = _mm512_or_ps(_mm512_and_ps(mag_sq, mant_mask_ps), one_ps);
+
+        __m512 poly = _mm512_log2_poly_avx512(frac);
+        __m512 log2_val = _mm512_fmadd_ps(poly, _mm512_sub_ps(frac, one_ps), exp_f);
+
+        _mm512_store_ps(outPtr, _mm512_mul_ps(log2_val, log2to10));
+
+        inPtr += 32;
+        outPtr += 16;
+    }
+
+    number = sixteenthPoints * 16;
+    volk_32fc_s32f_power_spectrum_32f_generic(
+        outPtr, complexFFTInput + number,
+        normalizationFactor, num_points - number);
+}
+
+#endif /* LV_HAVE_AVX512F && LV_HAVE_AVX512DQ */
 
 #endif /* INCLUDED_volk_32fc_s32f_power_spectrum_32f_a_H */

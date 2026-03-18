@@ -262,6 +262,23 @@ static inline void volk_16i_x2_add_saturated_16i_rvv(int16_t* outVector,
 #endif /* LV_HAVE_RVV */
 
 
+#ifdef LV_HAVE_ORC
+
+extern void volk_16i_x2_add_saturated_16i_a_orc_impl(int16_t* outVector,
+                                                       const int16_t* inVectorA,
+                                                       const int16_t* inVectorB,
+                                                       int num_points);
+
+static inline void volk_16i_x2_add_saturated_16i_u_orc(int16_t* outVector,
+                                                         const int16_t* inVectorA,
+                                                         const int16_t* inVectorB,
+                                                         unsigned int num_points)
+{
+    volk_16i_x2_add_saturated_16i_a_orc_impl(outVector, inVectorA, inVectorB, num_points);
+}
+
+#endif /* LV_HAVE_ORC */
+
 #endif /* INCLUDED_volk_16i_x2_add_saturated_16i_u_H */
 
 

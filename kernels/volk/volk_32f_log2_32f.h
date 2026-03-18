@@ -234,6 +234,148 @@ volk_32f_log2_32f_u_sse4_1(float* bVector, const float* aVector, unsigned int nu
 
 #endif /* LV_HAVE_SSE4_1 */
 
+#ifdef LV_HAVE_AVX
+#include <immintrin.h>
+#include <volk/volk_avx_intrinsics.h>
+
+static inline void
+volk_32f_log2_32f_u_avx(float* bVector, const float* aVector, unsigned int num_points)
+{
+    float* bPtr = bVector;
+    const float* aPtr = aVector;
+
+    unsigned int number = 0;
+    const unsigned int eighthPoints = num_points / 8;
+
+    /* 128-bit integer constants for exponent/mantissa extraction */
+    const __m128i exp_mask_128 = _mm_set1_epi32(0x7f800000);
+    const __m128i mant_mask_128 = _mm_set1_epi32(0x007fffff);
+    const __m128i one_bits_128 = _mm_set1_epi32(0x3f800000);
+    const __m128i exp_bias_128 = _mm_set1_epi32(127);
+    const __m256 one = _mm256_set1_ps(1.0f);
+
+    for (; number < eighthPoints; number++) {
+        __m256 aVal = _mm256_loadu_ps(aPtr);
+
+        /* Check for special values using AVX float comparisons */
+        __m256 zero_mask = _mm256_cmp_ps(aVal, _mm256_setzero_ps(), _CMP_EQ_OQ);
+        __m256 neg_mask = _mm256_cmp_ps(aVal, _mm256_setzero_ps(), _CMP_LT_OQ);
+        __m256 inf_mask = _mm256_cmp_ps(aVal, _mm256_set1_ps(INFINITY), _CMP_EQ_OQ);
+        __m256 nan_mask = _mm256_cmp_ps(aVal, aVal, _CMP_UNORD_Q);
+        __m256 invalid_mask = _mm256_or_ps(neg_mask, nan_mask);
+
+        /* Split to 128-bit halves for integer bit manipulation (plain AVX has no 256-bit int) */
+        __m128i a_lo = _mm256_castsi256_si128(_mm256_castps_si256(aVal));
+        __m128i a_hi = _mm_castps_si128(_mm256_extractf128_ps(aVal, 1));
+
+        /* Extract exponent: (bits & 0x7f800000) >> 23 - 127 */
+        __m128i exp_lo = _mm_sub_epi32(_mm_srli_epi32(_mm_and_si128(a_lo, exp_mask_128), 23),
+                                       exp_bias_128);
+        __m128i exp_hi = _mm_sub_epi32(_mm_srli_epi32(_mm_and_si128(a_hi, exp_mask_128), 23),
+                                       exp_bias_128);
+        __m256 exp_f = _mm256_insertf128_ps(_mm256_castps128_ps256(_mm_cvtepi32_ps(exp_lo)),
+                                            _mm_cvtepi32_ps(exp_hi), 1);
+
+        /* Extract mantissa as float in [1, 2) */
+        __m128i frac_lo = _mm_or_si128(_mm_and_si128(a_lo, mant_mask_128), one_bits_128);
+        __m128i frac_hi = _mm_or_si128(_mm_and_si128(a_hi, mant_mask_128), one_bits_128);
+        __m256 frac = _mm256_insertf128_ps(_mm256_castps128_ps256(_mm_castsi128_ps(frac_lo)),
+                                           _mm_castsi128_ps(frac_hi), 1);
+
+        /* Evaluate degree-6 polynomial using AVX float ops */
+        __m256 poly = _mm256_log2_poly_avx(frac);
+
+        /* result = exp + poly * (frac - 1) */
+        __m256 bVal = _mm256_add_ps(exp_f, _mm256_mul_ps(poly, _mm256_sub_ps(frac, one)));
+
+        /* Replace special values using AVX blendv */
+        bVal = _mm256_blendv_ps(bVal, _mm256_set1_ps(-127.0f), zero_mask);
+        bVal = _mm256_blendv_ps(bVal, _mm256_set1_ps(127.0f), inf_mask);
+        bVal = _mm256_blendv_ps(bVal, _mm256_set1_ps(NAN), invalid_mask);
+
+        _mm256_storeu_ps(bPtr, bVal);
+
+        aPtr += 8;
+        bPtr += 8;
+    }
+
+    number = eighthPoints * 8;
+    volk_32f_log2_32f_generic(bPtr, aPtr, num_points - number);
+}
+
+#endif /* LV_HAVE_AVX */
+
+#if LV_HAVE_AVX && LV_HAVE_FMA
+#include <immintrin.h>
+#include <volk/volk_avx_fma_intrinsics.h>
+
+static inline void
+volk_32f_log2_32f_u_avx_fma(float* bVector, const float* aVector, unsigned int num_points)
+{
+    float* bPtr = bVector;
+    const float* aPtr = aVector;
+
+    unsigned int number = 0;
+    const unsigned int eighthPoints = num_points / 8;
+
+    /* 128-bit integer constants for exponent/mantissa extraction */
+    const __m128i exp_mask_128 = _mm_set1_epi32(0x7f800000);
+    const __m128i mant_mask_128 = _mm_set1_epi32(0x007fffff);
+    const __m128i one_bits_128 = _mm_set1_epi32(0x3f800000);
+    const __m128i exp_bias_128 = _mm_set1_epi32(127);
+    const __m256 one = _mm256_set1_ps(1.0f);
+
+    for (; number < eighthPoints; number++) {
+        __m256 aVal = _mm256_loadu_ps(aPtr);
+
+        /* Check for special values using AVX float comparisons */
+        __m256 zero_mask = _mm256_cmp_ps(aVal, _mm256_setzero_ps(), _CMP_EQ_OQ);
+        __m256 neg_mask = _mm256_cmp_ps(aVal, _mm256_setzero_ps(), _CMP_LT_OQ);
+        __m256 inf_mask = _mm256_cmp_ps(aVal, _mm256_set1_ps(INFINITY), _CMP_EQ_OQ);
+        __m256 nan_mask = _mm256_cmp_ps(aVal, aVal, _CMP_UNORD_Q);
+        __m256 invalid_mask = _mm256_or_ps(neg_mask, nan_mask);
+
+        /* Split to 128-bit halves for integer bit manipulation (plain AVX has no 256-bit int) */
+        __m128i a_lo = _mm256_castsi256_si128(_mm256_castps_si256(aVal));
+        __m128i a_hi = _mm_castps_si128(_mm256_extractf128_ps(aVal, 1));
+
+        /* Extract exponent: (bits & 0x7f800000) >> 23 - 127 */
+        __m128i exp_lo = _mm_sub_epi32(_mm_srli_epi32(_mm_and_si128(a_lo, exp_mask_128), 23),
+                                       exp_bias_128);
+        __m128i exp_hi = _mm_sub_epi32(_mm_srli_epi32(_mm_and_si128(a_hi, exp_mask_128), 23),
+                                       exp_bias_128);
+        __m256 exp_f = _mm256_insertf128_ps(_mm256_castps128_ps256(_mm_cvtepi32_ps(exp_lo)),
+                                            _mm_cvtepi32_ps(exp_hi), 1);
+
+        /* Extract mantissa as float in [1, 2) */
+        __m128i frac_lo = _mm_or_si128(_mm_and_si128(a_lo, mant_mask_128), one_bits_128);
+        __m128i frac_hi = _mm_or_si128(_mm_and_si128(a_hi, mant_mask_128), one_bits_128);
+        __m256 frac = _mm256_insertf128_ps(_mm256_castps128_ps256(_mm_castsi128_ps(frac_lo)),
+                                           _mm_castsi128_ps(frac_hi), 1);
+
+        /* Evaluate degree-6 polynomial using FMA */
+        __m256 poly = _mm256_log2_poly_avx_fma(frac);
+
+        /* result = exp + poly * (frac - 1) */
+        __m256 bVal = _mm256_fmadd_ps(poly, _mm256_sub_ps(frac, one), exp_f);
+
+        /* Replace special values using AVX blendv */
+        bVal = _mm256_blendv_ps(bVal, _mm256_set1_ps(-127.0f), zero_mask);
+        bVal = _mm256_blendv_ps(bVal, _mm256_set1_ps(127.0f), inf_mask);
+        bVal = _mm256_blendv_ps(bVal, _mm256_set1_ps(NAN), invalid_mask);
+
+        _mm256_storeu_ps(bPtr, bVal);
+
+        aPtr += 8;
+        bPtr += 8;
+    }
+
+    number = eighthPoints * 8;
+    volk_32f_log2_32f_generic(bPtr, aPtr, num_points - number);
+}
+
+#endif /* LV_HAVE_AVX && LV_HAVE_FMA */
+
 #ifdef LV_HAVE_AVX2
 #include <immintrin.h>
 #include <volk/volk_avx2_intrinsics.h>
@@ -809,6 +951,148 @@ volk_32f_log2_32f_a_sse4_1(float* bVector, const float* aVector, unsigned int nu
 }
 
 #endif /* LV_HAVE_SSE4_1 */
+
+#ifdef LV_HAVE_AVX
+#include <immintrin.h>
+#include <volk/volk_avx_intrinsics.h>
+
+static inline void
+volk_32f_log2_32f_a_avx(float* bVector, const float* aVector, unsigned int num_points)
+{
+    float* bPtr = bVector;
+    const float* aPtr = aVector;
+
+    unsigned int number = 0;
+    const unsigned int eighthPoints = num_points / 8;
+
+    /* 128-bit integer constants for exponent/mantissa extraction */
+    const __m128i exp_mask_128 = _mm_set1_epi32(0x7f800000);
+    const __m128i mant_mask_128 = _mm_set1_epi32(0x007fffff);
+    const __m128i one_bits_128 = _mm_set1_epi32(0x3f800000);
+    const __m128i exp_bias_128 = _mm_set1_epi32(127);
+    const __m256 one = _mm256_set1_ps(1.0f);
+
+    for (; number < eighthPoints; number++) {
+        __m256 aVal = _mm256_load_ps(aPtr);
+
+        /* Check for special values using AVX float comparisons */
+        __m256 zero_mask = _mm256_cmp_ps(aVal, _mm256_setzero_ps(), _CMP_EQ_OQ);
+        __m256 neg_mask = _mm256_cmp_ps(aVal, _mm256_setzero_ps(), _CMP_LT_OQ);
+        __m256 inf_mask = _mm256_cmp_ps(aVal, _mm256_set1_ps(INFINITY), _CMP_EQ_OQ);
+        __m256 nan_mask = _mm256_cmp_ps(aVal, aVal, _CMP_UNORD_Q);
+        __m256 invalid_mask = _mm256_or_ps(neg_mask, nan_mask);
+
+        /* Split to 128-bit halves for integer bit manipulation (plain AVX has no 256-bit int) */
+        __m128i a_lo = _mm256_castsi256_si128(_mm256_castps_si256(aVal));
+        __m128i a_hi = _mm_castps_si128(_mm256_extractf128_ps(aVal, 1));
+
+        /* Extract exponent: (bits & 0x7f800000) >> 23 - 127 */
+        __m128i exp_lo = _mm_sub_epi32(_mm_srli_epi32(_mm_and_si128(a_lo, exp_mask_128), 23),
+                                       exp_bias_128);
+        __m128i exp_hi = _mm_sub_epi32(_mm_srli_epi32(_mm_and_si128(a_hi, exp_mask_128), 23),
+                                       exp_bias_128);
+        __m256 exp_f = _mm256_insertf128_ps(_mm256_castps128_ps256(_mm_cvtepi32_ps(exp_lo)),
+                                            _mm_cvtepi32_ps(exp_hi), 1);
+
+        /* Extract mantissa as float in [1, 2) */
+        __m128i frac_lo = _mm_or_si128(_mm_and_si128(a_lo, mant_mask_128), one_bits_128);
+        __m128i frac_hi = _mm_or_si128(_mm_and_si128(a_hi, mant_mask_128), one_bits_128);
+        __m256 frac = _mm256_insertf128_ps(_mm256_castps128_ps256(_mm_castsi128_ps(frac_lo)),
+                                           _mm_castsi128_ps(frac_hi), 1);
+
+        /* Evaluate degree-6 polynomial using AVX float ops */
+        __m256 poly = _mm256_log2_poly_avx(frac);
+
+        /* result = exp + poly * (frac - 1) */
+        __m256 bVal = _mm256_add_ps(exp_f, _mm256_mul_ps(poly, _mm256_sub_ps(frac, one)));
+
+        /* Replace special values using AVX blendv */
+        bVal = _mm256_blendv_ps(bVal, _mm256_set1_ps(-127.0f), zero_mask);
+        bVal = _mm256_blendv_ps(bVal, _mm256_set1_ps(127.0f), inf_mask);
+        bVal = _mm256_blendv_ps(bVal, _mm256_set1_ps(NAN), invalid_mask);
+
+        _mm256_store_ps(bPtr, bVal);
+
+        aPtr += 8;
+        bPtr += 8;
+    }
+
+    number = eighthPoints * 8;
+    volk_32f_log2_32f_generic(bPtr, aPtr, num_points - number);
+}
+
+#endif /* LV_HAVE_AVX */
+
+#if LV_HAVE_AVX && LV_HAVE_FMA
+#include <immintrin.h>
+#include <volk/volk_avx_fma_intrinsics.h>
+
+static inline void
+volk_32f_log2_32f_a_avx_fma(float* bVector, const float* aVector, unsigned int num_points)
+{
+    float* bPtr = bVector;
+    const float* aPtr = aVector;
+
+    unsigned int number = 0;
+    const unsigned int eighthPoints = num_points / 8;
+
+    /* 128-bit integer constants for exponent/mantissa extraction */
+    const __m128i exp_mask_128 = _mm_set1_epi32(0x7f800000);
+    const __m128i mant_mask_128 = _mm_set1_epi32(0x007fffff);
+    const __m128i one_bits_128 = _mm_set1_epi32(0x3f800000);
+    const __m128i exp_bias_128 = _mm_set1_epi32(127);
+    const __m256 one = _mm256_set1_ps(1.0f);
+
+    for (; number < eighthPoints; number++) {
+        __m256 aVal = _mm256_load_ps(aPtr);
+
+        /* Check for special values using AVX float comparisons */
+        __m256 zero_mask = _mm256_cmp_ps(aVal, _mm256_setzero_ps(), _CMP_EQ_OQ);
+        __m256 neg_mask = _mm256_cmp_ps(aVal, _mm256_setzero_ps(), _CMP_LT_OQ);
+        __m256 inf_mask = _mm256_cmp_ps(aVal, _mm256_set1_ps(INFINITY), _CMP_EQ_OQ);
+        __m256 nan_mask = _mm256_cmp_ps(aVal, aVal, _CMP_UNORD_Q);
+        __m256 invalid_mask = _mm256_or_ps(neg_mask, nan_mask);
+
+        /* Split to 128-bit halves for integer bit manipulation (plain AVX has no 256-bit int) */
+        __m128i a_lo = _mm256_castsi256_si128(_mm256_castps_si256(aVal));
+        __m128i a_hi = _mm_castps_si128(_mm256_extractf128_ps(aVal, 1));
+
+        /* Extract exponent: (bits & 0x7f800000) >> 23 - 127 */
+        __m128i exp_lo = _mm_sub_epi32(_mm_srli_epi32(_mm_and_si128(a_lo, exp_mask_128), 23),
+                                       exp_bias_128);
+        __m128i exp_hi = _mm_sub_epi32(_mm_srli_epi32(_mm_and_si128(a_hi, exp_mask_128), 23),
+                                       exp_bias_128);
+        __m256 exp_f = _mm256_insertf128_ps(_mm256_castps128_ps256(_mm_cvtepi32_ps(exp_lo)),
+                                            _mm_cvtepi32_ps(exp_hi), 1);
+
+        /* Extract mantissa as float in [1, 2) */
+        __m128i frac_lo = _mm_or_si128(_mm_and_si128(a_lo, mant_mask_128), one_bits_128);
+        __m128i frac_hi = _mm_or_si128(_mm_and_si128(a_hi, mant_mask_128), one_bits_128);
+        __m256 frac = _mm256_insertf128_ps(_mm256_castps128_ps256(_mm_castsi128_ps(frac_lo)),
+                                           _mm_castsi128_ps(frac_hi), 1);
+
+        /* Evaluate degree-6 polynomial using FMA */
+        __m256 poly = _mm256_log2_poly_avx_fma(frac);
+
+        /* result = exp + poly * (frac - 1) */
+        __m256 bVal = _mm256_fmadd_ps(poly, _mm256_sub_ps(frac, one), exp_f);
+
+        /* Replace special values using AVX blendv */
+        bVal = _mm256_blendv_ps(bVal, _mm256_set1_ps(-127.0f), zero_mask);
+        bVal = _mm256_blendv_ps(bVal, _mm256_set1_ps(127.0f), inf_mask);
+        bVal = _mm256_blendv_ps(bVal, _mm256_set1_ps(NAN), invalid_mask);
+
+        _mm256_store_ps(bPtr, bVal);
+
+        aPtr += 8;
+        bPtr += 8;
+    }
+
+    number = eighthPoints * 8;
+    volk_32f_log2_32f_generic(bPtr, aPtr, num_points - number);
+}
+
+#endif /* LV_HAVE_AVX && LV_HAVE_FMA */
 
 #ifdef LV_HAVE_AVX2
 

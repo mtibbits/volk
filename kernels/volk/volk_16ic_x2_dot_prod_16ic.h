@@ -323,6 +323,150 @@ static inline void volk_16ic_x2_dot_prod_16ic_u_avx2(lv_16sc_t* out,
 #endif /* LV_HAVE_AVX2 */
 
 
+#if LV_HAVE_AVX2 && LV_HAVE_FMA
+#include <immintrin.h>
+
+static inline void volk_16ic_x2_dot_prod_16ic_u_avx2_fma(lv_16sc_t* out,
+                                                          const lv_16sc_t* in_a,
+                                                          const lv_16sc_t* in_b,
+                                                          unsigned int num_points)
+{
+    lv_16sc_t dotProduct = lv_cmake((int16_t)0, (int16_t)0);
+
+    const unsigned int avx_iters = num_points / 8;
+
+    const lv_16sc_t* _in_a = in_a;
+    const lv_16sc_t* _in_b = in_b;
+    lv_16sc_t* _out = out;
+    unsigned int number;
+
+    if (avx_iters > 0) {
+        __m256i a, b, c, c_sr, mask_imag, mask_real, real, imag, imag1, imag2, b_sl, a_sl,
+            realcacc, imagcacc, result;
+        __VOLK_ATTR_ALIGNED(32) lv_16sc_t dotProductVector[8];
+
+        realcacc = _mm256_setzero_si256();
+        imagcacc = _mm256_setzero_si256();
+
+        mask_imag = _mm256_set_epi8(0xFF,
+                                    0xFF,
+                                    0,
+                                    0,
+                                    0xFF,
+                                    0xFF,
+                                    0,
+                                    0,
+                                    0xFF,
+                                    0xFF,
+                                    0,
+                                    0,
+                                    0xFF,
+                                    0xFF,
+                                    0,
+                                    0,
+                                    0xFF,
+                                    0xFF,
+                                    0,
+                                    0,
+                                    0xFF,
+                                    0xFF,
+                                    0,
+                                    0,
+                                    0xFF,
+                                    0xFF,
+                                    0,
+                                    0,
+                                    0xFF,
+                                    0xFF,
+                                    0,
+                                    0);
+        mask_real = _mm256_set_epi8(0,
+                                    0,
+                                    0xFF,
+                                    0xFF,
+                                    0,
+                                    0,
+                                    0xFF,
+                                    0xFF,
+                                    0,
+                                    0,
+                                    0xFF,
+                                    0xFF,
+                                    0,
+                                    0,
+                                    0xFF,
+                                    0xFF,
+                                    0,
+                                    0,
+                                    0xFF,
+                                    0xFF,
+                                    0,
+                                    0,
+                                    0xFF,
+                                    0xFF,
+                                    0,
+                                    0,
+                                    0xFF,
+                                    0xFF,
+                                    0,
+                                    0,
+                                    0xFF,
+                                    0xFF);
+
+        for (number = 0; number < avx_iters; number++) {
+            a = _mm256_loadu_si256((const __m256i*)_in_a);
+            __VOLK_PREFETCH(_in_a + 16);
+            b = _mm256_loadu_si256((const __m256i*)_in_b);
+            __VOLK_PREFETCH(_in_b + 16);
+            c = _mm256_mullo_epi16(a, b);
+
+            c_sr = _mm256_srli_si256(c, 2); // Shift a right by imm8 bytes while shifting
+                                            // in zeros, and store the results in dst.
+            real = _mm256_subs_epi16(c, c_sr);
+
+            b_sl = _mm256_slli_si256(b, 2);
+            a_sl = _mm256_slli_si256(a, 2);
+
+            imag1 = _mm256_mullo_epi16(a, b_sl);
+            imag2 = _mm256_mullo_epi16(b, a_sl);
+
+            imag = _mm256_adds_epi16(imag1, imag2); // with saturation arithmetic!
+
+            realcacc = _mm256_adds_epi16(realcacc, real);
+            imagcacc = _mm256_adds_epi16(imagcacc, imag);
+
+            _in_a += 8;
+            _in_b += 8;
+        }
+
+        realcacc = _mm256_and_si256(realcacc, mask_real);
+        imagcacc = _mm256_and_si256(imagcacc, mask_imag);
+
+        result = _mm256_or_si256(realcacc, imagcacc);
+
+        _mm256_storeu_si256((__m256i*)dotProductVector,
+                            result); // Store the results back into the dot product vector
+
+        for (number = 0; number < 8; ++number) {
+            dotProduct = lv_cmake(
+                sat_adds16i(lv_creal(dotProduct), lv_creal(dotProductVector[number])),
+                sat_adds16i(lv_cimag(dotProduct), lv_cimag(dotProductVector[number])));
+        }
+    }
+
+    if (num_points % 8 > 0) {
+        lv_16sc_t tail_result;
+        volk_16ic_x2_dot_prod_16ic_generic(&tail_result, _in_a, _in_b, num_points % 8);
+        dotProduct =
+            lv_cmake(sat_adds16i(lv_creal(dotProduct), lv_creal(tail_result)),
+                     sat_adds16i(lv_cimag(dotProduct), lv_cimag(tail_result)));
+    }
+
+    *_out = dotProduct;
+}
+#endif /* LV_HAVE_AVX2 && LV_HAVE_FMA */
+
+
 #ifdef LV_HAVE_AVX512BW
 #include <immintrin.h>
 
@@ -399,6 +543,88 @@ static inline void volk_16ic_x2_dot_prod_16ic_u_avx512bw(lv_16sc_t* out,
     *_out = dotProduct;
 }
 #endif /* LV_HAVE_AVX512BW */
+
+
+#ifdef LV_HAVE_AVX512VNNI
+#include <immintrin.h>
+
+static inline void volk_16ic_x2_dot_prod_16ic_u_avx512vnni(lv_16sc_t* out,
+                                                             const lv_16sc_t* in_a,
+                                                             const lv_16sc_t* in_b,
+                                                             unsigned int num_points)
+{
+    const unsigned int avx512_iters = num_points / 16;
+    const lv_16sc_t* _in_a = in_a;
+    const lv_16sc_t* _in_b = in_b;
+    unsigned int number;
+
+    /* 4 independent int32 accumulators for pipeline utilization */
+    __m512i realcacc0 = _mm512_setzero_si512();
+    __m512i realcacc1 = _mm512_setzero_si512();
+    __m512i imagcacc0 = _mm512_setzero_si512();
+    __m512i imagcacc1 = _mm512_setzero_si512();
+
+    /* [1, -1] as int16 pairs: negates imag for conjugate-style real computation */
+    const __m512i neg_mask = _mm512_set1_epi32(0xFFFF0001);
+
+    for (number = 0; number + 1 < avx512_iters; number += 2) {
+        __m512i a0 = _mm512_loadu_si512((const __m512i*)_in_a);
+        __m512i b0 = _mm512_loadu_si512((const __m512i*)_in_b);
+        __m512i a1 = _mm512_loadu_si512((const __m512i*)(_in_a + 16));
+        __m512i b1 = _mm512_loadu_si512((const __m512i*)(_in_b + 16));
+
+        /* b_conj = [re_b, -im_b]: madd gives re*re - im*im */
+        __m512i b0_conj = _mm512_mullo_epi16(b0, neg_mask);
+        __m512i b1_conj = _mm512_mullo_epi16(b1, neg_mask);
+
+        /* b_swap = [im_b, re_b]: madd gives re*im + im*re */
+        __m512i b0_swap = _mm512_rol_epi32(b0, 16);
+        __m512i b1_swap = _mm512_rol_epi32(b1, 16);
+
+        /* Fused multiply-add-accumulate via VNNI dpwssd */
+        realcacc0 = _mm512_dpwssd_epi32(realcacc0, a0, b0_conj);
+        realcacc1 = _mm512_dpwssd_epi32(realcacc1, a1, b1_conj);
+        imagcacc0 = _mm512_dpwssd_epi32(imagcacc0, a0, b0_swap);
+        imagcacc1 = _mm512_dpwssd_epi32(imagcacc1, a1, b1_swap);
+
+        _in_a += 32;
+        _in_b += 32;
+    }
+
+    /* Handle odd iteration */
+    if (number < avx512_iters) {
+        __m512i a0 = _mm512_loadu_si512((const __m512i*)_in_a);
+        __m512i b0 = _mm512_loadu_si512((const __m512i*)_in_b);
+        __m512i b0_conj = _mm512_mullo_epi16(b0, neg_mask);
+        __m512i b0_swap = _mm512_rol_epi32(b0, 16);
+        realcacc0 = _mm512_dpwssd_epi32(realcacc0, a0, b0_conj);
+        imagcacc0 = _mm512_dpwssd_epi32(imagcacc0, a0, b0_swap);
+        _in_a += 16;
+        _in_b += 16;
+    }
+
+    /* Combine accumulators and reduce */
+    realcacc0 = _mm512_add_epi32(realcacc0, realcacc1);
+    imagcacc0 = _mm512_add_epi32(imagcacc0, imagcacc1);
+
+    int32_t real_sum = _mm512_reduce_add_epi32(realcacc0);
+    int32_t imag_sum = _mm512_reduce_add_epi32(imagcacc0);
+
+    lv_16sc_t dotProduct = lv_cmake((int16_t)real_sum, (int16_t)imag_sum);
+
+    /* Handle tail */
+    if (num_points > avx512_iters * 16) {
+        lv_16sc_t tail_result;
+        volk_16ic_x2_dot_prod_16ic_generic(
+            &tail_result, _in_a, _in_b, num_points - avx512_iters * 16);
+        dotProduct =
+            lv_cmake(sat_adds16i(lv_creal(dotProduct), lv_creal(tail_result)),
+                     sat_adds16i(lv_cimag(dotProduct), lv_cimag(tail_result)));
+    }
+
+    *out = dotProduct;
+}
+#endif /* LV_HAVE_AVX512VNNI */
 
 
 #ifdef LV_HAVE_NEON
@@ -964,6 +1190,150 @@ static inline void volk_16ic_x2_dot_prod_16ic_a_avx2(lv_16sc_t* out,
 #endif /* LV_HAVE_AVX2 */
 
 
+#if LV_HAVE_AVX2 && LV_HAVE_FMA
+#include <immintrin.h>
+
+static inline void volk_16ic_x2_dot_prod_16ic_a_avx2_fma(lv_16sc_t* out,
+                                                          const lv_16sc_t* in_a,
+                                                          const lv_16sc_t* in_b,
+                                                          unsigned int num_points)
+{
+    lv_16sc_t dotProduct = lv_cmake((int16_t)0, (int16_t)0);
+
+    const unsigned int avx_iters = num_points / 8;
+
+    const lv_16sc_t* _in_a = in_a;
+    const lv_16sc_t* _in_b = in_b;
+    lv_16sc_t* _out = out;
+    unsigned int number;
+
+    if (avx_iters > 0) {
+        __m256i a, b, c, c_sr, mask_imag, mask_real, real, imag, imag1, imag2, b_sl, a_sl,
+            realcacc, imagcacc, result;
+        __VOLK_ATTR_ALIGNED(32) lv_16sc_t dotProductVector[8];
+
+        realcacc = _mm256_setzero_si256();
+        imagcacc = _mm256_setzero_si256();
+
+        mask_imag = _mm256_set_epi8(0xFF,
+                                    0xFF,
+                                    0,
+                                    0,
+                                    0xFF,
+                                    0xFF,
+                                    0,
+                                    0,
+                                    0xFF,
+                                    0xFF,
+                                    0,
+                                    0,
+                                    0xFF,
+                                    0xFF,
+                                    0,
+                                    0,
+                                    0xFF,
+                                    0xFF,
+                                    0,
+                                    0,
+                                    0xFF,
+                                    0xFF,
+                                    0,
+                                    0,
+                                    0xFF,
+                                    0xFF,
+                                    0,
+                                    0,
+                                    0xFF,
+                                    0xFF,
+                                    0,
+                                    0);
+        mask_real = _mm256_set_epi8(0,
+                                    0,
+                                    0xFF,
+                                    0xFF,
+                                    0,
+                                    0,
+                                    0xFF,
+                                    0xFF,
+                                    0,
+                                    0,
+                                    0xFF,
+                                    0xFF,
+                                    0,
+                                    0,
+                                    0xFF,
+                                    0xFF,
+                                    0,
+                                    0,
+                                    0xFF,
+                                    0xFF,
+                                    0,
+                                    0,
+                                    0xFF,
+                                    0xFF,
+                                    0,
+                                    0,
+                                    0xFF,
+                                    0xFF,
+                                    0,
+                                    0,
+                                    0xFF,
+                                    0xFF);
+
+        for (number = 0; number < avx_iters; number++) {
+            a = _mm256_load_si256((const __m256i*)_in_a);
+            __VOLK_PREFETCH(_in_a + 16);
+            b = _mm256_load_si256((const __m256i*)_in_b);
+            __VOLK_PREFETCH(_in_b + 16);
+            c = _mm256_mullo_epi16(a, b);
+
+            c_sr = _mm256_srli_si256(c, 2); // Shift a right by imm8 bytes while shifting
+                                            // in zeros, and store the results in dst.
+            real = _mm256_subs_epi16(c, c_sr);
+
+            b_sl = _mm256_slli_si256(b, 2);
+            a_sl = _mm256_slli_si256(a, 2);
+
+            imag1 = _mm256_mullo_epi16(a, b_sl);
+            imag2 = _mm256_mullo_epi16(b, a_sl);
+
+            imag = _mm256_adds_epi16(imag1, imag2); // with saturation arithmetic!
+
+            realcacc = _mm256_adds_epi16(realcacc, real);
+            imagcacc = _mm256_adds_epi16(imagcacc, imag);
+
+            _in_a += 8;
+            _in_b += 8;
+        }
+
+        realcacc = _mm256_and_si256(realcacc, mask_real);
+        imagcacc = _mm256_and_si256(imagcacc, mask_imag);
+
+        result = _mm256_or_si256(realcacc, imagcacc);
+
+        _mm256_store_si256((__m256i*)dotProductVector,
+                           result); // Store the results back into the dot product vector
+
+        for (number = 0; number < 8; ++number) {
+            dotProduct = lv_cmake(
+                sat_adds16i(lv_creal(dotProduct), lv_creal(dotProductVector[number])),
+                sat_adds16i(lv_cimag(dotProduct), lv_cimag(dotProductVector[number])));
+        }
+    }
+
+    if (num_points % 8 > 0) {
+        lv_16sc_t tail_result;
+        volk_16ic_x2_dot_prod_16ic_generic(&tail_result, _in_a, _in_b, num_points % 8);
+        dotProduct =
+            lv_cmake(sat_adds16i(lv_creal(dotProduct), lv_creal(tail_result)),
+                     sat_adds16i(lv_cimag(dotProduct), lv_cimag(tail_result)));
+    }
+
+    *_out = dotProduct;
+}
+#endif /* LV_HAVE_AVX2 && LV_HAVE_FMA */
+
+
 #ifdef LV_HAVE_AVX512BW
 #include <immintrin.h>
 
@@ -1040,6 +1410,88 @@ static inline void volk_16ic_x2_dot_prod_16ic_a_avx512bw(lv_16sc_t* out,
     *_out = dotProduct;
 }
 #endif /* LV_HAVE_AVX512BW */
+
+
+#ifdef LV_HAVE_AVX512VNNI
+#include <immintrin.h>
+
+static inline void volk_16ic_x2_dot_prod_16ic_a_avx512vnni(lv_16sc_t* out,
+                                                             const lv_16sc_t* in_a,
+                                                             const lv_16sc_t* in_b,
+                                                             unsigned int num_points)
+{
+    const unsigned int avx512_iters = num_points / 16;
+    const lv_16sc_t* _in_a = in_a;
+    const lv_16sc_t* _in_b = in_b;
+    unsigned int number;
+
+    /* 4 independent int32 accumulators for pipeline utilization */
+    __m512i realcacc0 = _mm512_setzero_si512();
+    __m512i realcacc1 = _mm512_setzero_si512();
+    __m512i imagcacc0 = _mm512_setzero_si512();
+    __m512i imagcacc1 = _mm512_setzero_si512();
+
+    /* [1, -1] as int16 pairs: negates imag for conjugate-style real computation */
+    const __m512i neg_mask = _mm512_set1_epi32(0xFFFF0001);
+
+    for (number = 0; number + 1 < avx512_iters; number += 2) {
+        __m512i a0 = _mm512_load_si512((const __m512i*)_in_a);
+        __m512i b0 = _mm512_load_si512((const __m512i*)_in_b);
+        __m512i a1 = _mm512_load_si512((const __m512i*)(_in_a + 16));
+        __m512i b1 = _mm512_load_si512((const __m512i*)(_in_b + 16));
+
+        /* b_conj = [re_b, -im_b]: madd gives re*re - im*im */
+        __m512i b0_conj = _mm512_mullo_epi16(b0, neg_mask);
+        __m512i b1_conj = _mm512_mullo_epi16(b1, neg_mask);
+
+        /* b_swap = [im_b, re_b]: madd gives re*im + im*re */
+        __m512i b0_swap = _mm512_rol_epi32(b0, 16);
+        __m512i b1_swap = _mm512_rol_epi32(b1, 16);
+
+        /* Fused multiply-add-accumulate via VNNI dpwssd */
+        realcacc0 = _mm512_dpwssd_epi32(realcacc0, a0, b0_conj);
+        realcacc1 = _mm512_dpwssd_epi32(realcacc1, a1, b1_conj);
+        imagcacc0 = _mm512_dpwssd_epi32(imagcacc0, a0, b0_swap);
+        imagcacc1 = _mm512_dpwssd_epi32(imagcacc1, a1, b1_swap);
+
+        _in_a += 32;
+        _in_b += 32;
+    }
+
+    /* Handle odd iteration */
+    if (number < avx512_iters) {
+        __m512i a0 = _mm512_load_si512((const __m512i*)_in_a);
+        __m512i b0 = _mm512_load_si512((const __m512i*)_in_b);
+        __m512i b0_conj = _mm512_mullo_epi16(b0, neg_mask);
+        __m512i b0_swap = _mm512_rol_epi32(b0, 16);
+        realcacc0 = _mm512_dpwssd_epi32(realcacc0, a0, b0_conj);
+        imagcacc0 = _mm512_dpwssd_epi32(imagcacc0, a0, b0_swap);
+        _in_a += 16;
+        _in_b += 16;
+    }
+
+    /* Combine accumulators and reduce */
+    realcacc0 = _mm512_add_epi32(realcacc0, realcacc1);
+    imagcacc0 = _mm512_add_epi32(imagcacc0, imagcacc1);
+
+    int32_t real_sum = _mm512_reduce_add_epi32(realcacc0);
+    int32_t imag_sum = _mm512_reduce_add_epi32(imagcacc0);
+
+    lv_16sc_t dotProduct = lv_cmake((int16_t)real_sum, (int16_t)imag_sum);
+
+    /* Handle tail */
+    if (num_points > avx512_iters * 16) {
+        lv_16sc_t tail_result;
+        volk_16ic_x2_dot_prod_16ic_generic(
+            &tail_result, _in_a, _in_b, num_points - avx512_iters * 16);
+        dotProduct =
+            lv_cmake(sat_adds16i(lv_creal(dotProduct), lv_creal(tail_result)),
+                     sat_adds16i(lv_cimag(dotProduct), lv_cimag(tail_result)));
+    }
+
+    *out = dotProduct;
+}
+#endif /* LV_HAVE_AVX512VNNI */
 
 
 #endif /* INCLUDED_volk_16ic_x2_dot_prod_16ic_a_H */

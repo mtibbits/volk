@@ -908,6 +908,119 @@ static inline void volk_8u_x2_encodeframepolar_8u_rvvseg(unsigned char* frame,
 }
 #endif /* LV_HAVE_RVVSEG */
 
+
+#ifdef LV_HAVE_NEON
+#include <arm_neon.h>
+
+static inline void volk_8u_x2_encodeframepolar_8u_neon(unsigned char* frame,
+                                                        unsigned char* temp,
+                                                        unsigned int frame_size)
+{
+    if (frame_size < 16) {
+        volk_8u_x2_encodeframepolar_8u_generic(frame, temp, frame_size);
+        return;
+    }
+
+    const unsigned int po2 = log2_of_power_of_2(frame_size);
+
+    unsigned int stage = po2;
+    unsigned char* frame_ptr = frame;
+    const unsigned char* temp_ptr = temp;
+
+    unsigned int frame_half = frame_size >> 1;
+    unsigned int num_branches = 1;
+    unsigned int branch;
+    unsigned int bit;
+
+    /* Upper stages: deinterleave pairs of bytes, XOR even with odd */
+    while (stage > 4) {
+        frame_ptr = frame;
+        temp_ptr = temp;
+
+        for (branch = 0; branch < num_branches; ++branch) {
+            for (bit = 0; bit < frame_half; bit += 16) {
+                /* Load 32 bytes as interleaved even/odd pairs */
+                uint8x16x2_t pairs = vld2q_u8(temp_ptr);
+                temp_ptr += 32;
+
+                /* even[i] = temp[2i], odd[i] = temp[2i+1] */
+                /* frame[i] = even[i] ^ odd[i], frame[i + half] = odd[i] */
+                uint8x16_t xored = veorq_u8(pairs.val[0], pairs.val[1]);
+                vst1q_u8(frame_ptr, xored);
+                vst1q_u8(frame_ptr + frame_half, pairs.val[1]);
+                frame_ptr += 16;
+            }
+
+            frame_ptr += frame_half;
+        }
+        memcpy(temp, frame, sizeof(unsigned char) * frame_size);
+
+        num_branches = num_branches << 1;
+        frame_half = frame_half >> 1;
+        stage--;
+    }
+
+    /* Final 4 stages within each 16-byte block */
+    frame_ptr = frame;
+    temp_ptr = temp;
+
+    /* Lookup table for the bit-reversal shuffle (same permutation as SSSE3) */
+    static const uint8_t shuffle_tbl[16] = {
+        0, 8, 4, 12, 2, 10, 6, 14, 1, 9, 5, 13, 3, 11, 7, 15
+    };
+    const uint8x16_t shuffle_idx = vld1q_u8(shuffle_tbl);
+
+    /* Masks for progressive XOR stages */
+    static const uint8_t mask4_tbl[16] = {
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+    };
+    static const uint8_t mask3_tbl[16] = {
+        0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
+        0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00
+    };
+    static const uint8_t mask2_tbl[16] = {
+        0xFF, 0xFF, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00,
+        0xFF, 0xFF, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00
+    };
+    static const uint8_t mask1_tbl[16] = {
+        0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00,
+        0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00
+    };
+    const uint8x16_t mask_stage4 = vld1q_u8(mask4_tbl);
+    const uint8x16_t mask_stage3 = vld1q_u8(mask3_tbl);
+    const uint8x16_t mask_stage2 = vld1q_u8(mask2_tbl);
+    const uint8x16_t mask_stage1 = vld1q_u8(mask1_tbl);
+
+    for (branch = 0; branch < num_branches; ++branch) {
+        uint8x16_t r = vld1q_u8(temp_ptr);
+        temp_ptr += 16;
+
+        /* Bit-reversal shuffle using vtbl (NEON table lookup) */
+        uint8x16_t r_shuffled = vqtbl1q_u8(r, shuffle_idx);
+
+        /* Stage 4: XOR upper 8 bytes into lower 8 bytes */
+        uint8x16_t shifted = vandq_u8(vextq_u8(r_shuffled, vdupq_n_u8(0), 8), mask_stage4);
+        r_shuffled = veorq_u8(shifted, r_shuffled);
+
+        /* Stage 3: XOR bytes shifted by 4 */
+        shifted = vandq_u8(vextq_u8(r_shuffled, vdupq_n_u8(0), 4), mask_stage3);
+        r_shuffled = veorq_u8(shifted, r_shuffled);
+
+        /* Stage 2: XOR bytes shifted by 2 */
+        shifted = vandq_u8(vextq_u8(r_shuffled, vdupq_n_u8(0), 2), mask_stage2);
+        r_shuffled = veorq_u8(shifted, r_shuffled);
+
+        /* Stage 1: XOR bytes shifted by 1 */
+        shifted = vandq_u8(vextq_u8(r_shuffled, vdupq_n_u8(0), 1), mask_stage1);
+        r_shuffled = veorq_u8(shifted, r_shuffled);
+
+        vst1q_u8(frame_ptr, r_shuffled);
+        frame_ptr += 16;
+    }
+}
+#endif /* LV_HAVE_NEON */
+
 #endif /* VOLK_KERNELS_VOLK_VOLK_8U_X2_ENCODEFRAMEPOLAR_8U_U_H_ */
 
 #ifndef VOLK_KERNELS_VOLK_VOLK_8U_X2_ENCODEFRAMEPOLAR_8U_A_H_

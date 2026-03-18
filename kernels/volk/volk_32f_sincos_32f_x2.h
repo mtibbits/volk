@@ -283,6 +283,99 @@ static inline void volk_32f_sincos_32f_x2_u_avx(float* sinVector,
 
 #endif /* LV_HAVE_AVX */
 
+#if LV_HAVE_AVX && LV_HAVE_FMA
+#include <immintrin.h>
+#include <volk/volk_avx_fma_intrinsics.h>
+
+static inline void volk_32f_sincos_32f_x2_u_avx_fma(float* sinVector,
+                                                  float* cosVector,
+                                                  const float* inVector,
+                                                  unsigned int num_points)
+{
+    float* sinPtr = sinVector;
+    float* cosPtr = cosVector;
+    const float* inPtr = inVector;
+
+    unsigned int number = 0;
+    unsigned int eighthPoints = num_points / 8;
+
+    // Constants for Cody-Waite argument reduction
+    const __m256 two_over_pi = _mm256_set1_ps(0x1.45f306p-1f);
+    const __m256 pi_over_2_hi = _mm256_set1_ps(0x1.921fb6p+0f);
+    const __m256 pi_over_2_lo = _mm256_set1_ps(-0x1.777a5cp-25f);
+
+    // 128-bit integer constants (AVX lacks 256-bit integer ops)
+    const __m128i ones_128 = _mm_set1_epi32(1);
+    const __m128i twos_128 = _mm_set1_epi32(2);
+    const __m256 sign_bit = _mm256_set1_ps(-0.0f);
+
+    for (; number < eighthPoints; number++) {
+        __m256 x = _mm256_loadu_ps(inPtr);
+
+        // Argument reduction: n = round(x * 2/pi)
+        __m256 n_f = _mm256_round_ps(_mm256_mul_ps(x, two_over_pi),
+                                     _MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC);
+        __m256i n = _mm256_cvtps_epi32(n_f);
+
+        // r = x - n * (pi/2)
+        __m256 r = _mm256_sub_ps(x, _mm256_mul_ps(n_f, pi_over_2_hi));
+        r = _mm256_sub_ps(r, _mm256_mul_ps(n_f, pi_over_2_lo));
+
+        // Evaluate both sin and cos polynomials (AVX 256-bit float)
+        __m256 sin_r = _mm256_sin_poly_avx_fma(r);
+        __m256 cos_r = _mm256_cos_poly_avx_fma(r);
+
+        // Quadrant selection — split to 128-bit halves for integer ops
+        __m128i n_lo = _mm256_castsi256_si128(n);
+        __m128i n_hi = _mm256_extractf128_si256(n, 1);
+
+        __m128i n_and_1_lo = _mm_and_si128(n_lo, ones_128);
+        __m128i n_and_1_hi = _mm_and_si128(n_hi, ones_128);
+        __m128i n_and_2_lo = _mm_and_si128(n_lo, twos_128);
+        __m128i n_and_2_hi = _mm_and_si128(n_hi, twos_128);
+        __m128i n_plus_1_and_2_lo =
+            _mm_and_si128(_mm_add_epi32(n_lo, ones_128), twos_128);
+        __m128i n_plus_1_and_2_hi =
+            _mm_and_si128(_mm_add_epi32(n_hi, ones_128), twos_128);
+
+        // Build 256-bit masks from 128-bit integer comparisons
+        __m128 swap_lo = _mm_castsi128_ps(_mm_cmpeq_epi32(n_and_1_lo, ones_128));
+        __m128 swap_hi = _mm_castsi128_ps(_mm_cmpeq_epi32(n_and_1_hi, ones_128));
+        __m256 sin_swap = _mm256_insertf128_ps(
+            _mm256_castps128_ps256(swap_lo), swap_hi, 1);
+
+        __m128 sneg_lo = _mm_castsi128_ps(_mm_cmpeq_epi32(n_and_2_lo, twos_128));
+        __m128 sneg_hi = _mm_castsi128_ps(_mm_cmpeq_epi32(n_and_2_hi, twos_128));
+        __m256 sin_neg = _mm256_insertf128_ps(
+            _mm256_castps128_ps256(sneg_lo), sneg_hi, 1);
+
+        __m128 cneg_lo =
+            _mm_castsi128_ps(_mm_cmpeq_epi32(n_plus_1_and_2_lo, twos_128));
+        __m128 cneg_hi =
+            _mm_castsi128_ps(_mm_cmpeq_epi32(n_plus_1_and_2_hi, twos_128));
+        __m256 cos_neg = _mm256_insertf128_ps(
+            _mm256_castps128_ps256(cneg_lo), cneg_hi, 1);
+
+        // For sin: swap when n&1, negate when n&2
+        __m256 sin_result = _mm256_blendv_ps(sin_r, cos_r, sin_swap);
+        sin_result = _mm256_xor_ps(sin_result, _mm256_and_ps(sin_neg, sign_bit));
+
+        // For cos: swap when n&1, negate when (n+1)&2
+        __m256 cos_result = _mm256_blendv_ps(cos_r, sin_r, sin_swap);
+        cos_result = _mm256_xor_ps(cos_result, _mm256_and_ps(cos_neg, sign_bit));
+
+        _mm256_storeu_ps(sinPtr, sin_result);
+        _mm256_storeu_ps(cosPtr, cos_result);
+        inPtr += 8;
+        sinPtr += 8;
+        cosPtr += 8;
+    }
+
+    volk_32f_sincos_32f_x2_generic(sinPtr, cosPtr, inPtr, num_points - eighthPoints * 8);
+}
+
+#endif /* LV_HAVE_AVX && LV_HAVE_FMA */
+
 #ifdef LV_HAVE_AVX2
 #include <immintrin.h>
 #include <volk/volk_avx2_intrinsics.h>
@@ -511,6 +604,80 @@ static inline void volk_32f_sincos_32f_x2_u_avx512f(float* sinVector,
 
 #endif /* LV_HAVE_AVX512F */
 
+#ifdef LV_HAVE_AVX512DQ
+#include <immintrin.h>
+#include <volk/volk_avx512_intrinsics.h>
+
+static inline void volk_32f_sincos_32f_x2_u_avx512dq(float* sinVector,
+                                                      float* cosVector,
+                                                      const float* inVector,
+                                                      unsigned int num_points)
+{
+    float* sinPtr = sinVector;
+    float* cosPtr = cosVector;
+    const float* inPtr = inVector;
+
+    unsigned int number = 0;
+    unsigned int sixteenPoints = num_points / 16;
+
+    // Constants for Cody-Waite argument reduction
+    const __m512 two_over_pi = _mm512_set1_ps(0x1.45f306p-1f);
+    const __m512 pi_over_2_hi = _mm512_set1_ps(0x1.921fb6p+0f);
+    const __m512 pi_over_2_lo = _mm512_set1_ps(-0x1.777a5cp-25f);
+
+    const __m512i ones = _mm512_set1_epi32(1);
+    const __m512i twos = _mm512_set1_epi32(2);
+    const __m512 sign_bit = _mm512_set1_ps(-0.0f);
+
+    for (; number < sixteenPoints; number++) {
+        __m512 x = _mm512_loadu_ps(inPtr);
+
+        // Argument reduction: n = round(x * 2/pi)
+        __m512 n_f = _mm512_roundscale_ps(_mm512_mul_ps(x, two_over_pi),
+                                          _MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC);
+        __m512i n = _mm512_cvtps_epi32(n_f);
+
+        // r = x - n * (pi/2)
+        __m512 r = _mm512_fnmadd_ps(n_f, pi_over_2_hi, x);
+        r = _mm512_fnmadd_ps(n_f, pi_over_2_lo, r);
+
+        // Evaluate both sin and cos polynomials
+        __m512 sin_r = _mm512_sin_poly_avx512(r);
+        __m512 cos_r = _mm512_cos_poly_avx512(r);
+
+        // Quadrant selection
+        __m512i n_and_1 = _mm512_and_si512(n, ones);
+        __m512i n_and_2 = _mm512_and_si512(n, twos);
+        __m512i n_plus_1_and_2 = _mm512_and_si512(_mm512_add_epi32(n, ones), twos);
+
+        // For sin: swap when n&1, negate when n&2
+        __mmask16 sin_swap = _mm512_cmpeq_epi32_mask(n_and_1, ones);
+        __m512 sin_result = _mm512_mask_blend_ps(sin_swap, sin_r, cos_r);
+        __mmask16 sin_neg = _mm512_cmpeq_epi32_mask(n_and_2, twos);
+        sin_result = _mm512_mask_xor_ps(sin_result, sin_neg, sin_result, sign_bit);
+
+        // For cos: swap when n&1, negate when (n+1)&2
+        __mmask16 cos_swap = sin_swap;
+        __m512 cos_result = _mm512_mask_blend_ps(cos_swap, cos_r, sin_r);
+        __mmask16 cos_neg = _mm512_cmpeq_epi32_mask(n_plus_1_and_2, twos);
+        cos_result = _mm512_mask_xor_ps(cos_result, cos_neg, cos_result, sign_bit);
+
+        _mm512_storeu_ps(sinPtr, sin_result);
+        _mm512_storeu_ps(cosPtr, cos_result);
+        inPtr += 16;
+        sinPtr += 16;
+        cosPtr += 16;
+    }
+
+    number = sixteenPoints * 16;
+    for (; number < num_points; number++) {
+        *sinPtr++ = sinf(*inPtr);
+        *cosPtr++ = cosf(*inPtr++);
+    }
+}
+
+#endif /* LV_HAVE_AVX512DQ */
+
 #ifdef LV_HAVE_NEON
 #include <arm_neon.h>
 #include <volk/volk_neon_intrinsics.h>
@@ -660,6 +827,84 @@ static inline void volk_32f_sincos_32f_x2_neonv8(float* sinVector,
     }
 }
 #endif /* LV_HAVE_NEONV8 */
+
+#ifdef LV_HAVE_RVV
+#include <riscv_vector.h>
+
+static inline void volk_32f_sincos_32f_x2_rvv(float* sinVector,
+                                                float* cosVector,
+                                                const float* inVector,
+                                                unsigned int num_points)
+{
+    /* Cody-Waite argument reduction constants */
+    const float two_over_pi = 0x1.45f306p-1f;
+    const float pi_over_2_hi = 0x1.921fb6p+0f;
+    const float pi_over_2_lo = -0x1.777a5cp-25f;
+
+    /* Sin polynomial: sin(x) = x + x^3*(s1 + x^2*(s2 + x^2*s3)) */
+    const float s1 = -0x1.555552p-3f;
+    const float s2 = +0x1.110be2p-7f;
+    const float s3 = -0x1.9ab22ap-13f;
+
+    /* Cos polynomial: cos(x) = 1 + x^2*(c1 + x^2*(c2 + x^2*c3)) */
+    const float c1f = -0x1.fffff4p-2f;
+    const float c2f = +0x1.554a46p-5f;
+    const float c3f = -0x1.661be2p-10f;
+
+    size_t n = (size_t)num_points;
+    for (size_t vl; n > 0;
+         n -= vl, inVector += vl, sinVector += vl, cosVector += vl) {
+        vl = __riscv_vsetvl_e32m4(n);
+        vfloat32m4_t x = __riscv_vle32_v_f32m4(inVector, vl);
+
+        /* n = round(x * 2/pi) */
+        vfloat32m4_t n_f = __riscv_vfmul(x, two_over_pi, vl);
+        vint32m4_t ni = __riscv_vfcvt_x(n_f, vl); /* round to nearest */
+        n_f = __riscv_vfcvt_f(ni, vl);
+
+        /* r = x - n * pi/2 (extended precision) */
+        vfloat32m4_t r = __riscv_vfnmsac(x, pi_over_2_hi, n_f, vl);
+        r = __riscv_vfnmsac(r, pi_over_2_lo, n_f, vl);
+
+        /* Evaluate sin and cos polynomials on reduced argument */
+        vfloat32m4_t r2 = __riscv_vfmul(r, r, vl);
+        vfloat32m4_t r3 = __riscv_vfmul(r2, r, vl);
+
+        /* sin(r) = r + r^3*(s1 + r^2*(s2 + r^2*s3)) */
+        vfloat32m4_t sp = __riscv_vfmv_v_f_f32m4(s3, vl);
+        sp = __riscv_vfmadd(sp, r2, __riscv_vfmv_v_f_f32m4(s2, vl), vl);
+        sp = __riscv_vfmadd(sp, r2, __riscv_vfmv_v_f_f32m4(s1, vl), vl);
+        vfloat32m4_t sin_r = __riscv_vfmacc(r, r3, sp, vl);
+
+        /* cos(r) = 1 + r^2*(c1 + r^2*(c2 + r^2*c3)) */
+        vfloat32m4_t cp = __riscv_vfmv_v_f_f32m4(c3f, vl);
+        cp = __riscv_vfmadd(cp, r2, __riscv_vfmv_v_f_f32m4(c2f, vl), vl);
+        cp = __riscv_vfmadd(cp, r2, __riscv_vfmv_v_f_f32m4(c1f, vl), vl);
+        vfloat32m4_t cos_r = __riscv_vfmacc(
+            __riscv_vfmv_v_f_f32m4(1.0f, vl), r2, cp, vl);
+
+        /* Quadrant selection based on n & 3 */
+        vint32m4_t n_and_1 = __riscv_vand(ni, 1, vl);
+        vint32m4_t n_and_2 = __riscv_vand(ni, 2, vl);
+        vint32m4_t n_plus_1_and_2 = __riscv_vand(__riscv_vadd(ni, 1, vl), 2, vl);
+
+        vbool8_t swap = __riscv_vmsne(n_and_1, 0, vl);
+
+        /* Sin: use cos_r when n&1, negate when n&2 */
+        vfloat32m4_t sin_result = __riscv_vmerge(sin_r, cos_r, swap, vl);
+        vbool8_t sin_neg = __riscv_vmsne(n_and_2, 0, vl);
+        sin_result = __riscv_vfneg_mu(sin_neg, sin_result, sin_result, vl);
+
+        /* Cos: use sin_r when n&1, negate when (n+1)&2 */
+        vfloat32m4_t cos_result = __riscv_vmerge(cos_r, sin_r, swap, vl);
+        vbool8_t cos_neg = __riscv_vmsne(n_plus_1_and_2, 0, vl);
+        cos_result = __riscv_vfneg_mu(cos_neg, cos_result, cos_result, vl);
+
+        __riscv_vse32(sinVector, sin_result, vl);
+        __riscv_vse32(cosVector, cos_result, vl);
+    }
+}
+#endif /* LV_HAVE_RVV */
 
 #endif /* INCLUDED_volk_32f_sincos_32f_x2_u_H */
 
@@ -832,6 +1077,99 @@ static inline void volk_32f_sincos_32f_x2_a_avx(float* sinVector,
 }
 
 #endif /* LV_HAVE_AVX */
+
+#if LV_HAVE_AVX && LV_HAVE_FMA
+#include <immintrin.h>
+#include <volk/volk_avx_fma_intrinsics.h>
+
+static inline void volk_32f_sincos_32f_x2_a_avx_fma(float* sinVector,
+                                                  float* cosVector,
+                                                  const float* inVector,
+                                                  unsigned int num_points)
+{
+    float* sinPtr = sinVector;
+    float* cosPtr = cosVector;
+    const float* inPtr = inVector;
+
+    unsigned int number = 0;
+    unsigned int eighthPoints = num_points / 8;
+
+    // Constants for Cody-Waite argument reduction
+    const __m256 two_over_pi = _mm256_set1_ps(0x1.45f306p-1f);
+    const __m256 pi_over_2_hi = _mm256_set1_ps(0x1.921fb6p+0f);
+    const __m256 pi_over_2_lo = _mm256_set1_ps(-0x1.777a5cp-25f);
+
+    // 128-bit integer constants (AVX lacks 256-bit integer ops)
+    const __m128i ones_128 = _mm_set1_epi32(1);
+    const __m128i twos_128 = _mm_set1_epi32(2);
+    const __m256 sign_bit = _mm256_set1_ps(-0.0f);
+
+    for (; number < eighthPoints; number++) {
+        __m256 x = _mm256_load_ps(inPtr);
+
+        // Argument reduction: n = round(x * 2/pi)
+        __m256 n_f = _mm256_round_ps(_mm256_mul_ps(x, two_over_pi),
+                                     _MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC);
+        __m256i n = _mm256_cvtps_epi32(n_f);
+
+        // r = x - n * (pi/2)
+        __m256 r = _mm256_sub_ps(x, _mm256_mul_ps(n_f, pi_over_2_hi));
+        r = _mm256_sub_ps(r, _mm256_mul_ps(n_f, pi_over_2_lo));
+
+        // Evaluate both sin and cos polynomials (AVX 256-bit float)
+        __m256 sin_r = _mm256_sin_poly_avx_fma(r);
+        __m256 cos_r = _mm256_cos_poly_avx_fma(r);
+
+        // Quadrant selection — split to 128-bit halves for integer ops
+        __m128i n_lo = _mm256_castsi256_si128(n);
+        __m128i n_hi = _mm256_extractf128_si256(n, 1);
+
+        __m128i n_and_1_lo = _mm_and_si128(n_lo, ones_128);
+        __m128i n_and_1_hi = _mm_and_si128(n_hi, ones_128);
+        __m128i n_and_2_lo = _mm_and_si128(n_lo, twos_128);
+        __m128i n_and_2_hi = _mm_and_si128(n_hi, twos_128);
+        __m128i n_plus_1_and_2_lo =
+            _mm_and_si128(_mm_add_epi32(n_lo, ones_128), twos_128);
+        __m128i n_plus_1_and_2_hi =
+            _mm_and_si128(_mm_add_epi32(n_hi, ones_128), twos_128);
+
+        // Build 256-bit masks from 128-bit integer comparisons
+        __m128 swap_lo = _mm_castsi128_ps(_mm_cmpeq_epi32(n_and_1_lo, ones_128));
+        __m128 swap_hi = _mm_castsi128_ps(_mm_cmpeq_epi32(n_and_1_hi, ones_128));
+        __m256 sin_swap = _mm256_insertf128_ps(
+            _mm256_castps128_ps256(swap_lo), swap_hi, 1);
+
+        __m128 sneg_lo = _mm_castsi128_ps(_mm_cmpeq_epi32(n_and_2_lo, twos_128));
+        __m128 sneg_hi = _mm_castsi128_ps(_mm_cmpeq_epi32(n_and_2_hi, twos_128));
+        __m256 sin_neg = _mm256_insertf128_ps(
+            _mm256_castps128_ps256(sneg_lo), sneg_hi, 1);
+
+        __m128 cneg_lo =
+            _mm_castsi128_ps(_mm_cmpeq_epi32(n_plus_1_and_2_lo, twos_128));
+        __m128 cneg_hi =
+            _mm_castsi128_ps(_mm_cmpeq_epi32(n_plus_1_and_2_hi, twos_128));
+        __m256 cos_neg = _mm256_insertf128_ps(
+            _mm256_castps128_ps256(cneg_lo), cneg_hi, 1);
+
+        // For sin: swap when n&1, negate when n&2
+        __m256 sin_result = _mm256_blendv_ps(sin_r, cos_r, sin_swap);
+        sin_result = _mm256_xor_ps(sin_result, _mm256_and_ps(sin_neg, sign_bit));
+
+        // For cos: swap when n&1, negate when (n+1)&2
+        __m256 cos_result = _mm256_blendv_ps(cos_r, sin_r, sin_swap);
+        cos_result = _mm256_xor_ps(cos_result, _mm256_and_ps(cos_neg, sign_bit));
+
+        _mm256_store_ps(sinPtr, sin_result);
+        _mm256_store_ps(cosPtr, cos_result);
+        inPtr += 8;
+        sinPtr += 8;
+        cosPtr += 8;
+    }
+
+    volk_32f_sincos_32f_x2_generic(sinPtr, cosPtr, inPtr, num_points - eighthPoints * 8);
+}
+
+#endif /* LV_HAVE_AVX && LV_HAVE_FMA */
 
 #ifdef LV_HAVE_AVX2
 #include <immintrin.h>
@@ -1060,5 +1398,79 @@ static inline void volk_32f_sincos_32f_x2_a_avx512f(float* sinVector,
 }
 
 #endif /* LV_HAVE_AVX512F */
+
+#ifdef LV_HAVE_AVX512DQ
+#include <immintrin.h>
+#include <volk/volk_avx512_intrinsics.h>
+
+static inline void volk_32f_sincos_32f_x2_a_avx512dq(float* sinVector,
+                                                      float* cosVector,
+                                                      const float* inVector,
+                                                      unsigned int num_points)
+{
+    float* sinPtr = sinVector;
+    float* cosPtr = cosVector;
+    const float* inPtr = inVector;
+
+    unsigned int number = 0;
+    unsigned int sixteenPoints = num_points / 16;
+
+    // Constants for Cody-Waite argument reduction
+    const __m512 two_over_pi = _mm512_set1_ps(0x1.45f306p-1f);
+    const __m512 pi_over_2_hi = _mm512_set1_ps(0x1.921fb6p+0f);
+    const __m512 pi_over_2_lo = _mm512_set1_ps(-0x1.777a5cp-25f);
+
+    const __m512i ones = _mm512_set1_epi32(1);
+    const __m512i twos = _mm512_set1_epi32(2);
+    const __m512 sign_bit = _mm512_set1_ps(-0.0f);
+
+    for (; number < sixteenPoints; number++) {
+        __m512 x = _mm512_load_ps(inPtr);
+
+        // Argument reduction: n = round(x * 2/pi)
+        __m512 n_f = _mm512_roundscale_ps(_mm512_mul_ps(x, two_over_pi),
+                                          _MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC);
+        __m512i n = _mm512_cvtps_epi32(n_f);
+
+        // r = x - n * (pi/2)
+        __m512 r = _mm512_fnmadd_ps(n_f, pi_over_2_hi, x);
+        r = _mm512_fnmadd_ps(n_f, pi_over_2_lo, r);
+
+        // Evaluate both sin and cos polynomials
+        __m512 sin_r = _mm512_sin_poly_avx512(r);
+        __m512 cos_r = _mm512_cos_poly_avx512(r);
+
+        // Quadrant selection
+        __m512i n_and_1 = _mm512_and_si512(n, ones);
+        __m512i n_and_2 = _mm512_and_si512(n, twos);
+        __m512i n_plus_1_and_2 = _mm512_and_si512(_mm512_add_epi32(n, ones), twos);
+
+        // For sin: swap when n&1, negate when n&2
+        __mmask16 sin_swap = _mm512_cmpeq_epi32_mask(n_and_1, ones);
+        __m512 sin_result = _mm512_mask_blend_ps(sin_swap, sin_r, cos_r);
+        __mmask16 sin_neg = _mm512_cmpeq_epi32_mask(n_and_2, twos);
+        sin_result = _mm512_mask_xor_ps(sin_result, sin_neg, sin_result, sign_bit);
+
+        // For cos: swap when n&1, negate when (n+1)&2
+        __mmask16 cos_swap = sin_swap;
+        __m512 cos_result = _mm512_mask_blend_ps(cos_swap, cos_r, sin_r);
+        __mmask16 cos_neg = _mm512_cmpeq_epi32_mask(n_plus_1_and_2, twos);
+        cos_result = _mm512_mask_xor_ps(cos_result, cos_neg, cos_result, sign_bit);
+
+        _mm512_store_ps(sinPtr, sin_result);
+        _mm512_store_ps(cosPtr, cos_result);
+        inPtr += 16;
+        sinPtr += 16;
+        cosPtr += 16;
+    }
+
+    number = sixteenPoints * 16;
+    for (; number < num_points; number++) {
+        *sinPtr++ = sinf(*inPtr);
+        *cosPtr++ = cosf(*inPtr++);
+    }
+}
+
+#endif /* LV_HAVE_AVX512DQ */
 
 #endif /* INCLUDED_volk_32f_sincos_32f_x2_a_H */

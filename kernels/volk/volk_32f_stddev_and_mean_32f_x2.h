@@ -412,6 +412,161 @@ static inline void volk_32f_stddev_and_mean_32f_x2_u_avx_fma(float* stddev,
 }
 #endif /* LV_HAVE_AVX && LV_HAVE_FMA */
 
+#ifdef LV_HAVE_AVX2
+#include <immintrin.h>
+#include <volk/volk_avx_intrinsics.h>
+
+static inline void volk_32f_stddev_and_mean_32f_x2_u_avx2(float* stddev,
+                                                            float* mean,
+                                                            const float* inputBuffer,
+                                                            unsigned int num_points)
+{
+    if (num_points < 16) {
+        volk_32f_stddev_and_mean_32f_x2_generic(stddev, mean, inputBuffer, num_points);
+        return;
+    }
+
+    const float* in_ptr = inputBuffer;
+
+    __VOLK_ATTR_ALIGNED(32) float SumLocal[16] = { 0.f };
+    __VOLK_ATTR_ALIGNED(32) float SquareSumLocal[16] = { 0.f };
+
+    const unsigned int sixteenth_points = num_points / 16;
+
+    __m256 Sum0 = _mm256_loadu_ps(in_ptr);
+    in_ptr += 8;
+    __m256 Sum1 = _mm256_loadu_ps(in_ptr);
+    in_ptr += 8;
+
+    __m256 SquareSum0 = _mm256_setzero_ps();
+    __m256 SquareSum1 = _mm256_setzero_ps();
+    __m256 Values0, Values1;
+    __m256 Aux0, Aux1;
+    __m256 Reciprocal;
+
+    for (uint32_t number = 1; number < sixteenth_points; number++) {
+        Values0 = _mm256_loadu_ps(in_ptr);
+        in_ptr += 8;
+
+        Values1 = _mm256_loadu_ps(in_ptr);
+        in_ptr += 8;
+
+        float n = (float)number;
+        float n_plus_one = n + 1.f;
+
+        Reciprocal = _mm256_set1_ps(1.f / (n * n_plus_one));
+
+        Sum0 = _mm256_add_ps(Sum0, Values0);
+        Aux0 = _mm256_set1_ps(n_plus_one);
+        Aux0 = _mm256_sub_ps(_mm256_mul_ps(Aux0, Values0), Sum0);
+        Aux0 = _mm256_mul_ps(Aux0, Aux0);
+        SquareSum0 = _mm256_add_ps(_mm256_mul_ps(Reciprocal, Aux0), SquareSum0);
+
+        Sum1 = _mm256_add_ps(Sum1, Values1);
+        Aux1 = _mm256_set1_ps(n_plus_one);
+        Aux1 = _mm256_sub_ps(_mm256_mul_ps(Aux1, Values1), Sum1);
+        Aux1 = _mm256_mul_ps(Aux1, Aux1);
+        SquareSum1 = _mm256_add_ps(_mm256_mul_ps(Reciprocal, Aux1), SquareSum1);
+    }
+
+    _mm256_store_ps(&SumLocal[0], Sum0);
+    _mm256_store_ps(&SumLocal[8], Sum1);
+    _mm256_store_ps(&SquareSumLocal[0], SquareSum0);
+    _mm256_store_ps(&SquareSumLocal[8], SquareSum1);
+
+    accrue_result(SquareSumLocal, SumLocal, 16, sixteenth_points);
+
+    uint32_t points_done = sixteenth_points * 16;
+
+    for (; points_done < num_points; points_done++) {
+        float val = (*in_ptr++);
+        SumLocal[0] += val;
+        SquareSumLocal[0] =
+            update_square_sum_1_val(SquareSumLocal[0], SumLocal[0], points_done, val);
+    }
+
+    *stddev = sqrtf(SquareSumLocal[0] / num_points);
+    *mean = SumLocal[0] / num_points;
+}
+#endif /* LV_HAVE_AVX2 */
+
+#if LV_HAVE_AVX2 && LV_HAVE_FMA
+#include <immintrin.h>
+
+static inline void volk_32f_stddev_and_mean_32f_x2_u_avx2_fma(float* stddev,
+                                                               float* mean,
+                                                               const float* inputBuffer,
+                                                               unsigned int num_points)
+{
+    if (num_points < 16) {
+        volk_32f_stddev_and_mean_32f_x2_generic(stddev, mean, inputBuffer, num_points);
+        return;
+    }
+
+    const float* in_ptr = inputBuffer;
+
+    __VOLK_ATTR_ALIGNED(32) float SumLocal[16] = { 0.f };
+    __VOLK_ATTR_ALIGNED(32) float SquareSumLocal[16] = { 0.f };
+
+    const unsigned int sixteenth_points = num_points / 16;
+
+    __m256 Sum0 = _mm256_loadu_ps(in_ptr);
+    in_ptr += 8;
+    __m256 Sum1 = _mm256_loadu_ps(in_ptr);
+    in_ptr += 8;
+
+    __m256 SquareSum0 = _mm256_setzero_ps();
+    __m256 SquareSum1 = _mm256_setzero_ps();
+    __m256 Values0, Values1;
+    __m256 Aux0, Aux1;
+    __m256 Reciprocal;
+
+    for (uint32_t number = 1; number < sixteenth_points; number++) {
+        Values0 = _mm256_loadu_ps(in_ptr);
+        in_ptr += 8;
+
+        Values1 = _mm256_loadu_ps(in_ptr);
+        in_ptr += 8;
+
+        float n = (float)number;
+        float n_plus_one = n + 1.f;
+
+        Reciprocal = _mm256_set1_ps(1.f / (n * n_plus_one));
+
+        Sum0 = _mm256_add_ps(Sum0, Values0);
+        Aux0 = _mm256_set1_ps(n_plus_one);
+        Aux0 = _mm256_fmsub_ps(Aux0, Values0, Sum0);
+        Aux0 = _mm256_mul_ps(Aux0, Aux0);
+        SquareSum0 = _mm256_fmadd_ps(Reciprocal, Aux0, SquareSum0);
+
+        Sum1 = _mm256_add_ps(Sum1, Values1);
+        Aux1 = _mm256_set1_ps(n_plus_one);
+        Aux1 = _mm256_fmsub_ps(Aux1, Values1, Sum1);
+        Aux1 = _mm256_mul_ps(Aux1, Aux1);
+        SquareSum1 = _mm256_fmadd_ps(Reciprocal, Aux1, SquareSum1);
+    }
+
+    _mm256_store_ps(&SumLocal[0], Sum0);
+    _mm256_store_ps(&SumLocal[8], Sum1);
+    _mm256_store_ps(&SquareSumLocal[0], SquareSum0);
+    _mm256_store_ps(&SquareSumLocal[8], SquareSum1);
+
+    accrue_result(SquareSumLocal, SumLocal, 16, sixteenth_points);
+
+    uint32_t points_done = sixteenth_points * 16;
+
+    for (; points_done < num_points; points_done++) {
+        float val = (*in_ptr++);
+        SumLocal[0] += val;
+        SquareSumLocal[0] =
+            update_square_sum_1_val(SquareSumLocal[0], SumLocal[0], points_done, val);
+    }
+
+    *stddev = sqrtf(SquareSumLocal[0] / num_points);
+    *mean = SumLocal[0] / num_points;
+}
+#endif /* LV_HAVE_AVX2 && LV_HAVE_FMA */
+
 #ifdef LV_HAVE_NEON
 #include <arm_neon.h>
 #include <volk/volk_neon_intrinsics.h>
@@ -494,6 +649,85 @@ static inline void volk_32f_stddev_and_mean_32f_x2_neon(float* stddev,
     *mean = SumLocal[0] / num_points;
 }
 #endif /* LV_HAVE_NEON */
+
+#ifdef LV_HAVE_NEONV8
+#include <arm_neon.h>
+#include <volk/volk_neon_intrinsics.h>
+
+static inline void volk_32f_stddev_and_mean_32f_x2_neonv8(float* stddev,
+                                                           float* mean,
+                                                           const float* inputBuffer,
+                                                           unsigned int num_points)
+{
+    if (num_points < 8) {
+        volk_32f_stddev_and_mean_32f_x2_generic(stddev, mean, inputBuffer, num_points);
+        return;
+    }
+
+    const float* in_ptr = inputBuffer;
+
+    __VOLK_ATTR_ALIGNED(32) float SumLocal[8] = { 0.f };
+    __VOLK_ATTR_ALIGNED(32) float SquareSumLocal[8] = { 0.f };
+
+    const uint32_t eigth_points = num_points / 8;
+
+    float32x4_t Sum0, Sum1;
+
+    Sum0 = vld1q_f32((const float32_t*)in_ptr);
+    in_ptr += 4;
+
+    Sum1 = vld1q_f32((const float32_t*)in_ptr);
+    in_ptr += 4;
+
+    float32x4_t SquareSum0 = { 0.f };
+    float32x4_t SquareSum1 = { 0.f };
+
+    float32x4_t Values0, Values1;
+    float32x4_t Aux0, Aux1;
+    float32x4_t Reciprocal;
+
+    for (uint32_t number = 1; number < eigth_points; number++) {
+        Values0 = vld1q_f32(in_ptr);
+        in_ptr += 4;
+
+        Values1 = vld1q_f32(in_ptr);
+        in_ptr += 4;
+
+        float n = (float)number;
+        float n_plus_one = n + 1.f;
+        Reciprocal = vdupq_n_f32(1.f / (n * n_plus_one));
+
+        Sum0 = vaddq_f32(Sum0, Values0);
+        Aux0 = vdupq_n_f32(n_plus_one);
+        SquareSum0 =
+            _neon_accumulate_square_sum_f32(SquareSum0, Sum0, Values0, Reciprocal, Aux0);
+
+        Sum1 = vaddq_f32(Sum1, Values1);
+        Aux1 = vdupq_n_f32(n_plus_one);
+        SquareSum1 =
+            _neon_accumulate_square_sum_f32(SquareSum1, Sum1, Values1, Reciprocal, Aux1);
+    }
+
+    vst1q_f32(&SumLocal[0], Sum0);
+    vst1q_f32(&SumLocal[4], Sum1);
+    vst1q_f32(&SquareSumLocal[0], SquareSum0);
+    vst1q_f32(&SquareSumLocal[4], SquareSum1);
+
+    accrue_result(SquareSumLocal, SumLocal, 8, eigth_points);
+
+    uint32_t points_done = eigth_points * 8;
+
+    for (; points_done < num_points; points_done++) {
+        float val = (*in_ptr++);
+        SumLocal[0] += val;
+        SquareSumLocal[0] =
+            update_square_sum_1_val(SquareSumLocal[0], SumLocal[0], points_done, val);
+    }
+
+    *stddev = sqrtf(SquareSumLocal[0] / num_points);
+    *mean = SumLocal[0] / num_points;
+}
+#endif /* LV_HAVE_NEONV8 */
 
 #ifdef LV_HAVE_RVV
 #include <riscv_vector.h>
@@ -878,6 +1112,160 @@ static inline void volk_32f_stddev_and_mean_32f_x2_a_avx_fma(float* stddev,
     *mean = SumLocal[0] / num_points;
 }
 #endif /* LV_HAVE_AVX && LV_HAVE_FMA */
+
+#ifdef LV_HAVE_AVX2
+#include <immintrin.h>
+
+static inline void volk_32f_stddev_and_mean_32f_x2_a_avx2(float* stddev,
+                                                            float* mean,
+                                                            const float* inputBuffer,
+                                                            unsigned int num_points)
+{
+    if (num_points < 16) {
+        volk_32f_stddev_and_mean_32f_x2_generic(stddev, mean, inputBuffer, num_points);
+        return;
+    }
+
+    const float* in_ptr = inputBuffer;
+
+    __VOLK_ATTR_ALIGNED(32) float SumLocal[16] = { 0.f };
+    __VOLK_ATTR_ALIGNED(32) float SquareSumLocal[16] = { 0.f };
+
+    const unsigned int sixteenth_points = num_points / 16;
+
+    __m256 Sum0 = _mm256_load_ps(in_ptr);
+    in_ptr += 8;
+    __m256 Sum1 = _mm256_load_ps(in_ptr);
+    in_ptr += 8;
+
+    __m256 SquareSum0 = _mm256_setzero_ps();
+    __m256 SquareSum1 = _mm256_setzero_ps();
+    __m256 Values0, Values1;
+    __m256 Aux0, Aux1;
+    __m256 Reciprocal;
+
+    for (uint32_t number = 1; number < sixteenth_points; number++) {
+        Values0 = _mm256_load_ps(in_ptr);
+        in_ptr += 8;
+
+        Values1 = _mm256_load_ps(in_ptr);
+        in_ptr += 8;
+
+        float n = (float)number;
+        float n_plus_one = n + 1.f;
+
+        Reciprocal = _mm256_set1_ps(1.f / (n * n_plus_one));
+
+        Sum0 = _mm256_add_ps(Sum0, Values0);
+        Aux0 = _mm256_set1_ps(n_plus_one);
+        Aux0 = _mm256_sub_ps(_mm256_mul_ps(Aux0, Values0), Sum0);
+        Aux0 = _mm256_mul_ps(Aux0, Aux0);
+        SquareSum0 = _mm256_add_ps(_mm256_mul_ps(Reciprocal, Aux0), SquareSum0);
+
+        Sum1 = _mm256_add_ps(Sum1, Values1);
+        Aux1 = _mm256_set1_ps(n_plus_one);
+        Aux1 = _mm256_sub_ps(_mm256_mul_ps(Aux1, Values1), Sum1);
+        Aux1 = _mm256_mul_ps(Aux1, Aux1);
+        SquareSum1 = _mm256_add_ps(_mm256_mul_ps(Reciprocal, Aux1), SquareSum1);
+    }
+
+    _mm256_store_ps(&SumLocal[0], Sum0);
+    _mm256_store_ps(&SumLocal[8], Sum1);
+    _mm256_store_ps(&SquareSumLocal[0], SquareSum0);
+    _mm256_store_ps(&SquareSumLocal[8], SquareSum1);
+
+    accrue_result(SquareSumLocal, SumLocal, 16, sixteenth_points);
+
+    uint32_t points_done = sixteenth_points * 16;
+
+    for (; points_done < num_points; points_done++) {
+        float val = (*in_ptr++);
+        SumLocal[0] += val;
+        SquareSumLocal[0] =
+            update_square_sum_1_val(SquareSumLocal[0], SumLocal[0], points_done, val);
+    }
+
+    *stddev = sqrtf(SquareSumLocal[0] / num_points);
+    *mean = SumLocal[0] / num_points;
+}
+#endif /* LV_HAVE_AVX2 */
+
+#if LV_HAVE_AVX2 && LV_HAVE_FMA
+#include <immintrin.h>
+
+static inline void volk_32f_stddev_and_mean_32f_x2_a_avx2_fma(float* stddev,
+                                                               float* mean,
+                                                               const float* inputBuffer,
+                                                               unsigned int num_points)
+{
+    if (num_points < 16) {
+        volk_32f_stddev_and_mean_32f_x2_generic(stddev, mean, inputBuffer, num_points);
+        return;
+    }
+
+    const float* in_ptr = inputBuffer;
+
+    __VOLK_ATTR_ALIGNED(32) float SumLocal[16] = { 0.f };
+    __VOLK_ATTR_ALIGNED(32) float SquareSumLocal[16] = { 0.f };
+
+    const unsigned int sixteenth_points = num_points / 16;
+
+    __m256 Sum0 = _mm256_load_ps(in_ptr);
+    in_ptr += 8;
+    __m256 Sum1 = _mm256_load_ps(in_ptr);
+    in_ptr += 8;
+
+    __m256 SquareSum0 = _mm256_setzero_ps();
+    __m256 SquareSum1 = _mm256_setzero_ps();
+    __m256 Values0, Values1;
+    __m256 Aux0, Aux1;
+    __m256 Reciprocal;
+
+    for (uint32_t number = 1; number < sixteenth_points; number++) {
+        Values0 = _mm256_load_ps(in_ptr);
+        in_ptr += 8;
+
+        Values1 = _mm256_load_ps(in_ptr);
+        in_ptr += 8;
+
+        float n = (float)number;
+        float n_plus_one = n + 1.f;
+
+        Reciprocal = _mm256_set1_ps(1.f / (n * n_plus_one));
+
+        Sum0 = _mm256_add_ps(Sum0, Values0);
+        Aux0 = _mm256_set1_ps(n_plus_one);
+        Aux0 = _mm256_fmsub_ps(Aux0, Values0, Sum0);
+        Aux0 = _mm256_mul_ps(Aux0, Aux0);
+        SquareSum0 = _mm256_fmadd_ps(Reciprocal, Aux0, SquareSum0);
+
+        Sum1 = _mm256_add_ps(Sum1, Values1);
+        Aux1 = _mm256_set1_ps(n_plus_one);
+        Aux1 = _mm256_fmsub_ps(Aux1, Values1, Sum1);
+        Aux1 = _mm256_mul_ps(Aux1, Aux1);
+        SquareSum1 = _mm256_fmadd_ps(Reciprocal, Aux1, SquareSum1);
+    }
+
+    _mm256_store_ps(&SumLocal[0], Sum0);
+    _mm256_store_ps(&SumLocal[8], Sum1);
+    _mm256_store_ps(&SquareSumLocal[0], SquareSum0);
+    _mm256_store_ps(&SquareSumLocal[8], SquareSum1);
+
+    accrue_result(SquareSumLocal, SumLocal, 16, sixteenth_points);
+
+    uint32_t points_done = sixteenth_points * 16;
+
+    for (; points_done < num_points; points_done++) {
+        float val = (*in_ptr++);
+        SumLocal[0] += val;
+        SquareSumLocal[0] =
+            update_square_sum_1_val(SquareSumLocal[0], SumLocal[0], points_done, val);
+    }
+
+    *stddev = sqrtf(SquareSumLocal[0] / num_points);
+    *mean = SumLocal[0] / num_points;
+}
+#endif /* LV_HAVE_AVX2 && LV_HAVE_FMA */
 
 
 #ifdef LV_HAVE_AVX512F

@@ -330,6 +330,55 @@ static inline void volk_16ic_x2_multiply_16ic_u_avx512bw(lv_16sc_t* out,
 #endif /* LV_HAVE_AVX512BW */
 
 
+#ifdef LV_HAVE_AVX512VNNI
+#include <immintrin.h>
+
+static inline void volk_16ic_x2_multiply_16ic_u_avx512vnni(lv_16sc_t* out,
+                                                             const lv_16sc_t* in_a,
+                                                             const lv_16sc_t* in_b,
+                                                             unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int avx512_points = num_points / 16;
+
+    const lv_16sc_t* _in_a = in_a;
+    const lv_16sc_t* _in_b = in_b;
+    lv_16sc_t* _out = out;
+
+    /* [1, -1] per int16 pair: negates imag in each complex sample */
+    const __m512i neg_mask = _mm512_set1_epi32(0xFFFF0001);
+    const __m512i lo16_mask = _mm512_set1_epi32(0x0000FFFF);
+
+    for (; number < avx512_points; number++) {
+        __m512i a = _mm512_loadu_si512((const __m512i*)_in_a);
+        __m512i b = _mm512_loadu_si512((const __m512i*)_in_b);
+
+        /* b_conj = [re_b, -im_b]: madd gives re*re - im*im per int32 lane */
+        __m512i b_conj = _mm512_mullo_epi16(b, neg_mask);
+        /* b_swap = [im_b, re_b]: madd gives re*im + im*re per int32 lane */
+        __m512i b_swap = _mm512_rol_epi32(b, 16);
+
+        __m512i real32 = _mm512_madd_epi16(a, b_conj);
+        __m512i imag32 = _mm512_madd_epi16(a, b_swap);
+
+        /* Pack int32 results back to interleaved int16 [re, im] */
+        __m512i real_lo = _mm512_and_epi32(real32, lo16_mask);
+        __m512i imag_hi = _mm512_slli_epi32(imag32, 16);
+        __m512i result = _mm512_or_epi32(real_lo, imag_hi);
+
+        _mm512_storeu_si512((__m512i*)_out, result);
+
+        _in_a += 16;
+        _in_b += 16;
+        _out += 16;
+    }
+
+    volk_16ic_x2_multiply_16ic_generic(
+        _out, _in_a, _in_b, num_points - avx512_points * 16);
+}
+#endif /* LV_HAVE_AVX512VNNI */
+
+
 #ifdef LV_HAVE_NEON
 #include <arm_neon.h>
 
@@ -710,5 +759,54 @@ static inline void volk_16ic_x2_multiply_16ic_a_avx512bw(lv_16sc_t* out,
         _out, _in_a, _in_b, num_points - avx512_points * 16);
 }
 #endif /* LV_HAVE_AVX512BW */
+
+
+#ifdef LV_HAVE_AVX512VNNI
+#include <immintrin.h>
+
+static inline void volk_16ic_x2_multiply_16ic_a_avx512vnni(lv_16sc_t* out,
+                                                             const lv_16sc_t* in_a,
+                                                             const lv_16sc_t* in_b,
+                                                             unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int avx512_points = num_points / 16;
+
+    const lv_16sc_t* _in_a = in_a;
+    const lv_16sc_t* _in_b = in_b;
+    lv_16sc_t* _out = out;
+
+    /* [1, -1] per int16 pair: negates imag in each complex sample */
+    const __m512i neg_mask = _mm512_set1_epi32(0xFFFF0001);
+    const __m512i lo16_mask = _mm512_set1_epi32(0x0000FFFF);
+
+    for (; number < avx512_points; number++) {
+        __m512i a = _mm512_load_si512((const __m512i*)_in_a);
+        __m512i b = _mm512_load_si512((const __m512i*)_in_b);
+
+        /* b_conj = [re_b, -im_b]: madd gives re*re - im*im per int32 lane */
+        __m512i b_conj = _mm512_mullo_epi16(b, neg_mask);
+        /* b_swap = [im_b, re_b]: madd gives re*im + im*re per int32 lane */
+        __m512i b_swap = _mm512_rol_epi32(b, 16);
+
+        __m512i real32 = _mm512_madd_epi16(a, b_conj);
+        __m512i imag32 = _mm512_madd_epi16(a, b_swap);
+
+        /* Pack int32 results back to interleaved int16 [re, im] */
+        __m512i real_lo = _mm512_and_epi32(real32, lo16_mask);
+        __m512i imag_hi = _mm512_slli_epi32(imag32, 16);
+        __m512i result = _mm512_or_epi32(real_lo, imag_hi);
+
+        _mm512_store_si512((__m512i*)_out, result);
+
+        _in_a += 16;
+        _in_b += 16;
+        _out += 16;
+    }
+
+    volk_16ic_x2_multiply_16ic_generic(
+        _out, _in_a, _in_b, num_points - avx512_points * 16);
+}
+#endif /* LV_HAVE_AVX512VNNI */
 
 #endif /* INCLUDED_volk_16ic_x2_multiply_16ic_a_H */

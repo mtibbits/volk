@@ -151,6 +151,46 @@ static inline void volk_32fc_deinterleave_imag_32f_u_avx(float* qBuffer,
 }
 #endif /* LV_HAVE_AVX */
 
+#ifdef LV_HAVE_AVX2
+#include <immintrin.h>
+
+static inline void volk_32fc_deinterleave_imag_32f_u_avx2(float* qBuffer,
+                                                           const lv_32fc_t* complexVector,
+                                                           unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int eighthPoints = num_points / 8;
+    const float* complexVectorPtr = (const float*)complexVector;
+    float* qBufferPtr = qBuffer;
+
+    __m256 cplxValue1, cplxValue2, complex1, complex2, qValue;
+    for (; number < eighthPoints; number++) {
+
+        cplxValue1 = _mm256_loadu_ps(complexVectorPtr);
+        complexVectorPtr += 8;
+
+        cplxValue2 = _mm256_loadu_ps(complexVectorPtr);
+        complexVectorPtr += 8;
+
+        complex1 = _mm256_permute2f128_ps(cplxValue1, cplxValue2, 0x20);
+        complex2 = _mm256_permute2f128_ps(cplxValue1, cplxValue2, 0x31);
+
+        // Arrange in q1q2q3q4 format
+        qValue = _mm256_shuffle_ps(complex1, complex2, 0xdd);
+
+        _mm256_storeu_ps(qBufferPtr, qValue);
+
+        qBufferPtr += 8;
+    }
+
+    number = eighthPoints * 8;
+    for (; number < num_points; number++) {
+        complexVectorPtr++;
+        *qBufferPtr++ = *complexVectorPtr++;
+    }
+}
+#endif /* LV_HAVE_AVX2 */
+
 #ifdef LV_HAVE_AVX512F
 #include <immintrin.h>
 
@@ -259,6 +299,38 @@ static inline void volk_32fc_deinterleave_imag_32f_rvv(float* qBuffer,
 }
 #endif /* LV_HAVE_RVV */
 
+#ifdef LV_HAVE_RVVSEG
+#include <riscv_vector.h>
+
+static inline void volk_32fc_deinterleave_imag_32f_rvvseg(float* qBuffer,
+                                                           const lv_32fc_t* complexVector,
+                                                           unsigned int num_points)
+{
+    size_t n = num_points;
+    for (size_t vl; n > 0; n -= vl, complexVector += vl, qBuffer += vl) {
+        vl = __riscv_vsetvl_e32m4(n);
+        vfloat32m4x2_t vc =
+            __riscv_vlseg2e32_v_f32m4x2((const float*)complexVector, vl);
+        __riscv_vse32(qBuffer, __riscv_vget_f32m4(vc, 1), vl);
+    }
+}
+#endif /* LV_HAVE_RVVSEG */
+
+#ifdef LV_HAVE_ORC
+
+extern void volk_32fc_deinterleave_imag_32f_a_orc_impl(float* qBuffer,
+                                                        const lv_32fc_t* complexVector,
+                                                        int num_points);
+
+static inline void volk_32fc_deinterleave_imag_32f_u_orc(float* qBuffer,
+                                                          const lv_32fc_t* complexVector,
+                                                          unsigned int num_points)
+{
+    volk_32fc_deinterleave_imag_32f_a_orc_impl(qBuffer, complexVector, num_points);
+}
+
+#endif /* LV_HAVE_ORC */
+
 #endif /* INCLUDED_volk_32fc_deinterleave_imag_32f_u_H */
 
 #ifndef INCLUDED_volk_32fc_deinterleave_imag_32f_a_H
@@ -344,6 +416,46 @@ static inline void volk_32fc_deinterleave_imag_32f_a_avx(float* qBuffer,
     }
 }
 #endif /* LV_HAVE_AVX */
+
+#ifdef LV_HAVE_AVX2
+#include <immintrin.h>
+
+static inline void volk_32fc_deinterleave_imag_32f_a_avx2(float* qBuffer,
+                                                           const lv_32fc_t* complexVector,
+                                                           unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int eighthPoints = num_points / 8;
+    const float* complexVectorPtr = (const float*)complexVector;
+    float* qBufferPtr = qBuffer;
+
+    __m256 cplxValue1, cplxValue2, complex1, complex2, qValue;
+    for (; number < eighthPoints; number++) {
+
+        cplxValue1 = _mm256_load_ps(complexVectorPtr);
+        complexVectorPtr += 8;
+
+        cplxValue2 = _mm256_load_ps(complexVectorPtr);
+        complexVectorPtr += 8;
+
+        complex1 = _mm256_permute2f128_ps(cplxValue1, cplxValue2, 0x20);
+        complex2 = _mm256_permute2f128_ps(cplxValue1, cplxValue2, 0x31);
+
+        // Arrange in q1q2q3q4 format
+        qValue = _mm256_shuffle_ps(complex1, complex2, 0xdd);
+
+        _mm256_store_ps(qBufferPtr, qValue);
+
+        qBufferPtr += 8;
+    }
+
+    number = eighthPoints * 8;
+    for (; number < num_points; number++) {
+        complexVectorPtr++;
+        *qBufferPtr++ = *complexVectorPtr++;
+    }
+}
+#endif /* LV_HAVE_AVX2 */
 
 #ifdef LV_HAVE_AVX512F
 #include <immintrin.h>

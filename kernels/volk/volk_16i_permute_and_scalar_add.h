@@ -513,6 +513,120 @@ static inline void volk_16i_permute_and_scalar_add_u_avx512bw(
 }
 #endif /* LV_HAVE_AVX512BW */
 
+
+#ifdef LV_HAVE_NEON
+#include <arm_neon.h>
+
+static inline void volk_16i_permute_and_scalar_add_neon(short* target,
+                                                         const short* src0,
+                                                         const short* permute_indexes,
+                                                         const short* cntl0,
+                                                         const short* cntl1,
+                                                         const short* cntl2,
+                                                         const short* cntl3,
+                                                         const short* scalars,
+                                                         unsigned int num_points)
+{
+    const unsigned int eighth_points = num_points / 8;
+    const unsigned int leftovers = num_points - eighth_points * 8;
+
+    int16x8_t s0 = vdupq_n_s16(scalars[0]);
+    int16x8_t s1 = vdupq_n_s16(scalars[1]);
+    int16x8_t s2 = vdupq_n_s16(scalars[2]);
+    int16x8_t s3 = vdupq_n_s16(scalars[3]);
+
+    for (unsigned int i = 0; i < eighth_points; ++i) {
+        /* Scalar gather — no NEON gather for int16 */
+        int16_t gathered[8];
+        gathered[0] = src0[permute_indexes[0]];
+        gathered[1] = src0[permute_indexes[1]];
+        gathered[2] = src0[permute_indexes[2]];
+        gathered[3] = src0[permute_indexes[3]];
+        gathered[4] = src0[permute_indexes[4]];
+        gathered[5] = src0[permute_indexes[5]];
+        gathered[6] = src0[permute_indexes[6]];
+        gathered[7] = src0[permute_indexes[7]];
+        permute_indexes += 8;
+
+        int16x8_t g = vld1q_s16(gathered);
+
+        int16x8_t c0 = vandq_s16(vld1q_s16(cntl0), s0);
+        int16x8_t c1 = vandq_s16(vld1q_s16(cntl1), s1);
+        int16x8_t c2 = vandq_s16(vld1q_s16(cntl2), s2);
+        int16x8_t c3 = vandq_s16(vld1q_s16(cntl3), s3);
+
+        g = vaddq_s16(g, c0);
+        c1 = vaddq_s16(c1, c2);
+        g = vaddq_s16(g, c1);
+        g = vaddq_s16(g, c3);
+
+        vst1q_s16(target, g);
+
+        target += 8;
+        cntl0 += 8;
+        cntl1 += 8;
+        cntl2 += 8;
+        cntl3 += 8;
+    }
+
+    volk_16i_permute_and_scalar_add_generic(target,
+                                            src0,
+                                            permute_indexes,
+                                            cntl0,
+                                            cntl1,
+                                            cntl2,
+                                            cntl3,
+                                            scalars,
+                                            leftovers);
+}
+#endif /* LV_HAVE_NEON */
+
+#ifdef LV_HAVE_RVV
+#include <riscv_vector.h>
+
+static inline void volk_16i_permute_and_scalar_add_rvv(short* target,
+                                                        const short* src0,
+                                                        const short* permute_indexes,
+                                                        const short* cntl0,
+                                                        const short* cntl1,
+                                                        const short* cntl2,
+                                                        const short* cntl3,
+                                                        const short* scalars,
+                                                        unsigned int num_points)
+{
+    const short s0 = scalars[0];
+    const short s1 = scalars[1];
+    const short s2 = scalars[2];
+    const short s3 = scalars[3];
+
+    size_t n = (size_t)num_points;
+    for (size_t vl; n > 0;
+         n -= vl, permute_indexes += vl, cntl0 += vl, cntl1 += vl, cntl2 += vl,
+                  cntl3 += vl, target += vl) {
+        vl = __riscv_vsetvl_e16m4(n);
+
+        /* Gather from src0 using permute_indexes */
+        vint16m4_t idx = __riscv_vle16_v_i16m4(permute_indexes, vl);
+        vuint16m4_t uidx = __riscv_vreinterpret_u16m4(idx);
+        vint16m4_t gathered = __riscv_vluxei16_v_i16m4(src0, __riscv_vsll(uidx, 1, vl), vl);
+
+        /* Load control vectors and AND with scalars, then accumulate */
+        vint16m4_t c0 = __riscv_vle16_v_i16m4(cntl0, vl);
+        vint16m4_t c1 = __riscv_vle16_v_i16m4(cntl1, vl);
+        vint16m4_t c2 = __riscv_vle16_v_i16m4(cntl2, vl);
+        vint16m4_t c3 = __riscv_vle16_v_i16m4(cntl3, vl);
+
+        vint16m4_t sum = gathered;
+        sum = __riscv_vadd(sum, __riscv_vand(c0, s0, vl), vl);
+        sum = __riscv_vadd(sum, __riscv_vand(c1, s1, vl), vl);
+        sum = __riscv_vadd(sum, __riscv_vand(c2, s2, vl), vl);
+        sum = __riscv_vadd(sum, __riscv_vand(c3, s3, vl), vl);
+
+        __riscv_vse16(target, sum, vl);
+    }
+}
+#endif /* LV_HAVE_RVV */
+
 #endif /* INCLUDED_volk_16i_permute_and_scalar_add_u_H */
 
 #ifndef INCLUDED_volk_16i_permute_and_scalar_add_a_H

@@ -120,6 +120,55 @@ static inline void volk_32fc_x2_divide_32fc_generic(lv_32fc_t* cVector,
 #endif /* LV_HAVE_GENERIC */
 
 
+#ifdef LV_HAVE_SSE
+#include <xmmintrin.h>
+
+static inline void volk_32fc_x2_divide_32fc_u_sse(lv_32fc_t* cVector,
+                                                   const lv_32fc_t* numeratorVector,
+                                                   const lv_32fc_t* denumeratorVector,
+                                                   unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int halfPoints = num_points / 2;
+
+    const __m128 conjugator = _mm_setr_ps(0, -0.f, 0, -0.f);
+    lv_32fc_t* c = cVector;
+    const lv_32fc_t* a = numeratorVector;
+    const lv_32fc_t* b = denumeratorVector;
+
+    for (; number < halfPoints; number++) {
+        __m128 num = _mm_loadu_ps((const float*)a);
+        __m128 den = _mm_loadu_ps((const float*)b);
+
+        __m128 nswap = _mm_shuffle_ps(num, num, 0xB1);
+        __m128 dreal = _mm_shuffle_ps(den, den, _MM_SHUFFLE(2, 2, 0, 0));
+        __m128 dimag = _mm_shuffle_ps(den, den, _MM_SHUFFLE(3, 3, 1, 1));
+        __m128 dimagconj = _mm_xor_ps(dimag, conjugator);
+        __m128 conj_prod = _mm_add_ps(_mm_mul_ps(num, dreal),
+                                       _mm_mul_ps(nswap, dimagconj));
+
+        __m128 sq = _mm_mul_ps(den, den);
+        __m128 sq_swap = _mm_shuffle_ps(sq, sq, 0xB1);
+        __m128 mag_sq = _mm_add_ps(sq, sq_swap);
+
+        _mm_storeu_ps((float*)c, _mm_div_ps(conj_prod, mag_sq));
+
+        a += 2;
+        b += 2;
+        c += 2;
+    }
+
+    number = halfPoints * 2;
+    for (; number < num_points; number++) {
+        *c = (*a) / (*b);
+        a++;
+        b++;
+        c++;
+    }
+}
+#endif /* LV_HAVE_SSE */
+
+
 #ifdef LV_HAVE_SSE3
 #include <pmmintrin.h>
 #include <volk/volk_sse3_intrinsics.h>
@@ -511,6 +560,55 @@ static inline void volk_32fc_x2_divide_32fc_rvvseg(lv_32fc_t* cVector,
 #include <inttypes.h>
 #include <stdio.h>
 #include <volk/volk_complex.h>
+
+#ifdef LV_HAVE_SSE
+#include <xmmintrin.h>
+
+static inline void volk_32fc_x2_divide_32fc_a_sse(lv_32fc_t* cVector,
+                                                   const lv_32fc_t* numeratorVector,
+                                                   const lv_32fc_t* denumeratorVector,
+                                                   unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int halfPoints = num_points / 2;
+
+    const __m128 conjugator = _mm_setr_ps(0, -0.f, 0, -0.f);
+    lv_32fc_t* c = cVector;
+    const lv_32fc_t* a = numeratorVector;
+    const lv_32fc_t* b = denumeratorVector;
+
+    for (; number < halfPoints; number++) {
+        __m128 num = _mm_load_ps((const float*)a);
+        __m128 den = _mm_load_ps((const float*)b);
+
+        __m128 nswap = _mm_shuffle_ps(num, num, 0xB1);
+        __m128 dreal = _mm_shuffle_ps(den, den, _MM_SHUFFLE(2, 2, 0, 0));
+        __m128 dimag = _mm_shuffle_ps(den, den, _MM_SHUFFLE(3, 3, 1, 1));
+        __m128 dimagconj = _mm_xor_ps(dimag, conjugator);
+        __m128 conj_prod = _mm_add_ps(_mm_mul_ps(num, dreal),
+                                       _mm_mul_ps(nswap, dimagconj));
+
+        __m128 sq = _mm_mul_ps(den, den);
+        __m128 sq_swap = _mm_shuffle_ps(sq, sq, 0xB1);
+        __m128 mag_sq = _mm_add_ps(sq, sq_swap);
+
+        _mm_store_ps((float*)c, _mm_div_ps(conj_prod, mag_sq));
+
+        a += 2;
+        b += 2;
+        c += 2;
+    }
+
+    number = halfPoints * 2;
+    for (; number < num_points; number++) {
+        *c = (*a) / (*b);
+        a++;
+        b++;
+        c++;
+    }
+}
+#endif /* LV_HAVE_SSE */
+
 
 #ifdef LV_HAVE_SSE3
 #include <pmmintrin.h>

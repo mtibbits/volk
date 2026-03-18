@@ -253,6 +253,57 @@ static inline void volk_32fc_x2_square_dist_32f_u_avx(float* target,
 
 #endif /*LV_HAVE_AVX*/
 
+#if LV_HAVE_AVX && LV_HAVE_FMA
+#include <immintrin.h>
+
+static inline void volk_32fc_x2_square_dist_32f_u_avx_fma(float* target,
+                                                            const lv_32fc_t* src0,
+                                                            const lv_32fc_t* points,
+                                                            unsigned int num_points)
+{
+    const unsigned int eighth_points = num_points / 8;
+    unsigned int number = 0;
+
+    /* Broadcast src0 [real, imag] across 256-bit register */
+    __m128 xmm0 = _mm_setzero_ps();
+    xmm0 = _mm_loadl_pi(xmm0, (const __m64*)src0);
+    xmm0 = _mm_movelh_ps(xmm0, xmm0);
+    __m256 src_vec = _mm256_castps128_ps256(xmm0);
+    src_vec = _mm256_insertf128_ps(src_vec, xmm0, 1);
+
+    for (; number < eighth_points; ++number) {
+        __m256 pts0 = _mm256_loadu_ps((const float*)points);
+        __m256 pts1 = _mm256_loadu_ps((const float*)(points + 4));
+        points += 8;
+
+        __m256 diff0 = _mm256_sub_ps(src_vec, pts0);
+        __m256 diff1 = _mm256_sub_ps(src_vec, pts1);
+
+        /* Deinterleave re/im from the two diff vectors (within 128-bit lanes) */
+        __m256 diff_re = _mm256_shuffle_ps(diff0, diff1, _MM_SHUFFLE(2, 0, 2, 0));
+        __m256 diff_im = _mm256_shuffle_ps(diff0, diff1, _MM_SHUFFLE(3, 1, 3, 1));
+
+        /* dist² = diff_re² + diff_im² using FMA (lane-interleaved: [0,1,4,5 | 2,3,6,7]) */
+        __m256 dist_sq = _mm256_fmadd_ps(diff_im, diff_im, _mm256_mul_ps(diff_re, diff_re));
+
+        /* Fix cross-lane order */
+        __m128 lo = _mm256_castps256_ps128(dist_sq);
+        __m128 hi = _mm256_extractf128_ps(dist_sq, 1);
+        __m128 out0 = _mm_shuffle_ps(lo, hi, _MM_SHUFFLE(1, 0, 1, 0));
+        __m128 out1 = _mm_shuffle_ps(lo, hi, _MM_SHUFFLE(3, 2, 3, 2));
+
+        _mm_storeu_ps(target, out0);
+        _mm_storeu_ps(target + 4, out1);
+
+        target += 8;
+    }
+
+    volk_32fc_x2_square_dist_32f_generic(
+        target, src0, points, num_points - eighth_points * 8);
+}
+
+#endif /* LV_HAVE_AVX && LV_HAVE_FMA */
+
 #ifdef LV_HAVE_AVX2
 #include <immintrin.h>
 
@@ -328,6 +379,42 @@ static inline void volk_32fc_x2_square_dist_32f_u_avx2(float* target,
 }
 
 #endif /*LV_HAVE_AVX2*/
+
+#if LV_HAVE_AVX2 && LV_HAVE_FMA
+#include <immintrin.h>
+#include <volk/volk_avx2_fma_intrinsics.h>
+
+static inline void volk_32fc_x2_square_dist_32f_u_avx2_fma(float* target,
+                                                             const lv_32fc_t* src0,
+                                                             const lv_32fc_t* points,
+                                                             unsigned int num_points)
+{
+    const unsigned int eighthPoints = num_points / 8;
+    unsigned int number = 0;
+
+    /* Broadcast src0 as interleaved [re,im,re,im,...] */
+    const __m256 xmm_src = _mm256_castpd_ps(
+        _mm256_broadcast_sd((const double*)src0));
+
+    for (; number < eighthPoints; number++) {
+        __m256 pts0 = _mm256_loadu_ps((const float*)points);
+        __m256 pts1 = _mm256_loadu_ps((const float*)(points + 4));
+        points += 8;
+
+        __m256 diff0 = _mm256_sub_ps(xmm_src, pts0);
+        __m256 diff1 = _mm256_sub_ps(xmm_src, pts1);
+
+        __m256 result = _mm256_magnitudesquared_ps_avx2_fma(diff0, diff1);
+
+        _mm256_storeu_ps(target, result);
+        target += 8;
+    }
+
+    volk_32fc_x2_square_dist_32f_generic(
+        target, src0, points, num_points - eighthPoints * 8);
+}
+
+#endif /*LV_HAVE_AVX2 && LV_HAVE_FMA*/
 
 #ifdef LV_HAVE_NEON
 #include <arm_neon.h>
@@ -684,6 +771,57 @@ static inline void volk_32fc_x2_square_dist_32f_a_avx(float* target,
 
 #endif /*LV_HAVE_AVX*/
 
+#if LV_HAVE_AVX && LV_HAVE_FMA
+#include <immintrin.h>
+
+static inline void volk_32fc_x2_square_dist_32f_a_avx_fma(float* target,
+                                                            const lv_32fc_t* src0,
+                                                            const lv_32fc_t* points,
+                                                            unsigned int num_points)
+{
+    const unsigned int eighth_points = num_points / 8;
+    unsigned int number = 0;
+
+    /* Broadcast src0 [real, imag] across 256-bit register */
+    __m128 xmm0 = _mm_setzero_ps();
+    xmm0 = _mm_loadl_pi(xmm0, (const __m64*)src0);
+    xmm0 = _mm_movelh_ps(xmm0, xmm0);
+    __m256 src_vec = _mm256_castps128_ps256(xmm0);
+    src_vec = _mm256_insertf128_ps(src_vec, xmm0, 1);
+
+    for (; number < eighth_points; ++number) {
+        __m256 pts0 = _mm256_load_ps((const float*)points);
+        __m256 pts1 = _mm256_load_ps((const float*)(points + 4));
+        points += 8;
+
+        __m256 diff0 = _mm256_sub_ps(src_vec, pts0);
+        __m256 diff1 = _mm256_sub_ps(src_vec, pts1);
+
+        /* Deinterleave re/im from the two diff vectors (within 128-bit lanes) */
+        __m256 diff_re = _mm256_shuffle_ps(diff0, diff1, _MM_SHUFFLE(2, 0, 2, 0));
+        __m256 diff_im = _mm256_shuffle_ps(diff0, diff1, _MM_SHUFFLE(3, 1, 3, 1));
+
+        /* dist² = diff_re² + diff_im² using FMA (lane-interleaved: [0,1,4,5 | 2,3,6,7]) */
+        __m256 dist_sq = _mm256_fmadd_ps(diff_im, diff_im, _mm256_mul_ps(diff_re, diff_re));
+
+        /* Fix cross-lane order */
+        __m128 lo = _mm256_castps256_ps128(dist_sq);
+        __m128 hi = _mm256_extractf128_ps(dist_sq, 1);
+        __m128 out0 = _mm_shuffle_ps(lo, hi, _MM_SHUFFLE(1, 0, 1, 0));
+        __m128 out1 = _mm_shuffle_ps(lo, hi, _MM_SHUFFLE(3, 2, 3, 2));
+
+        _mm_store_ps(target, out0);
+        _mm_store_ps(target + 4, out1);
+
+        target += 8;
+    }
+
+    volk_32fc_x2_square_dist_32f_generic(
+        target, src0, points, num_points - eighth_points * 8);
+}
+
+#endif /* LV_HAVE_AVX && LV_HAVE_FMA */
+
 #ifdef LV_HAVE_AVX2
 #include <immintrin.h>
 
@@ -776,6 +914,40 @@ static inline void volk_32fc_x2_square_dist_32f_a_avx2(float* target,
 
 #endif /*LV_HAVE_AVX2*/
 
+#if LV_HAVE_AVX2 && LV_HAVE_FMA
+#include <immintrin.h>
+#include <volk/volk_avx2_fma_intrinsics.h>
+
+static inline void volk_32fc_x2_square_dist_32f_a_avx2_fma(float* target,
+                                                             const lv_32fc_t* src0,
+                                                             const lv_32fc_t* points,
+                                                             unsigned int num_points)
+{
+    const unsigned int eighthPoints = num_points / 8;
+    unsigned int number = 0;
+
+    const __m256 xmm_src = _mm256_castpd_ps(
+        _mm256_broadcast_sd((const double*)src0));
+
+    for (; number < eighthPoints; number++) {
+        __m256 pts0 = _mm256_load_ps((const float*)points);
+        __m256 pts1 = _mm256_load_ps((const float*)(points + 4));
+        points += 8;
+
+        __m256 diff0 = _mm256_sub_ps(xmm_src, pts0);
+        __m256 diff1 = _mm256_sub_ps(xmm_src, pts1);
+
+        __m256 result = _mm256_magnitudesquared_ps_avx2_fma(diff0, diff1);
+
+        _mm256_store_ps(target, result);
+        target += 8;
+    }
+
+    volk_32fc_x2_square_dist_32f_generic(
+        target, src0, points, num_points - eighthPoints * 8);
+}
+
+#endif /*LV_HAVE_AVX2 && LV_HAVE_FMA*/
 
 #ifdef LV_HAVE_AVX512F
 #include <immintrin.h>

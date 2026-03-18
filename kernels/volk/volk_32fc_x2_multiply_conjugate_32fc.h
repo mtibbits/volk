@@ -81,6 +81,46 @@ static inline void volk_32fc_x2_multiply_conjugate_32fc_generic(lv_32fc_t* cVect
 #endif /* LV_HAVE_GENERIC */
 
 
+#ifdef LV_HAVE_SSE
+#include <xmmintrin.h>
+
+static inline void volk_32fc_x2_multiply_conjugate_32fc_u_sse(lv_32fc_t* cVector,
+                                                               const lv_32fc_t* aVector,
+                                                               const lv_32fc_t* bVector,
+                                                               unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int halfPoints = num_points / 2;
+
+    const __m128 conjugator = _mm_setr_ps(0, -0.f, 0, -0.f);
+    lv_32fc_t* c = cVector;
+    const lv_32fc_t* a = aVector;
+    const lv_32fc_t* b = bVector;
+
+    for (; number < halfPoints; number++) {
+        __m128 x = _mm_loadu_ps((const float*)a);
+        __m128 y = _mm_loadu_ps((const float*)b);
+
+        __m128 nswap = _mm_shuffle_ps(x, x, 0xB1);
+        __m128 dreal = _mm_shuffle_ps(y, y, _MM_SHUFFLE(2, 2, 0, 0));
+        __m128 dimag = _mm_shuffle_ps(y, y, _MM_SHUFFLE(3, 3, 1, 1));
+        __m128 dimagconj = _mm_xor_ps(dimag, conjugator);
+
+        __m128 z = _mm_add_ps(_mm_mul_ps(x, dreal), _mm_mul_ps(nswap, dimagconj));
+        _mm_storeu_ps((float*)c, z);
+
+        a += 2;
+        b += 2;
+        c += 2;
+    }
+
+    if ((num_points % 2) != 0) {
+        *c = (*a) * lv_conj(*b);
+    }
+}
+#endif /* LV_HAVE_SSE */
+
+
 #ifdef LV_HAVE_SSE3
 #include <pmmintrin.h>
 #include <volk/volk_sse3_intrinsics.h>
@@ -153,6 +193,41 @@ static inline void volk_32fc_x2_multiply_conjugate_32fc_u_avx(lv_32fc_t* cVector
     }
 }
 #endif /* LV_HAVE_AVX */
+
+
+#ifdef LV_HAVE_AVX512F
+#include <immintrin.h>
+#include <volk/volk_avx512_intrinsics.h>
+
+static inline void volk_32fc_x2_multiply_conjugate_32fc_u_avx512f(lv_32fc_t* cVector,
+                                                                    const lv_32fc_t* aVector,
+                                                                    const lv_32fc_t* bVector,
+                                                                    unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int eighthPoints = num_points / 8;
+
+    lv_32fc_t* c = cVector;
+    const lv_32fc_t* a = aVector;
+    const lv_32fc_t* b = bVector;
+
+    for (; number < eighthPoints; number++) {
+        __m512 x = _mm512_loadu_ps((const float*)a);
+        __m512 y = _mm512_loadu_ps((const float*)b);
+        __m512 z = _mm512_complexconjugatemul_ps(x, y);
+        _mm512_storeu_ps((float*)c, z);
+
+        a += 8;
+        b += 8;
+        c += 8;
+    }
+
+    number = eighthPoints * 8;
+    for (; number < num_points; number++) {
+        *c++ = (*a++) * lv_conj(*b++);
+    }
+}
+#endif /* LV_HAVE_AVX512F */
 
 
 #ifdef LV_HAVE_NEON
@@ -309,6 +384,46 @@ static inline void volk_32fc_x2_multiply_conjugate_32fc_rvvseg(lv_32fc_t* cVecto
 #include <stdio.h>
 #include <volk/volk_complex.h>
 
+#ifdef LV_HAVE_SSE
+#include <xmmintrin.h>
+
+static inline void volk_32fc_x2_multiply_conjugate_32fc_a_sse(lv_32fc_t* cVector,
+                                                               const lv_32fc_t* aVector,
+                                                               const lv_32fc_t* bVector,
+                                                               unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int halfPoints = num_points / 2;
+
+    const __m128 conjugator = _mm_setr_ps(0, -0.f, 0, -0.f);
+    lv_32fc_t* c = cVector;
+    const lv_32fc_t* a = aVector;
+    const lv_32fc_t* b = bVector;
+
+    for (; number < halfPoints; number++) {
+        __m128 x = _mm_load_ps((const float*)a);
+        __m128 y = _mm_load_ps((const float*)b);
+
+        __m128 nswap = _mm_shuffle_ps(x, x, 0xB1);
+        __m128 dreal = _mm_shuffle_ps(y, y, _MM_SHUFFLE(2, 2, 0, 0));
+        __m128 dimag = _mm_shuffle_ps(y, y, _MM_SHUFFLE(3, 3, 1, 1));
+        __m128 dimagconj = _mm_xor_ps(dimag, conjugator);
+
+        __m128 z = _mm_add_ps(_mm_mul_ps(x, dreal), _mm_mul_ps(nswap, dimagconj));
+        _mm_store_ps((float*)c, z);
+
+        a += 2;
+        b += 2;
+        c += 2;
+    }
+
+    if ((num_points % 2) != 0) {
+        *c = (*a) * lv_conj(*b);
+    }
+}
+#endif /* LV_HAVE_SSE */
+
+
 #ifdef LV_HAVE_SSE3
 #include <pmmintrin.h>
 #include <volk/volk_sse3_intrinsics.h>
@@ -379,5 +494,39 @@ static inline void volk_32fc_x2_multiply_conjugate_32fc_a_avx(lv_32fc_t* cVector
     }
 }
 #endif /* LV_HAVE_AVX */
+
+#ifdef LV_HAVE_AVX512F
+#include <immintrin.h>
+#include <volk/volk_avx512_intrinsics.h>
+
+static inline void volk_32fc_x2_multiply_conjugate_32fc_a_avx512f(lv_32fc_t* cVector,
+                                                                    const lv_32fc_t* aVector,
+                                                                    const lv_32fc_t* bVector,
+                                                                    unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int eighthPoints = num_points / 8;
+
+    lv_32fc_t* c = cVector;
+    const lv_32fc_t* a = aVector;
+    const lv_32fc_t* b = bVector;
+
+    for (; number < eighthPoints; number++) {
+        __m512 x = _mm512_load_ps((const float*)a);
+        __m512 y = _mm512_load_ps((const float*)b);
+        __m512 z = _mm512_complexconjugatemul_ps(x, y);
+        _mm512_store_ps((float*)c, z);
+
+        a += 8;
+        b += 8;
+        c += 8;
+    }
+
+    number = eighthPoints * 8;
+    for (; number < num_points; number++) {
+        *c++ = (*a++) * lv_conj(*b++);
+    }
+}
+#endif /* LV_HAVE_AVX512F */
 
 #endif /* INCLUDED_volk_32fc_x2_multiply_conjugate_32fc_a_H */

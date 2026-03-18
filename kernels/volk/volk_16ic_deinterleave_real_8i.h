@@ -409,6 +409,40 @@ static inline void volk_16ic_deinterleave_real_8i_u_avx512vbmi(
 }
 #endif /* LV_HAVE_AVX512VBMI */
 
+#ifdef LV_HAVE_AVX512VBMI2
+#include <immintrin.h>
+
+static inline void volk_16ic_deinterleave_real_8i_u_avx512vbmi2(
+    int8_t* iBuffer,
+    const lv_16sc_t* complexVector,
+    unsigned int num_points)
+{
+    unsigned int number = 0;
+    const int16_t* complexVectorPtr = (const int16_t*)complexVector;
+    int8_t* iBufferPtr = iBuffer;
+
+    const __mmask32 iMask = 0x55555555;
+
+    const unsigned int sixteenthPoints = num_points / 16;
+
+    for (number = 0; number < sixteenthPoints; number++) {
+        __m512i data = _mm512_loadu_si512((const __m512i*)complexVectorPtr);
+        complexVectorPtr += 32;
+
+        __m512i iVals = _mm512_maskz_compress_epi16(iMask, data);
+        __m256i i16 = _mm512_castsi512_si256(iVals);
+        __m256i i16_shifted = _mm256_srai_epi16(i16, 8);
+        __m128i i8 = _mm256_cvtepi16_epi8(i16_shifted);
+        _mm_storeu_si128((__m128i*)iBufferPtr, i8);
+        iBufferPtr += 16;
+    }
+
+    number = sixteenthPoints * 16;
+    volk_16ic_deinterleave_real_8i_generic(
+        iBufferPtr, (const lv_16sc_t*)complexVectorPtr, num_points - number);
+}
+#endif /* LV_HAVE_AVX512VBMI2 */
+
 
 #ifdef LV_HAVE_NEON
 #include <arm_neon.h>
@@ -489,6 +523,24 @@ static inline void volk_16ic_deinterleave_real_8i_rvv(int8_t* iBuffer,
     }
 }
 #endif /* LV_HAVE_RVV */
+
+#ifdef LV_HAVE_RVVSEG
+#include <riscv_vector.h>
+
+static inline void volk_16ic_deinterleave_real_8i_rvvseg(int8_t* iBuffer,
+                                                          const lv_16sc_t* complexVector,
+                                                          unsigned int num_points)
+{
+    size_t n = num_points;
+    for (size_t vl; n > 0; n -= vl, complexVector += vl, iBuffer += vl) {
+        vl = __riscv_vsetvl_e16m4(n);
+        vint16m4x2_t vc =
+            __riscv_vlseg2e16_v_i16m4x2((const int16_t*)complexVector, vl);
+        __riscv_vse8(
+            (int8_t*)iBuffer, __riscv_vnsra(__riscv_vget_i16m4(vc, 0), 8, vl), vl);
+    }
+}
+#endif /* LV_HAVE_RVVSEG */
 
 #ifdef LV_HAVE_ORC
 
@@ -786,5 +838,39 @@ static inline void volk_16ic_deinterleave_real_8i_a_avx512bw(
         iBufferPtr, (const lv_16sc_t*)complexVectorPtr, num_points - number);
 }
 #endif /* LV_HAVE_AVX512BW */
+
+#ifdef LV_HAVE_AVX512VBMI2
+#include <immintrin.h>
+
+static inline void volk_16ic_deinterleave_real_8i_a_avx512vbmi2(
+    int8_t* iBuffer,
+    const lv_16sc_t* complexVector,
+    unsigned int num_points)
+{
+    unsigned int number = 0;
+    const int16_t* complexVectorPtr = (const int16_t*)complexVector;
+    int8_t* iBufferPtr = iBuffer;
+
+    const __mmask32 iMask = 0x55555555;
+
+    const unsigned int sixteenthPoints = num_points / 16;
+
+    for (number = 0; number < sixteenthPoints; number++) {
+        __m512i data = _mm512_load_si512((const __m512i*)complexVectorPtr);
+        complexVectorPtr += 32;
+
+        __m512i iVals = _mm512_maskz_compress_epi16(iMask, data);
+        __m256i i16 = _mm512_castsi512_si256(iVals);
+        __m256i i16_shifted = _mm256_srai_epi16(i16, 8);
+        __m128i i8 = _mm256_cvtepi16_epi8(i16_shifted);
+        _mm_store_si128((__m128i*)iBufferPtr, i8);
+        iBufferPtr += 16;
+    }
+
+    number = sixteenthPoints * 16;
+    volk_16ic_deinterleave_real_8i_generic(
+        iBufferPtr, (const lv_16sc_t*)complexVectorPtr, num_points - number);
+}
+#endif /* LV_HAVE_AVX512VBMI2 */
 
 #endif /* INCLUDED_volk_16ic_deinterleave_real_8i_a_H */

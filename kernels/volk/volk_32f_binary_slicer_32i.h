@@ -178,6 +178,47 @@ static inline void volk_32f_binary_slicer_32i_u_avx(int* cVector,
 }
 #endif /* LV_HAVE_AVX */
 
+#ifdef LV_HAVE_AVX2
+#include <immintrin.h>
+
+static inline void volk_32f_binary_slicer_32i_u_avx2(int* cVector,
+                                                    const float* aVector,
+                                                    unsigned int num_points)
+{
+    int* cPtr = cVector;
+    const float* aPtr = aVector;
+    unsigned int number = 0;
+
+    unsigned int quarter_points = num_points / 8;
+    __m256 a_val, res_f, binary_f;
+    __m256i binary_i;
+    __m256 zero_val, one_val;
+    zero_val = _mm256_set1_ps(0.0f);
+    one_val = _mm256_set1_ps(1.0f);
+
+    for (number = 0; number < quarter_points; number++) {
+        a_val = _mm256_loadu_ps(aPtr);
+
+        res_f = _mm256_cmp_ps(a_val, zero_val, _CMP_GE_OS);
+        binary_f = _mm256_and_ps(res_f, one_val);
+        binary_i = _mm256_cvtps_epi32(binary_f);
+
+        _mm256_storeu_si256((__m256i*)cPtr, binary_i);
+
+        cPtr += 8;
+        aPtr += 8;
+    }
+
+    for (number = quarter_points * 8; number < num_points; number++) {
+        if (*aPtr++ >= 0) {
+            *cPtr++ = 1;
+        } else {
+            *cPtr++ = 0;
+        }
+    }
+}
+#endif /* LV_HAVE_AVX2 */
+
 #ifdef LV_HAVE_AVX512F
 #include <immintrin.h>
 
@@ -289,6 +330,21 @@ static inline void volk_32f_binary_slicer_32i_rvv(int* cVector,
 }
 #endif /* LV_HAVE_RVV */
 
+#ifdef LV_HAVE_ORC
+
+extern void volk_32f_binary_slicer_32i_a_orc_impl(int* cVector,
+                                                    const float* aVector,
+                                                    int num_points);
+
+static inline void volk_32f_binary_slicer_32i_u_orc(int* cVector,
+                                                      const float* aVector,
+                                                      unsigned int num_points)
+{
+    volk_32f_binary_slicer_32i_a_orc_impl(cVector, aVector, num_points);
+}
+
+#endif /* LV_HAVE_ORC */
+
 #endif /* INCLUDED_volk_32f_binary_slicer_32i_u_H */
 
 #ifndef INCLUDED_volk_32f_binary_slicer_32i_a_H
@@ -376,6 +432,47 @@ static inline void volk_32f_binary_slicer_32i_a_avx(int* cVector,
     }
 }
 #endif /* LV_HAVE_AVX */
+
+#ifdef LV_HAVE_AVX2
+#include <immintrin.h>
+
+static inline void volk_32f_binary_slicer_32i_a_avx2(int* cVector,
+                                                    const float* aVector,
+                                                    unsigned int num_points)
+{
+    int* cPtr = cVector;
+    const float* aPtr = aVector;
+    unsigned int number = 0;
+
+    unsigned int quarter_points = num_points / 8;
+    __m256 a_val, res_f, binary_f;
+    __m256i binary_i;
+    __m256 zero_val, one_val;
+    zero_val = _mm256_set1_ps(0.0f);
+    one_val = _mm256_set1_ps(1.0f);
+
+    for (number = 0; number < quarter_points; number++) {
+        a_val = _mm256_load_ps(aPtr);
+
+        res_f = _mm256_cmp_ps(a_val, zero_val, _CMP_GE_OS);
+        binary_f = _mm256_and_ps(res_f, one_val);
+        binary_i = _mm256_cvtps_epi32(binary_f);
+
+        _mm256_store_si256((__m256i*)cPtr, binary_i);
+
+        cPtr += 8;
+        aPtr += 8;
+    }
+
+    for (number = quarter_points * 8; number < num_points; number++) {
+        if (*aPtr++ >= 0) {
+            *cPtr++ = 1;
+        } else {
+            *cPtr++ = 0;
+        }
+    }
+}
+#endif /* LV_HAVE_AVX2 */
 
 #ifdef LV_HAVE_AVX512F
 #include <immintrin.h>

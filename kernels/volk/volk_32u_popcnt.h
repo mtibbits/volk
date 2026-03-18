@@ -99,6 +99,39 @@ static inline void volk_32u_popcnt_rva22(uint32_t* ret, const uint32_t value)
 }
 #endif /* LV_HAVE_RVA22V */
 
+#ifdef LV_HAVE_SSE4_2
+
+#include <nmmintrin.h>
+
+static inline void volk_32u_popcnt_u_sse4_2(uint32_t* ret, const uint32_t value)
+{
+    *ret = _mm_popcnt_u32(value);
+}
+
+#endif /* LV_HAVE_SSE4_2 */
+
+
+#ifdef LV_HAVE_AVX2
+#include <immintrin.h>
+
+static inline void volk_32u_popcnt_u_avx2(uint32_t* ret, const uint32_t value)
+{
+    *ret = _mm_popcnt_u32(value);
+}
+
+#endif /* LV_HAVE_AVX2 */
+
+
+#ifdef LV_HAVE_AVX512BW
+#include <immintrin.h>
+
+static inline void volk_32u_popcnt_u_avx512bw(uint32_t* ret, const uint32_t value)
+{
+    *ret = _mm_popcnt_u32(value);
+}
+
+#endif /* LV_HAVE_AVX512BW */
+
 #endif /* INCLUDED_volk_32u_popcnt_u_H */
 
 #ifndef INCLUDED_volk_32u_popcnt_a_H
@@ -114,5 +147,27 @@ static inline void volk_32u_popcnt_a_sse4_2(uint32_t* ret, const uint32_t value)
 }
 
 #endif /* LV_HAVE_SSE4_2 */
+
+
+#ifdef LV_HAVE_AVX2
+#include <immintrin.h>
+
+static inline void volk_32u_popcnt_a_avx2(uint32_t* ret, const uint32_t value)
+{
+    *ret = _mm_popcnt_u32(value);
+}
+
+#endif /* LV_HAVE_AVX2 */
+
+
+#ifdef LV_HAVE_AVX512BW
+#include <immintrin.h>
+
+static inline void volk_32u_popcnt_a_avx512bw(uint32_t* ret, const uint32_t value)
+{
+    *ret = _mm_popcnt_u32(value);
+}
+
+#endif /* LV_HAVE_AVX512BW */
 
 #endif /* INCLUDED_volk_32u_popcnt_a_H */

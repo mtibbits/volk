@@ -150,6 +150,45 @@ static inline void volk_64f_convert_32f_u_avx(float* outputVector,
 }
 #endif /* LV_HAVE_AVX */
 
+#ifdef LV_HAVE_AVX2
+#include <immintrin.h>
+
+static inline void volk_64f_convert_32f_u_avx2(float* outputVector,
+                                              const double* inputVector,
+                                              unsigned int num_points)
+{
+    unsigned int number = 0;
+
+    const unsigned int oneEightPoints = num_points / 8;
+
+    const double* inputVectorPtr = (const double*)inputVector;
+    float* outputVectorPtr = outputVector;
+    __m128 ret1, ret2;
+    __m256d inputVal1, inputVal2;
+
+    for (; number < oneEightPoints; number++) {
+        inputVal1 = _mm256_loadu_pd(inputVectorPtr);
+        inputVectorPtr += 4;
+        inputVal2 = _mm256_loadu_pd(inputVectorPtr);
+        inputVectorPtr += 4;
+
+        ret1 = _mm256_cvtpd_ps(inputVal1);
+        ret2 = _mm256_cvtpd_ps(inputVal2);
+
+        _mm_storeu_ps(outputVectorPtr, ret1);
+        outputVectorPtr += 4;
+
+        _mm_storeu_ps(outputVectorPtr, ret2);
+        outputVectorPtr += 4;
+    }
+
+    number = oneEightPoints * 8;
+    for (; number < num_points; number++) {
+        outputVector[number] = (float)(inputVector[number]);
+    }
+}
+#endif /* LV_HAVE_AVX2 */
+
 
 #ifdef LV_HAVE_AVX512F
 #include <immintrin.h>
@@ -245,6 +284,21 @@ static inline void volk_64f_convert_32f_rvv(float* outputVector,
 }
 #endif /* LV_HAVE_RVV */
 
+#ifdef LV_HAVE_ORC
+
+extern void volk_64f_convert_32f_a_orc_impl(float* outputVector,
+                                             const double* inputVector,
+                                             int num_points);
+
+static inline void volk_64f_convert_32f_u_orc(float* outputVector,
+                                               const double* inputVector,
+                                               unsigned int num_points)
+{
+    volk_64f_convert_32f_a_orc_impl(outputVector, inputVector, num_points);
+}
+
+#endif /* LV_HAVE_ORC */
+
 #endif /* INCLUDED_volk_64f_convert_32f_u_H */
 #ifndef INCLUDED_volk_64f_convert_32f_a_H
 #define INCLUDED_volk_64f_convert_32f_a_H
@@ -329,6 +383,45 @@ static inline void volk_64f_convert_32f_a_avx(float* outputVector,
     }
 }
 #endif /* LV_HAVE_AVX */
+
+#ifdef LV_HAVE_AVX2
+#include <immintrin.h>
+
+static inline void volk_64f_convert_32f_a_avx2(float* outputVector,
+                                              const double* inputVector,
+                                              unsigned int num_points)
+{
+    unsigned int number = 0;
+
+    const unsigned int oneEightPoints = num_points / 8;
+
+    const double* inputVectorPtr = (const double*)inputVector;
+    float* outputVectorPtr = outputVector;
+    __m128 ret1, ret2;
+    __m256d inputVal1, inputVal2;
+
+    for (; number < oneEightPoints; number++) {
+        inputVal1 = _mm256_load_pd(inputVectorPtr);
+        inputVectorPtr += 4;
+        inputVal2 = _mm256_load_pd(inputVectorPtr);
+        inputVectorPtr += 4;
+
+        ret1 = _mm256_cvtpd_ps(inputVal1);
+        ret2 = _mm256_cvtpd_ps(inputVal2);
+
+        _mm_store_ps(outputVectorPtr, ret1);
+        outputVectorPtr += 4;
+
+        _mm_store_ps(outputVectorPtr, ret2);
+        outputVectorPtr += 4;
+    }
+
+    number = oneEightPoints * 8;
+    for (; number < num_points; number++) {
+        outputVector[number] = (float)(inputVector[number]);
+    }
+}
+#endif /* LV_HAVE_AVX2 */
 
 
 #ifdef LV_HAVE_AVX512F

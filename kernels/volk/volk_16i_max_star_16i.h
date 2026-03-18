@@ -229,6 +229,75 @@ volk_16i_max_star_16i_u_avx512bw(short* target, const short* src0, unsigned int 
 }
 #endif /* LV_HAVE_AVX512BW */
 
+
+#ifdef LV_HAVE_NEON
+#include <arm_neon.h>
+
+static inline void
+volk_16i_max_star_16i_neon(short* target, const short* src0, unsigned int num_points)
+{
+    short candidate = src0[0];
+
+    const unsigned int eighth_points = num_points / 8;
+    int leftovers = num_points - eighth_points * 8;
+
+    int16x8_t max_vec = vdupq_n_s16(candidate);
+
+    for (unsigned int i = 0; i < eighth_points; ++i) {
+        int16x8_t input = vld1q_s16(src0);
+        src0 += 8;
+        max_vec = vmaxq_s16(max_vec, input);
+    }
+
+    /* Reduce 128-bit to scalar */
+    int16x4_t max_lo = vget_low_s16(max_vec);
+    int16x4_t max_hi = vget_high_s16(max_vec);
+    max_lo = vmax_s16(max_lo, max_hi);
+    max_lo = vpmax_s16(max_lo, max_lo);
+    max_lo = vpmax_s16(max_lo, max_lo);
+    candidate = vget_lane_s16(max_lo, 0);
+
+    if (leftovers > 0) {
+        short tail_result;
+        volk_16i_max_star_16i_generic(&tail_result, src0, leftovers);
+        candidate = (candidate > tail_result) ? candidate : tail_result;
+    }
+
+    target[0] = candidate;
+}
+#endif /* LV_HAVE_NEON */
+
+#ifdef LV_HAVE_RVV
+#include <riscv_vector.h>
+
+static inline void
+volk_16i_max_star_16i_rvv(short* target, const short* src0, unsigned int num_points)
+{
+    size_t n = (size_t)num_points;
+    if (n == 0) {
+        return;
+    }
+
+    /* Bootstrap: load the first chunk and seed the reduction accumulator */
+    size_t vl = __riscv_vsetvl_e16m4(n);
+    vint16m4_t max_vec = __riscv_vle16_v_i16m4(src0, vl);
+    src0 += vl;
+    n -= vl;
+
+    /* Vector max across remaining elements */
+    for (; n > 0; n -= vl, src0 += vl) {
+        vl = __riscv_vsetvl_e16m4(n);
+        vint16m4_t v = __riscv_vle16_v_i16m4(src0, vl);
+        max_vec = __riscv_vmax(max_vec, v, vl);
+    }
+
+    /* Tree reduction to scalar */
+    vint16m1_t scalar = __riscv_vmv_s_x_i16m1(INT16_MIN, 1);
+    scalar = __riscv_vredmax(max_vec, scalar, __riscv_vsetvlmax_e16m4());
+    target[0] = __riscv_vmv_x_s_i16m1_i16(scalar);
+}
+#endif /* LV_HAVE_RVV */
+
 #endif /* INCLUDED_volk_16i_max_star_16i_u_H */
 
 #ifndef INCLUDED_volk_16i_max_star_16i_a_H

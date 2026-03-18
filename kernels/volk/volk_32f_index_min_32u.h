@@ -265,6 +265,65 @@ volk_32f_index_min_32u_u_avx(uint32_t* target, const float* source, uint32_t num
 #endif /*LV_HAVE_AVX*/
 
 
+#ifdef LV_HAVE_AVX2
+#include <immintrin.h>
+
+static inline void
+volk_32f_index_min_32u_u_avx2(uint32_t* target, const float* source, uint32_t num_points)
+{
+    const uint32_t eighthPoints = num_points / 8;
+
+    const float* inputPtr = source;
+
+    __m256i indexIncrementValues = _mm256_set1_epi32(8);
+    __m256i currentIndexes = _mm256_set_epi32(-1, -2, -3, -4, -5, -6, -7, -8);
+
+    float min = source[0];
+    uint32_t index = 0;
+    __m256 minValues = _mm256_set1_ps(min);
+    __m256i minValuesIndex = _mm256_setzero_si256();
+    __m256 compareResults;
+    __m256 currentValues;
+
+    __VOLK_ATTR_ALIGNED(32) float minValuesBuffer[8];
+    __VOLK_ATTR_ALIGNED(32) uint32_t minIndexesBuffer[8];
+
+    for (uint32_t number = 0; number < eighthPoints; number++) {
+        currentValues = _mm256_loadu_ps(inputPtr);
+        inputPtr += 8;
+        currentIndexes = _mm256_add_epi32(currentIndexes, indexIncrementValues);
+        compareResults = _mm256_cmp_ps(currentValues, minValues, _CMP_LT_OS);
+        __m256i mask = _mm256_castps_si256(compareResults);
+        minValuesIndex = _mm256_blendv_epi8(minValuesIndex, currentIndexes, mask);
+        minValues = _mm256_blendv_ps(minValues, currentValues, compareResults);
+    }
+
+    // Calculate the smallest value from the remaining 8 points
+    _mm256_storeu_ps(minValuesBuffer, minValues);
+    _mm256_storeu_si256((__m256i*)minIndexesBuffer, minValuesIndex);
+
+    for (uint32_t number = 0; number < 8; number++) {
+        if (minValuesBuffer[number] < min) {
+            index = minIndexesBuffer[number];
+            min = minValuesBuffer[number];
+        } else if (minValuesBuffer[number] == min) {
+            if (index > minIndexesBuffer[number])
+                index = minIndexesBuffer[number];
+        }
+    }
+
+    for (uint32_t number = eighthPoints * 8; number < num_points; number++) {
+        if (source[number] < min) {
+            index = number;
+            min = source[number];
+        }
+    }
+    target[0] = index;
+}
+
+#endif /*LV_HAVE_AVX2*/
+
+
 #ifdef LV_HAVE_AVX512F
 #include <immintrin.h>
 
@@ -683,6 +742,65 @@ volk_32f_index_min_32u_a_avx(uint32_t* target, const float* source, uint32_t num
 }
 
 #endif /*LV_HAVE_AVX*/
+
+
+#ifdef LV_HAVE_AVX2
+#include <immintrin.h>
+
+static inline void
+volk_32f_index_min_32u_a_avx2(uint32_t* target, const float* source, uint32_t num_points)
+{
+    const uint32_t eighthPoints = num_points / 8;
+
+    const float* inputPtr = source;
+
+    __m256i indexIncrementValues = _mm256_set1_epi32(8);
+    __m256i currentIndexes = _mm256_set_epi32(-1, -2, -3, -4, -5, -6, -7, -8);
+
+    float min = source[0];
+    uint32_t index = 0;
+    __m256 minValues = _mm256_set1_ps(min);
+    __m256i minValuesIndex = _mm256_setzero_si256();
+    __m256 compareResults;
+    __m256 currentValues;
+
+    __VOLK_ATTR_ALIGNED(32) float minValuesBuffer[8];
+    __VOLK_ATTR_ALIGNED(32) uint32_t minIndexesBuffer[8];
+
+    for (uint32_t number = 0; number < eighthPoints; number++) {
+        currentValues = _mm256_load_ps(inputPtr);
+        inputPtr += 8;
+        currentIndexes = _mm256_add_epi32(currentIndexes, indexIncrementValues);
+        compareResults = _mm256_cmp_ps(currentValues, minValues, _CMP_LT_OS);
+        __m256i mask = _mm256_castps_si256(compareResults);
+        minValuesIndex = _mm256_blendv_epi8(minValuesIndex, currentIndexes, mask);
+        minValues = _mm256_blendv_ps(minValues, currentValues, compareResults);
+    }
+
+    // Calculate the smallest value from the remaining 8 points
+    _mm256_store_ps(minValuesBuffer, minValues);
+    _mm256_store_si256((__m256i*)minIndexesBuffer, minValuesIndex);
+
+    for (uint32_t number = 0; number < 8; number++) {
+        if (minValuesBuffer[number] < min) {
+            index = minIndexesBuffer[number];
+            min = minValuesBuffer[number];
+        } else if (minValuesBuffer[number] == min) {
+            if (index > minIndexesBuffer[number])
+                index = minIndexesBuffer[number];
+        }
+    }
+
+    for (uint32_t number = eighthPoints * 8; number < num_points; number++) {
+        if (source[number] < min) {
+            index = number;
+            min = source[number];
+        }
+    }
+    target[0] = index;
+}
+
+#endif /*LV_HAVE_AVX2*/
 
 
 #ifdef LV_HAVE_AVX512F

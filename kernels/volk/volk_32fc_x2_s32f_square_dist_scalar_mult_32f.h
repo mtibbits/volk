@@ -363,6 +363,41 @@ volk_32fc_x2_s32f_square_dist_scalar_mult_32f_u_avx2(float* target,
 
 #endif /*LV_HAVE_AVX2*/
 
+#if LV_HAVE_AVX2 && LV_HAVE_FMA
+#include <immintrin.h>
+#include <volk/volk_avx2_fma_intrinsics.h>
+
+static inline void
+volk_32fc_x2_s32f_square_dist_scalar_mult_32f_u_avx2_fma(float* target,
+                                                           const lv_32fc_t* src0,
+                                                           const lv_32fc_t* points,
+                                                           float scalar,
+                                                           unsigned int num_points)
+{
+    const unsigned int eighthPoints = num_points / 8;
+
+    const __m256 xmm_symbol = _mm256_castpd_ps(
+        _mm256_broadcast_sd((const double*)src0));
+    const __m256 xmm_scalar = _mm256_broadcast_ss(&scalar);
+
+    for (unsigned int i = 0; i < eighthPoints; ++i) {
+        __m256 pts0 = _mm256_loadu_ps((const float*)points);
+        __m256 pts1 = _mm256_loadu_ps((const float*)(points + 4));
+        points += 8;
+
+        __m256 result = _mm256_scaled_norm_dist_ps_avx2_fma(
+            xmm_symbol, xmm_symbol, pts0, pts1, xmm_scalar);
+
+        _mm256_storeu_ps(target, result);
+        target += 8;
+    }
+
+    volk_32fc_x2_s32f_square_dist_scalar_mult_32f_generic(
+        target, src0, points, scalar, num_points - eighthPoints * 8);
+}
+
+#endif /*LV_HAVE_AVX2 && LV_HAVE_FMA*/
+
 #ifdef LV_HAVE_NEON
 #include <arm_neon.h>
 
@@ -841,6 +876,40 @@ volk_32fc_x2_s32f_square_dist_scalar_mult_32f_a_avx2(float* target,
 
 #endif /*LV_HAVE_AVX2*/
 
+#if LV_HAVE_AVX2 && LV_HAVE_FMA
+#include <immintrin.h>
+#include <volk/volk_avx2_fma_intrinsics.h>
+
+static inline void
+volk_32fc_x2_s32f_square_dist_scalar_mult_32f_a_avx2_fma(float* target,
+                                                           const lv_32fc_t* src0,
+                                                           const lv_32fc_t* points,
+                                                           float scalar,
+                                                           unsigned int num_points)
+{
+    const unsigned int eighthPoints = num_points / 8;
+
+    const __m256 xmm_symbol = _mm256_castpd_ps(
+        _mm256_broadcast_sd((const double*)src0));
+    const __m256 xmm_scalar = _mm256_broadcast_ss(&scalar);
+
+    for (unsigned int i = 0; i < eighthPoints; ++i) {
+        __m256 pts0 = _mm256_load_ps((const float*)points);
+        __m256 pts1 = _mm256_load_ps((const float*)(points + 4));
+        points += 8;
+
+        __m256 result = _mm256_scaled_norm_dist_ps_avx2_fma(
+            xmm_symbol, xmm_symbol, pts0, pts1, xmm_scalar);
+
+        _mm256_store_ps(target, result);
+        target += 8;
+    }
+
+    volk_32fc_x2_s32f_square_dist_scalar_mult_32f_generic(
+        target, src0, points, scalar, num_points - eighthPoints * 8);
+}
+
+#endif /*LV_HAVE_AVX2 && LV_HAVE_FMA*/
 
 #ifdef LV_HAVE_AVX512F
 #include <immintrin.h>

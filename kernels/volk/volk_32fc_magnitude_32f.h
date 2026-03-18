@@ -188,6 +188,149 @@ static inline void volk_32fc_magnitude_32f_u_avx(float* magnitudeVector,
 }
 #endif /* LV_HAVE_AVX */
 
+#if LV_HAVE_AVX && LV_HAVE_FMA
+#include <immintrin.h>
+#include <volk/volk_avx_intrinsics.h>
+
+static inline void volk_32fc_magnitude_32f_u_avx_fma(float* magnitudeVector,
+                                                      const lv_32fc_t* complexVector,
+                                                      unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int eighthPoints = num_points / 8;
+
+    const float* complexVectorPtr = (const float*)complexVector;
+    float* magnitudeVectorPtr = magnitudeVector;
+
+    for (; number < eighthPoints; number++) {
+        __m256 cplxValue1 = _mm256_loadu_ps(complexVectorPtr);
+        __m256 cplxValue2 = _mm256_loadu_ps(complexVectorPtr + 8);
+        complexVectorPtr += 16;
+
+        /* Deinterleave re/im within 128-bit lanes */
+        __m256 re = _mm256_shuffle_ps(cplxValue1, cplxValue2, _MM_SHUFFLE(2, 0, 2, 0));
+        __m256 im = _mm256_shuffle_ps(cplxValue1, cplxValue2, _MM_SHUFFLE(3, 1, 3, 1));
+
+        /* mag² = re*re + im*im using FMA (lane-interleaved: [0,1,4,5 | 2,3,6,7]) */
+        __m256 mag_sq = _mm256_fmadd_ps(im, im, _mm256_mul_ps(re, re));
+
+        /* Fix cross-lane order using permute2f128 + SSE shuffles (AVX only, no AVX2) */
+        __m128 lo = _mm256_castps256_ps128(mag_sq);
+        __m128 hi = _mm256_extractf128_ps(mag_sq, 1);
+        __m128 out_lo = _mm_shuffle_ps(lo, hi, _MM_SHUFFLE(1, 0, 1, 0));
+        __m128 out_hi = _mm_shuffle_ps(lo, hi, _MM_SHUFFLE(3, 2, 3, 2));
+        __m256 mag_sq_ordered = _mm256_castps128_ps256(out_lo);
+        mag_sq_ordered = _mm256_insertf128_ps(mag_sq_ordered, out_hi, 1);
+
+        __m256 result = _mm256_sqrt_ps(mag_sq_ordered);
+        _mm256_storeu_ps(magnitudeVectorPtr, result);
+        magnitudeVectorPtr += 8;
+    }
+
+    number = eighthPoints * 8;
+    for (; number < num_points; number++) {
+        float val1Real = *complexVectorPtr++;
+        float val1Imag = *complexVectorPtr++;
+        *magnitudeVectorPtr++ = sqrtf((val1Real * val1Real) + (val1Imag * val1Imag));
+    }
+}
+#endif /* LV_HAVE_AVX && LV_HAVE_FMA */
+
+#ifdef LV_HAVE_AVX2
+#include <immintrin.h>
+#include <volk/volk_avx_intrinsics.h>
+
+static inline void volk_32fc_magnitude_32f_u_avx2(float* magnitudeVector,
+                                                    const lv_32fc_t* complexVector,
+                                                    unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int eighthPoints = num_points / 8;
+
+    const float* complexVectorPtr = (const float*)complexVector;
+    float* magnitudeVectorPtr = magnitudeVector;
+
+    for (; number < eighthPoints; number++) {
+        __m256 cplxValue1 = _mm256_loadu_ps(complexVectorPtr);
+        __m256 cplxValue2 = _mm256_loadu_ps(complexVectorPtr + 8);
+        complexVectorPtr += 16;
+
+        /* Deinterleave re/im within 128-bit lanes */
+        __m256 re = _mm256_shuffle_ps(cplxValue1, cplxValue2, _MM_SHUFFLE(2, 0, 2, 0));
+        __m256 im = _mm256_shuffle_ps(cplxValue1, cplxValue2, _MM_SHUFFLE(3, 1, 3, 1));
+
+        /* mag² = re*re + im*im (lane-interleaved: [0,1,4,5 | 2,3,6,7]) */
+        __m256 mag_sq = _mm256_add_ps(_mm256_mul_ps(re, re), _mm256_mul_ps(im, im));
+
+        /* Fix cross-lane order using permute2f128 + SSE shuffles (AVX only, no AVX2) */
+        __m128 lo = _mm256_castps256_ps128(mag_sq);
+        __m128 hi = _mm256_extractf128_ps(mag_sq, 1);
+        __m128 out_lo = _mm_shuffle_ps(lo, hi, _MM_SHUFFLE(1, 0, 1, 0));
+        __m128 out_hi = _mm_shuffle_ps(lo, hi, _MM_SHUFFLE(3, 2, 3, 2));
+        __m256 mag_sq_ordered = _mm256_castps128_ps256(out_lo);
+        mag_sq_ordered = _mm256_insertf128_ps(mag_sq_ordered, out_hi, 1);
+
+        __m256 result = _mm256_sqrt_ps(mag_sq_ordered);
+        _mm256_storeu_ps(magnitudeVectorPtr, result);
+        magnitudeVectorPtr += 8;
+    }
+
+    number = eighthPoints * 8;
+    for (; number < num_points; number++) {
+        float val1Real = *complexVectorPtr++;
+        float val1Imag = *complexVectorPtr++;
+        *magnitudeVectorPtr++ = sqrtf((val1Real * val1Real) + (val1Imag * val1Imag));
+    }
+}
+#endif /* LV_HAVE_AVX2 */
+
+#if LV_HAVE_AVX2 && LV_HAVE_FMA
+#include <immintrin.h>
+
+static inline void volk_32fc_magnitude_32f_u_avx2_fma(float* magnitudeVector,
+                                                       const lv_32fc_t* complexVector,
+                                                       unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int eighthPoints = num_points / 8;
+
+    const float* complexVectorPtr = (const float*)complexVector;
+    float* magnitudeVectorPtr = magnitudeVector;
+
+    for (; number < eighthPoints; number++) {
+        __m256 cplxValue1 = _mm256_loadu_ps(complexVectorPtr);
+        __m256 cplxValue2 = _mm256_loadu_ps(complexVectorPtr + 8);
+        complexVectorPtr += 16;
+
+        /* Deinterleave re/im within 128-bit lanes */
+        __m256 re = _mm256_shuffle_ps(cplxValue1, cplxValue2, _MM_SHUFFLE(2, 0, 2, 0));
+        __m256 im = _mm256_shuffle_ps(cplxValue1, cplxValue2, _MM_SHUFFLE(3, 1, 3, 1));
+
+        /* mag² = re*re + im*im using FMA (lane-interleaved: [0,1,4,5 | 2,3,6,7]) */
+        __m256 mag_sq = _mm256_fmadd_ps(im, im, _mm256_mul_ps(re, re));
+
+        /* Fix cross-lane order using permute2f128 + SSE shuffles (AVX only, no AVX2) */
+        __m128 lo = _mm256_castps256_ps128(mag_sq);
+        __m128 hi = _mm256_extractf128_ps(mag_sq, 1);
+        __m128 out_lo = _mm_shuffle_ps(lo, hi, _MM_SHUFFLE(1, 0, 1, 0));
+        __m128 out_hi = _mm_shuffle_ps(lo, hi, _MM_SHUFFLE(3, 2, 3, 2));
+        __m256 mag_sq_ordered = _mm256_castps128_ps256(out_lo);
+        mag_sq_ordered = _mm256_insertf128_ps(mag_sq_ordered, out_hi, 1);
+
+        __m256 result = _mm256_sqrt_ps(mag_sq_ordered);
+        _mm256_storeu_ps(magnitudeVectorPtr, result);
+        magnitudeVectorPtr += 8;
+    }
+
+    number = eighthPoints * 8;
+    for (; number < num_points; number++) {
+        float val1Real = *complexVectorPtr++;
+        float val1Imag = *complexVectorPtr++;
+        *magnitudeVectorPtr++ = sqrtf((val1Real * val1Real) + (val1Imag * val1Imag));
+    }
+}
+#endif /* LV_HAVE_AVX2 && LV_HAVE_FMA */
+
 #ifdef LV_HAVE_AVX512F
 #include <immintrin.h>
 
@@ -539,6 +682,149 @@ static inline void volk_32fc_magnitude_32f_a_avx(float* magnitudeVector,
     }
 }
 #endif /* LV_HAVE_AVX */
+
+#if LV_HAVE_AVX && LV_HAVE_FMA
+#include <immintrin.h>
+#include <volk/volk_avx_intrinsics.h>
+
+static inline void volk_32fc_magnitude_32f_a_avx_fma(float* magnitudeVector,
+                                                      const lv_32fc_t* complexVector,
+                                                      unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int eighthPoints = num_points / 8;
+
+    const float* complexVectorPtr = (const float*)complexVector;
+    float* magnitudeVectorPtr = magnitudeVector;
+
+    for (; number < eighthPoints; number++) {
+        __m256 cplxValue1 = _mm256_load_ps(complexVectorPtr);
+        __m256 cplxValue2 = _mm256_load_ps(complexVectorPtr + 8);
+        complexVectorPtr += 16;
+
+        /* Deinterleave re/im within 128-bit lanes */
+        __m256 re = _mm256_shuffle_ps(cplxValue1, cplxValue2, _MM_SHUFFLE(2, 0, 2, 0));
+        __m256 im = _mm256_shuffle_ps(cplxValue1, cplxValue2, _MM_SHUFFLE(3, 1, 3, 1));
+
+        /* mag² = re*re + im*im using FMA (lane-interleaved: [0,1,4,5 | 2,3,6,7]) */
+        __m256 mag_sq = _mm256_fmadd_ps(im, im, _mm256_mul_ps(re, re));
+
+        /* Fix cross-lane order using permute2f128 + SSE shuffles (AVX only, no AVX2) */
+        __m128 lo = _mm256_castps256_ps128(mag_sq);
+        __m128 hi = _mm256_extractf128_ps(mag_sq, 1);
+        __m128 out_lo = _mm_shuffle_ps(lo, hi, _MM_SHUFFLE(1, 0, 1, 0));
+        __m128 out_hi = _mm_shuffle_ps(lo, hi, _MM_SHUFFLE(3, 2, 3, 2));
+        __m256 mag_sq_ordered = _mm256_castps128_ps256(out_lo);
+        mag_sq_ordered = _mm256_insertf128_ps(mag_sq_ordered, out_hi, 1);
+
+        __m256 result = _mm256_sqrt_ps(mag_sq_ordered);
+        _mm256_store_ps(magnitudeVectorPtr, result);
+        magnitudeVectorPtr += 8;
+    }
+
+    number = eighthPoints * 8;
+    for (; number < num_points; number++) {
+        float val1Real = *complexVectorPtr++;
+        float val1Imag = *complexVectorPtr++;
+        *magnitudeVectorPtr++ = sqrtf((val1Real * val1Real) + (val1Imag * val1Imag));
+    }
+}
+#endif /* LV_HAVE_AVX && LV_HAVE_FMA */
+
+#ifdef LV_HAVE_AVX2
+#include <immintrin.h>
+#include <volk/volk_avx_intrinsics.h>
+
+static inline void volk_32fc_magnitude_32f_a_avx2(float* magnitudeVector,
+                                                    const lv_32fc_t* complexVector,
+                                                    unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int eighthPoints = num_points / 8;
+
+    const float* complexVectorPtr = (const float*)complexVector;
+    float* magnitudeVectorPtr = magnitudeVector;
+
+    for (; number < eighthPoints; number++) {
+        __m256 cplxValue1 = _mm256_load_ps(complexVectorPtr);
+        __m256 cplxValue2 = _mm256_load_ps(complexVectorPtr + 8);
+        complexVectorPtr += 16;
+
+        /* Deinterleave re/im within 128-bit lanes */
+        __m256 re = _mm256_shuffle_ps(cplxValue1, cplxValue2, _MM_SHUFFLE(2, 0, 2, 0));
+        __m256 im = _mm256_shuffle_ps(cplxValue1, cplxValue2, _MM_SHUFFLE(3, 1, 3, 1));
+
+        /* mag² = re*re + im*im (lane-interleaved: [0,1,4,5 | 2,3,6,7]) */
+        __m256 mag_sq = _mm256_add_ps(_mm256_mul_ps(re, re), _mm256_mul_ps(im, im));
+
+        /* Fix cross-lane order using permute2f128 + SSE shuffles (AVX only, no AVX2) */
+        __m128 lo = _mm256_castps256_ps128(mag_sq);
+        __m128 hi = _mm256_extractf128_ps(mag_sq, 1);
+        __m128 out_lo = _mm_shuffle_ps(lo, hi, _MM_SHUFFLE(1, 0, 1, 0));
+        __m128 out_hi = _mm_shuffle_ps(lo, hi, _MM_SHUFFLE(3, 2, 3, 2));
+        __m256 mag_sq_ordered = _mm256_castps128_ps256(out_lo);
+        mag_sq_ordered = _mm256_insertf128_ps(mag_sq_ordered, out_hi, 1);
+
+        __m256 result = _mm256_sqrt_ps(mag_sq_ordered);
+        _mm256_store_ps(magnitudeVectorPtr, result);
+        magnitudeVectorPtr += 8;
+    }
+
+    number = eighthPoints * 8;
+    for (; number < num_points; number++) {
+        float val1Real = *complexVectorPtr++;
+        float val1Imag = *complexVectorPtr++;
+        *magnitudeVectorPtr++ = sqrtf((val1Real * val1Real) + (val1Imag * val1Imag));
+    }
+}
+#endif /* LV_HAVE_AVX2 */
+
+#if LV_HAVE_AVX2 && LV_HAVE_FMA
+#include <immintrin.h>
+
+static inline void volk_32fc_magnitude_32f_a_avx2_fma(float* magnitudeVector,
+                                                       const lv_32fc_t* complexVector,
+                                                       unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int eighthPoints = num_points / 8;
+
+    const float* complexVectorPtr = (const float*)complexVector;
+    float* magnitudeVectorPtr = magnitudeVector;
+
+    for (; number < eighthPoints; number++) {
+        __m256 cplxValue1 = _mm256_load_ps(complexVectorPtr);
+        __m256 cplxValue2 = _mm256_load_ps(complexVectorPtr + 8);
+        complexVectorPtr += 16;
+
+        /* Deinterleave re/im within 128-bit lanes */
+        __m256 re = _mm256_shuffle_ps(cplxValue1, cplxValue2, _MM_SHUFFLE(2, 0, 2, 0));
+        __m256 im = _mm256_shuffle_ps(cplxValue1, cplxValue2, _MM_SHUFFLE(3, 1, 3, 1));
+
+        /* mag² = re*re + im*im using FMA (lane-interleaved: [0,1,4,5 | 2,3,6,7]) */
+        __m256 mag_sq = _mm256_fmadd_ps(im, im, _mm256_mul_ps(re, re));
+
+        /* Fix cross-lane order using permute2f128 + SSE shuffles (AVX only, no AVX2) */
+        __m128 lo = _mm256_castps256_ps128(mag_sq);
+        __m128 hi = _mm256_extractf128_ps(mag_sq, 1);
+        __m128 out_lo = _mm_shuffle_ps(lo, hi, _MM_SHUFFLE(1, 0, 1, 0));
+        __m128 out_hi = _mm_shuffle_ps(lo, hi, _MM_SHUFFLE(3, 2, 3, 2));
+        __m256 mag_sq_ordered = _mm256_castps128_ps256(out_lo);
+        mag_sq_ordered = _mm256_insertf128_ps(mag_sq_ordered, out_hi, 1);
+
+        __m256 result = _mm256_sqrt_ps(mag_sq_ordered);
+        _mm256_store_ps(magnitudeVectorPtr, result);
+        magnitudeVectorPtr += 8;
+    }
+
+    number = eighthPoints * 8;
+    for (; number < num_points; number++) {
+        float val1Real = *complexVectorPtr++;
+        float val1Imag = *complexVectorPtr++;
+        *magnitudeVectorPtr++ = sqrtf((val1Real * val1Real) + (val1Imag * val1Imag));
+    }
+}
+#endif /* LV_HAVE_AVX2 && LV_HAVE_FMA */
 
 #ifdef LV_HAVE_AVX512F
 #include <immintrin.h>

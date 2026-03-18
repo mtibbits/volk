@@ -81,6 +81,49 @@ static inline void volk_32fc_x2_multiply_32fc_generic(lv_32fc_t* cVector,
 #endif /* LV_HAVE_GENERIC */
 
 
+#ifdef LV_HAVE_SSE
+#include <xmmintrin.h>
+
+static inline void volk_32fc_x2_multiply_32fc_u_sse(lv_32fc_t* cVector,
+                                                     const lv_32fc_t* aVector,
+                                                     const lv_32fc_t* bVector,
+                                                     unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int halfPoints = num_points / 2;
+
+    const __m128 neg_mask = _mm_setr_ps(-0.f, 0.f, -0.f, 0.f);
+    __m128 x, y, yl, yh, z, tmp1, tmp2;
+    lv_32fc_t* c = cVector;
+    const lv_32fc_t* a = aVector;
+    const lv_32fc_t* b = bVector;
+
+    for (; number < halfPoints; number++) {
+        x = _mm_loadu_ps((const float*)a);
+        y = _mm_loadu_ps((const float*)b);
+
+        yl = _mm_shuffle_ps(y, y, _MM_SHUFFLE(2, 2, 0, 0));
+        yh = _mm_shuffle_ps(y, y, _MM_SHUFFLE(3, 3, 1, 1));
+
+        tmp1 = _mm_mul_ps(x, yl);
+        x = _mm_shuffle_ps(x, x, 0xB1);
+        tmp2 = _mm_mul_ps(x, yh);
+
+        z = _mm_add_ps(tmp1, _mm_xor_ps(tmp2, neg_mask));
+        _mm_storeu_ps((float*)c, z);
+
+        a += 2;
+        b += 2;
+        c += 2;
+    }
+
+    if ((num_points % 2) != 0) {
+        *c = (*a) * (*b);
+    }
+}
+#endif /* LV_HAVE_SSE */
+
+
 #ifdef LV_HAVE_SSE3
 #include <pmmintrin.h>
 #include <volk/volk_sse3_intrinsics.h>
@@ -459,6 +502,49 @@ static inline void volk_32fc_x2_multiply_32fc_u_orc(lv_32fc_t* cVector,
 #include <inttypes.h>
 #include <stdio.h>
 #include <volk/volk_complex.h>
+
+#ifdef LV_HAVE_SSE
+#include <xmmintrin.h>
+
+static inline void volk_32fc_x2_multiply_32fc_a_sse(lv_32fc_t* cVector,
+                                                     const lv_32fc_t* aVector,
+                                                     const lv_32fc_t* bVector,
+                                                     unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int halfPoints = num_points / 2;
+
+    const __m128 neg_mask = _mm_setr_ps(-0.f, 0.f, -0.f, 0.f);
+    __m128 x, y, yl, yh, z, tmp1, tmp2;
+    lv_32fc_t* c = cVector;
+    const lv_32fc_t* a = aVector;
+    const lv_32fc_t* b = bVector;
+
+    for (; number < halfPoints; number++) {
+        x = _mm_load_ps((const float*)a);
+        y = _mm_load_ps((const float*)b);
+
+        yl = _mm_shuffle_ps(y, y, _MM_SHUFFLE(2, 2, 0, 0));
+        yh = _mm_shuffle_ps(y, y, _MM_SHUFFLE(3, 3, 1, 1));
+
+        tmp1 = _mm_mul_ps(x, yl);
+        x = _mm_shuffle_ps(x, x, 0xB1);
+        tmp2 = _mm_mul_ps(x, yh);
+
+        z = _mm_add_ps(tmp1, _mm_xor_ps(tmp2, neg_mask));
+        _mm_store_ps((float*)c, z);
+
+        a += 2;
+        b += 2;
+        c += 2;
+    }
+
+    if ((num_points % 2) != 0) {
+        *c = (*a) * (*b);
+    }
+}
+#endif /* LV_HAVE_SSE */
+
 
 #ifdef LV_HAVE_SSE3
 #include <pmmintrin.h>

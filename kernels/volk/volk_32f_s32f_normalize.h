@@ -140,6 +140,41 @@ static inline void volk_32f_s32f_normalize_u_avx(float* vecBuffer,
 }
 #endif /* LV_HAVE_AVX */
 
+#ifdef LV_HAVE_AVX2
+#include <immintrin.h>
+
+static inline void volk_32f_s32f_normalize_u_avx2(float* vecBuffer,
+                                                 const float scalar,
+                                                 unsigned int num_points)
+{
+    unsigned int number = 0;
+    float* inputPtr = vecBuffer;
+
+    const float invScalar = 1.0f / scalar;
+    __m256 vecScalar = _mm256_set1_ps(invScalar);
+
+    __m256 input1;
+
+    const uint64_t eighthPoints = num_points / 8;
+    for (; number < eighthPoints; number++) {
+
+        input1 = _mm256_loadu_ps(inputPtr);
+
+        input1 = _mm256_mul_ps(input1, vecScalar);
+
+        _mm256_storeu_ps(inputPtr, input1);
+
+        inputPtr += 8;
+    }
+
+    number = eighthPoints * 8;
+    for (; number < num_points; number++) {
+        *inputPtr *= invScalar;
+        inputPtr++;
+    }
+}
+#endif /* LV_HAVE_AVX2 */
+
 #ifdef LV_HAVE_AVX512F
 #include <immintrin.h>
 
@@ -339,6 +374,41 @@ static inline void volk_32f_s32f_normalize_a_avx(float* vecBuffer,
     }
 }
 #endif /* LV_HAVE_AVX */
+
+#ifdef LV_HAVE_AVX2
+#include <immintrin.h>
+
+static inline void volk_32f_s32f_normalize_a_avx2(float* vecBuffer,
+                                                 const float scalar,
+                                                 unsigned int num_points)
+{
+    unsigned int number = 0;
+    float* inputPtr = vecBuffer;
+
+    const float invScalar = 1.0f / scalar;
+    __m256 vecScalar = _mm256_set1_ps(invScalar);
+
+    __m256 input1;
+
+    const uint64_t eighthPoints = num_points / 8;
+    for (; number < eighthPoints; number++) {
+
+        input1 = _mm256_load_ps(inputPtr);
+
+        input1 = _mm256_mul_ps(input1, vecScalar);
+
+        _mm256_store_ps(inputPtr, input1);
+
+        inputPtr += 8;
+    }
+
+    number = eighthPoints * 8;
+    for (; number < num_points; number++) {
+        *inputPtr *= invScalar;
+        inputPtr++;
+    }
+}
+#endif /* LV_HAVE_AVX2 */
 
 #ifdef LV_HAVE_AVX512F
 #include <immintrin.h>

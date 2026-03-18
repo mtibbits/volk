@@ -350,6 +350,63 @@ static inline void volk_16ic_magnitude_16i_u_avx2(int16_t* magnitudeVector,
 }
 #endif /* LV_HAVE_AVX2 */
 
+#if LV_HAVE_AVX2 && LV_HAVE_FMA
+#include <immintrin.h>
+#include <volk/volk_avx2_fma_intrinsics.h>
+
+static inline void volk_16ic_magnitude_16i_u_avx2_fma(int16_t* magnitudeVector,
+                                                       const lv_16sc_t* complexVector,
+                                                       unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int eighthPoints = num_points / 8;
+
+    const int16_t* complexVectorPtr = (const int16_t*)complexVector;
+    int16_t* magnitudeVectorPtr = magnitudeVector;
+
+    const float fInvScalar = 1.0f / SHRT_MAX;
+    __m256 vScalar = _mm256_set1_ps(SHRT_MAX);
+    __m256 invScalar = _mm256_set1_ps(fInvScalar);
+
+    for (; number < eighthPoints; number++) {
+        __m256i raw = _mm256_loadu_si256((const __m256i*)complexVectorPtr);
+        complexVectorPtr += 16;
+
+        __m128i lo_half = _mm256_extracti128_si256(raw, 0);
+        __m128i hi_half = _mm256_extracti128_si256(raw, 1);
+
+        __m256 cplxValue1 = _mm256_mul_ps(
+            _mm256_cvtepi32_ps(_mm256_cvtepi16_epi32(lo_half)), invScalar);
+        __m256 cplxValue2 = _mm256_mul_ps(
+            _mm256_cvtepi32_ps(_mm256_cvtepi16_epi32(hi_half)), invScalar);
+
+        /* mag² = re*re + im*im using FMA, sequential order */
+        __m256 result = _mm256_magnitudesquared_ps_avx2_fma(cplxValue1, cplxValue2);
+
+        result = _mm256_sqrt_ps(result);
+        result = _mm256_mul_ps(result, vScalar);
+
+        __m256i resultInt = _mm256_cvtps_epi32(result);
+        resultInt = _mm256_packs_epi32(resultInt, resultInt);
+        resultInt = _mm256_permute4x64_epi64(resultInt, 0x08);
+        _mm_storeu_si128((__m128i*)magnitudeVectorPtr,
+                         _mm256_extracti128_si256(resultInt, 0));
+        magnitudeVectorPtr += 8;
+    }
+
+    number = eighthPoints * 8;
+    magnitudeVectorPtr = &magnitudeVector[number];
+    complexVectorPtr = (const int16_t*)&complexVector[number];
+    for (; number < num_points; number++) {
+        const float val1Real = (float)(*complexVectorPtr++) * fInvScalar;
+        const float val1Imag = (float)(*complexVectorPtr++) * fInvScalar;
+        const float val1Result =
+            sqrtf((val1Real * val1Real) + (val1Imag * val1Imag)) * SHRT_MAX;
+        *magnitudeVectorPtr++ = (int16_t)rintf(val1Result);
+    }
+}
+#endif /* LV_HAVE_AVX2 && LV_HAVE_FMA */
+
 #ifdef LV_HAVE_AVX512F
 #include <immintrin.h>
 
@@ -418,6 +475,80 @@ static inline void volk_16ic_magnitude_16i_u_avx512f(int16_t* magnitudeVector,
         num_points - sixteenthPoints * 16);
 }
 #endif /* LV_HAVE_AVX512F */
+
+#ifdef LV_HAVE_AVX512BW
+#include <immintrin.h>
+
+static inline void volk_16ic_magnitude_16i_u_avx512bw(int16_t* magnitudeVector,
+                                                       const lv_16sc_t* complexVector,
+                                                       unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int thirtySecondPoints = num_points / 32;
+
+    const int16_t* complexVectorPtr = (const int16_t*)complexVector;
+    int16_t* magnitudeVectorPtr = magnitudeVector;
+
+    const float fInvScalar = 1.0f / SHRT_MAX;
+    __m512 vInvScalar = _mm512_set1_ps(fInvScalar);
+    __m512 vScalar = _mm512_set1_ps(SHRT_MAX);
+
+    /* Indices to pick even (I) and odd (Q) int16 elements from a 512-bit register */
+    const __m512i idx_i = _mm512_set_epi16(30, 28, 26, 24, 22, 20, 18, 16,
+                                           14, 12, 10, 8, 6, 4, 2, 0,
+                                           30, 28, 26, 24, 22, 20, 18, 16,
+                                           14, 12, 10, 8, 6, 4, 2, 0);
+    const __m512i idx_q = _mm512_set_epi16(31, 29, 27, 25, 23, 21, 19, 17,
+                                           15, 13, 11, 9, 7, 5, 3, 1,
+                                           31, 29, 27, 25, 23, 21, 19, 17,
+                                           15, 13, 11, 9, 7, 5, 3, 1);
+
+    for (; number < thirtySecondPoints; number++) {
+        /* Load 32 complex int16 samples = two 512-bit loads */
+        __m512i raw1 = _mm512_loadu_si512((const __m512i*)complexVectorPtr);
+        complexVectorPtr += 32;
+        __m512i raw2 = _mm512_loadu_si512((const __m512i*)complexVectorPtr);
+        complexVectorPtr += 32;
+
+        /* Extract I and Q channels at int16 level (16 values in low 256 bits) */
+        __m256i iShort1 = _mm512_castsi512_si256(_mm512_permutexvar_epi16(idx_i, raw1));
+        __m256i qShort1 = _mm512_castsi512_si256(_mm512_permutexvar_epi16(idx_q, raw1));
+        __m256i iShort2 = _mm512_castsi512_si256(_mm512_permutexvar_epi16(idx_i, raw2));
+        __m256i qShort2 = _mm512_castsi512_si256(_mm512_permutexvar_epi16(idx_q, raw2));
+
+        /* Widen int16 -> int32 -> float, scale, compute magnitude for batch 1 */
+        __m512i iWide1 = _mm512_cvtepi16_epi32(iShort1);
+        __m512i qWide1 = _mm512_cvtepi16_epi32(qShort1);
+        __m512 iFloat1 = _mm512_mul_ps(_mm512_cvtepi32_ps(iWide1), vInvScalar);
+        __m512 qFloat1 = _mm512_mul_ps(_mm512_cvtepi32_ps(qWide1), vInvScalar);
+        __m512 mag1 = _mm512_sqrt_ps(
+            _mm512_add_ps(_mm512_mul_ps(iFloat1, iFloat1),
+                          _mm512_mul_ps(qFloat1, qFloat1)));
+        mag1 = _mm512_mul_ps(mag1, vScalar);
+        __m256i magShort1 = _mm512_cvtsepi32_epi16(_mm512_cvtps_epi32(mag1));
+
+        /* Widen int16 -> int32 -> float, scale, compute magnitude for batch 2 */
+        __m512i iWide2 = _mm512_cvtepi16_epi32(iShort2);
+        __m512i qWide2 = _mm512_cvtepi16_epi32(qShort2);
+        __m512 iFloat2 = _mm512_mul_ps(_mm512_cvtepi32_ps(iWide2), vInvScalar);
+        __m512 qFloat2 = _mm512_mul_ps(_mm512_cvtepi32_ps(qWide2), vInvScalar);
+        __m512 mag2 = _mm512_sqrt_ps(
+            _mm512_add_ps(_mm512_mul_ps(iFloat2, iFloat2),
+                          _mm512_mul_ps(qFloat2, qFloat2)));
+        mag2 = _mm512_mul_ps(mag2, vScalar);
+        __m256i magShort2 = _mm512_cvtsepi32_epi16(_mm512_cvtps_epi32(mag2));
+
+        _mm256_storeu_si256((__m256i*)magnitudeVectorPtr, magShort1);
+        _mm256_storeu_si256((__m256i*)(magnitudeVectorPtr + 16), magShort2);
+        magnitudeVectorPtr += 32;
+    }
+
+    volk_16ic_magnitude_16i_generic(
+        magnitudeVector + thirtySecondPoints * 32,
+        complexVector + thirtySecondPoints * 32,
+        num_points - thirtySecondPoints * 32);
+}
+#endif /* LV_HAVE_AVX512BW */
 
 #ifdef LV_HAVE_NEONV7
 #include <arm_neon.h>
@@ -858,6 +989,62 @@ static inline void volk_16ic_magnitude_16i_a_avx2(int16_t* magnitudeVector,
 }
 #endif /* LV_HAVE_AVX2 */
 
+#if LV_HAVE_AVX2 && LV_HAVE_FMA
+#include <immintrin.h>
+#include <volk/volk_avx2_fma_intrinsics.h>
+
+static inline void volk_16ic_magnitude_16i_a_avx2_fma(int16_t* magnitudeVector,
+                                                       const lv_16sc_t* complexVector,
+                                                       unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int eighthPoints = num_points / 8;
+
+    const int16_t* complexVectorPtr = (const int16_t*)complexVector;
+    int16_t* magnitudeVectorPtr = magnitudeVector;
+
+    const float fInvScalar = 1.0f / SHRT_MAX;
+    __m256 vScalar = _mm256_set1_ps(SHRT_MAX);
+    __m256 invScalar = _mm256_set1_ps(fInvScalar);
+
+    for (; number < eighthPoints; number++) {
+        __m256i raw = _mm256_load_si256((const __m256i*)complexVectorPtr);
+        complexVectorPtr += 16;
+
+        __m128i lo_half = _mm256_extracti128_si256(raw, 0);
+        __m128i hi_half = _mm256_extracti128_si256(raw, 1);
+
+        __m256 cplxValue1 = _mm256_mul_ps(
+            _mm256_cvtepi32_ps(_mm256_cvtepi16_epi32(lo_half)), invScalar);
+        __m256 cplxValue2 = _mm256_mul_ps(
+            _mm256_cvtepi32_ps(_mm256_cvtepi16_epi32(hi_half)), invScalar);
+
+        __m256 result = _mm256_magnitudesquared_ps_avx2_fma(cplxValue1, cplxValue2);
+
+        result = _mm256_sqrt_ps(result);
+        result = _mm256_mul_ps(result, vScalar);
+
+        __m256i resultInt = _mm256_cvtps_epi32(result);
+        resultInt = _mm256_packs_epi32(resultInt, resultInt);
+        resultInt = _mm256_permute4x64_epi64(resultInt, 0x08);
+        _mm_store_si128((__m128i*)magnitudeVectorPtr,
+                        _mm256_extracti128_si256(resultInt, 0));
+        magnitudeVectorPtr += 8;
+    }
+
+    number = eighthPoints * 8;
+    magnitudeVectorPtr = &magnitudeVector[number];
+    complexVectorPtr = (const int16_t*)&complexVector[number];
+    for (; number < num_points; number++) {
+        const float val1Real = (float)(*complexVectorPtr++) * fInvScalar;
+        const float val1Imag = (float)(*complexVectorPtr++) * fInvScalar;
+        const float val1Result =
+            sqrtf((val1Real * val1Real) + (val1Imag * val1Imag)) * SHRT_MAX;
+        *magnitudeVectorPtr++ = (int16_t)rintf(val1Result);
+    }
+}
+#endif /* LV_HAVE_AVX2 && LV_HAVE_FMA */
+
 #ifdef LV_HAVE_AVX512F
 #include <immintrin.h>
 
@@ -926,5 +1113,79 @@ static inline void volk_16ic_magnitude_16i_a_avx512f(int16_t* magnitudeVector,
         num_points - sixteenthPoints * 16);
 }
 #endif /* LV_HAVE_AVX512F */
+
+#ifdef LV_HAVE_AVX512BW
+#include <immintrin.h>
+
+static inline void volk_16ic_magnitude_16i_a_avx512bw(int16_t* magnitudeVector,
+                                                       const lv_16sc_t* complexVector,
+                                                       unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int thirtySecondPoints = num_points / 32;
+
+    const int16_t* complexVectorPtr = (const int16_t*)complexVector;
+    int16_t* magnitudeVectorPtr = magnitudeVector;
+
+    const float fInvScalar = 1.0f / SHRT_MAX;
+    __m512 vInvScalar = _mm512_set1_ps(fInvScalar);
+    __m512 vScalar = _mm512_set1_ps(SHRT_MAX);
+
+    /* Indices to pick even (I) and odd (Q) int16 elements from a 512-bit register */
+    const __m512i idx_i = _mm512_set_epi16(30, 28, 26, 24, 22, 20, 18, 16,
+                                           14, 12, 10, 8, 6, 4, 2, 0,
+                                           30, 28, 26, 24, 22, 20, 18, 16,
+                                           14, 12, 10, 8, 6, 4, 2, 0);
+    const __m512i idx_q = _mm512_set_epi16(31, 29, 27, 25, 23, 21, 19, 17,
+                                           15, 13, 11, 9, 7, 5, 3, 1,
+                                           31, 29, 27, 25, 23, 21, 19, 17,
+                                           15, 13, 11, 9, 7, 5, 3, 1);
+
+    for (; number < thirtySecondPoints; number++) {
+        /* Load 32 complex int16 samples = two 512-bit loads */
+        __m512i raw1 = _mm512_load_si512((const __m512i*)complexVectorPtr);
+        complexVectorPtr += 32;
+        __m512i raw2 = _mm512_load_si512((const __m512i*)complexVectorPtr);
+        complexVectorPtr += 32;
+
+        /* Extract I and Q channels at int16 level (16 values in low 256 bits) */
+        __m256i iShort1 = _mm512_castsi512_si256(_mm512_permutexvar_epi16(idx_i, raw1));
+        __m256i qShort1 = _mm512_castsi512_si256(_mm512_permutexvar_epi16(idx_q, raw1));
+        __m256i iShort2 = _mm512_castsi512_si256(_mm512_permutexvar_epi16(idx_i, raw2));
+        __m256i qShort2 = _mm512_castsi512_si256(_mm512_permutexvar_epi16(idx_q, raw2));
+
+        /* Widen int16 -> int32 -> float, scale, compute magnitude for batch 1 */
+        __m512i iWide1 = _mm512_cvtepi16_epi32(iShort1);
+        __m512i qWide1 = _mm512_cvtepi16_epi32(qShort1);
+        __m512 iFloat1 = _mm512_mul_ps(_mm512_cvtepi32_ps(iWide1), vInvScalar);
+        __m512 qFloat1 = _mm512_mul_ps(_mm512_cvtepi32_ps(qWide1), vInvScalar);
+        __m512 mag1 = _mm512_sqrt_ps(
+            _mm512_add_ps(_mm512_mul_ps(iFloat1, iFloat1),
+                          _mm512_mul_ps(qFloat1, qFloat1)));
+        mag1 = _mm512_mul_ps(mag1, vScalar);
+        __m256i magShort1 = _mm512_cvtsepi32_epi16(_mm512_cvtps_epi32(mag1));
+
+        /* Widen int16 -> int32 -> float, scale, compute magnitude for batch 2 */
+        __m512i iWide2 = _mm512_cvtepi16_epi32(iShort2);
+        __m512i qWide2 = _mm512_cvtepi16_epi32(qShort2);
+        __m512 iFloat2 = _mm512_mul_ps(_mm512_cvtepi32_ps(iWide2), vInvScalar);
+        __m512 qFloat2 = _mm512_mul_ps(_mm512_cvtepi32_ps(qWide2), vInvScalar);
+        __m512 mag2 = _mm512_sqrt_ps(
+            _mm512_add_ps(_mm512_mul_ps(iFloat2, iFloat2),
+                          _mm512_mul_ps(qFloat2, qFloat2)));
+        mag2 = _mm512_mul_ps(mag2, vScalar);
+        __m256i magShort2 = _mm512_cvtsepi32_epi16(_mm512_cvtps_epi32(mag2));
+
+        _mm256_store_si256((__m256i*)magnitudeVectorPtr, magShort1);
+        _mm256_store_si256((__m256i*)(magnitudeVectorPtr + 16), magShort2);
+        magnitudeVectorPtr += 32;
+    }
+
+    volk_16ic_magnitude_16i_generic(
+        magnitudeVector + thirtySecondPoints * 32,
+        complexVector + thirtySecondPoints * 32,
+        num_points - thirtySecondPoints * 32);
+}
+#endif /* LV_HAVE_AVX512BW */
 
 #endif /* INCLUDED_volk_16ic_magnitude_16i_a_H */

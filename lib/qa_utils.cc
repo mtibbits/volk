@@ -276,7 +276,7 @@ std::vector<std::string> split_signature(const std::string& protokernel_signatur
     return signature_tokens;
 }
 
-static void get_signatures_from_name(std::vector<volk_type_t>& inputsig,
+void get_signatures_from_name(std::vector<volk_type_t>& inputsig,
                                      std::vector<volk_type_t>& outputsig,
                                      std::string name)
 {

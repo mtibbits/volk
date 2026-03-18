@@ -431,6 +431,146 @@ static inline void volk_32f_x3_sum_of_poly_32f_u_avx_fma(float* target,
 }
 #endif /* LV_HAVE_AVX && LV_HAVE_FMA */
 
+#ifdef LV_HAVE_AVX2
+#include <immintrin.h>
+
+static inline void volk_32f_x3_sum_of_poly_32f_u_avx2(float* target,
+                                                       const float* src0,
+                                                       const float* center_point_array,
+                                                       const float* cutoff,
+                                                       unsigned int num_points)
+{
+    const unsigned int eighth_points = num_points / 8;
+    float fst = 0.0;
+    float sq = 0.0;
+    float thrd = 0.0;
+    float frth = 0.0;
+
+    __m256 cpa0, cpa1, cpa2, cpa3, cutoff_vec;
+    __m256 target_vec;
+    __m256 x_to_1, x_to_2, x_to_3, x_to_4;
+
+    cpa0 = _mm256_set1_ps(center_point_array[0]);
+    cpa1 = _mm256_set1_ps(center_point_array[1]);
+    cpa2 = _mm256_set1_ps(center_point_array[2]);
+    cpa3 = _mm256_set1_ps(center_point_array[3]);
+    cutoff_vec = _mm256_set1_ps(*cutoff);
+    target_vec = _mm256_setzero_ps();
+
+    unsigned int i;
+
+    for (i = 0; i < eighth_points; ++i) {
+        x_to_1 = _mm256_loadu_ps(src0);
+        x_to_1 = _mm256_max_ps(x_to_1, cutoff_vec);
+        x_to_2 = _mm256_mul_ps(x_to_1, x_to_1); // x^2
+        x_to_3 = _mm256_mul_ps(x_to_1, x_to_2); // x^3
+        // x^1 * x^3 is slightly faster than x^2 * x^2
+        x_to_4 = _mm256_mul_ps(x_to_1, x_to_3); // x^4
+
+        x_to_2 = _mm256_mul_ps(x_to_2, cpa1); // cpa[1] * x^2
+        x_to_4 = _mm256_mul_ps(x_to_4, cpa3); // cpa[3] * x^4
+
+        x_to_1 = _mm256_add_ps(_mm256_mul_ps(x_to_1, cpa0), x_to_2);
+        x_to_3 = _mm256_add_ps(_mm256_mul_ps(x_to_3, cpa2), x_to_4);
+        // this is slightly faster than result += (x_to_1 + x_to_3)
+        target_vec = _mm256_add_ps(x_to_1, target_vec);
+        target_vec = _mm256_add_ps(x_to_3, target_vec);
+
+        src0 += 8;
+    }
+
+    // the hadd for vector reduction has very very slight impact @ 50k iters
+    __VOLK_ATTR_ALIGNED(32) float temp_results[8];
+    target_vec = _mm256_hadd_ps(
+        target_vec,
+        target_vec); // x0+x1 | x2+x3 | x0+x1 | x2+x3 || x4+x5 | x6+x7 | x4+x5 | x6+x7
+    _mm256_storeu_ps(temp_results, target_vec);
+    *target = temp_results[0] + temp_results[1] + temp_results[4] + temp_results[5];
+
+    for (i = eighth_points * 8; i < num_points; ++i) {
+        fst = *src0++;
+        fst = MAX(fst, *cutoff);
+        sq = fst * fst;
+        thrd = fst * sq;
+        frth = sq * sq;
+        *target += (center_point_array[0] * fst + center_point_array[1] * sq +
+                    center_point_array[2] * thrd + center_point_array[3] * frth);
+    }
+
+    *target += (float)(num_points)*center_point_array[4];
+}
+#endif /* LV_HAVE_AVX2 */
+
+#if LV_HAVE_AVX2 && LV_HAVE_FMA
+#include <immintrin.h>
+
+static inline void volk_32f_x3_sum_of_poly_32f_u_avx2_fma(float* target,
+                                                           const float* src0,
+                                                           const float* center_point_array,
+                                                           const float* cutoff,
+                                                           unsigned int num_points)
+{
+    const unsigned int eighth_points = num_points / 8;
+    float fst = 0.0;
+    float sq = 0.0;
+    float thrd = 0.0;
+    float frth = 0.0;
+
+    __m256 cpa0, cpa1, cpa2, cpa3, cutoff_vec;
+    __m256 target_vec;
+    __m256 x_to_1, x_to_2, x_to_3, x_to_4;
+
+    cpa0 = _mm256_set1_ps(center_point_array[0]);
+    cpa1 = _mm256_set1_ps(center_point_array[1]);
+    cpa2 = _mm256_set1_ps(center_point_array[2]);
+    cpa3 = _mm256_set1_ps(center_point_array[3]);
+    cutoff_vec = _mm256_set1_ps(*cutoff);
+    target_vec = _mm256_setzero_ps();
+
+    unsigned int i;
+
+    for (i = 0; i < eighth_points; ++i) {
+        x_to_1 = _mm256_loadu_ps(src0);
+        x_to_1 = _mm256_max_ps(x_to_1, cutoff_vec);
+        x_to_2 = _mm256_mul_ps(x_to_1, x_to_1); // x^2
+        x_to_3 = _mm256_mul_ps(x_to_1, x_to_2); // x^3
+        // x^1 * x^3 is slightly faster than x^2 * x^2
+        x_to_4 = _mm256_mul_ps(x_to_1, x_to_3); // x^4
+
+        x_to_2 = _mm256_mul_ps(x_to_2, cpa1); // cpa[1] * x^2
+        x_to_4 = _mm256_mul_ps(x_to_4, cpa3); // cpa[3] * x^4
+
+        x_to_1 = _mm256_fmadd_ps(x_to_1, cpa0, x_to_2);
+        x_to_3 = _mm256_fmadd_ps(x_to_3, cpa2, x_to_4);
+        // this is slightly faster than result += (x_to_1 + x_to_3)
+        target_vec = _mm256_add_ps(x_to_1, target_vec);
+        target_vec = _mm256_add_ps(x_to_3, target_vec);
+
+        src0 += 8;
+    }
+
+    // the hadd for vector reduction has very very slight impact @ 50k iters
+    __VOLK_ATTR_ALIGNED(32) float temp_results[8];
+    target_vec = _mm256_hadd_ps(
+        target_vec,
+        target_vec); // x0+x1 | x2+x3 | x0+x1 | x2+x3 || x4+x5 | x6+x7 | x4+x5 | x6+x7
+    _mm256_storeu_ps(temp_results, target_vec);
+    *target = temp_results[0] + temp_results[1] + temp_results[4] + temp_results[5];
+
+    for (i = eighth_points * 8; i < num_points; ++i) {
+        fst = *src0++;
+        fst = MAX(fst, *cutoff);
+        sq = fst * fst;
+        thrd = fst * sq;
+        frth = sq * sq;
+        *target += (center_point_array[0] * fst + center_point_array[1] * sq +
+                    center_point_array[2] * thrd + center_point_array[3] * frth);
+    }
+
+    *target += (float)(num_points)*center_point_array[4];
+}
+#endif /* LV_HAVE_AVX2 && LV_HAVE_FMA */
+
 #ifdef LV_HAVE_AVX512F
 #include <immintrin.h>
 
@@ -568,6 +708,75 @@ static inline void volk_32f_x3_sum_of_poly_32f_neon(float* __restrict target,
 }
 
 #endif /* LV_HAVE_NEON */
+
+#ifdef LV_HAVE_NEONV8
+#include <arm_neon.h>
+
+static inline void volk_32f_x3_sum_of_poly_32f_neonv8(float* __restrict target,
+                                                        const float* __restrict src0,
+                                                        const float* __restrict center_point_array,
+                                                        const float* __restrict cutoff,
+                                                        unsigned int num_points)
+{
+    unsigned int i;
+
+    float32x4_t acc0 = vdupq_n_f32(0.0f);
+    float32x4_t acc1 = vdupq_n_f32(0.0f);
+    float32x4_t acc2 = vdupq_n_f32(0.0f);
+    float32x4_t acc3 = vdupq_n_f32(0.0f);
+    float32x4_t x_to_1, x_to_2, x_to_3, x_to_4;
+    float32x4_t cutoff_vector, cpa_0, cpa_1, cpa_2, cpa_3;
+
+    cutoff_vector = vdupq_n_f32(*cutoff);
+    cpa_0 = vdupq_n_f32(center_point_array[0]);
+    cpa_1 = vdupq_n_f32(center_point_array[1]);
+    cpa_2 = vdupq_n_f32(center_point_array[2]);
+    cpa_3 = vdupq_n_f32(center_point_array[3]);
+
+    for (i = 0; i < num_points / 4; ++i) {
+        x_to_1 = vld1q_f32(src0);
+
+        x_to_1 = vmaxq_f32(x_to_1, cutoff_vector);
+        x_to_2 = vmulq_f32(x_to_1, x_to_1);
+        x_to_3 = vmulq_f32(x_to_2, x_to_1);
+        x_to_4 = vmulq_f32(x_to_3, x_to_1);
+        acc0 = vfmaq_f32(acc0, x_to_1, cpa_0);
+        acc1 = vfmaq_f32(acc1, x_to_2, cpa_1);
+        acc2 = vfmaq_f32(acc2, x_to_3, cpa_2);
+        acc3 = vfmaq_f32(acc3, x_to_4, cpa_3);
+
+        src0 += 4;
+    }
+    acc0 = vaddq_f32(acc0, acc1);
+    acc2 = vaddq_f32(acc2, acc3);
+    acc0 = vaddq_f32(acc0, acc2);
+
+    __VOLK_ATTR_ALIGNED(32) float res_accumulators[4];
+    vst1q_f32(res_accumulators, acc0);
+    float accumulator = res_accumulators[0] + res_accumulators[1] + res_accumulators[2] +
+                        res_accumulators[3];
+
+    float fst = 0.0;
+    float sq = 0.0;
+    float thrd = 0.0;
+    float frth = 0.0;
+
+    for (i = 4 * (num_points / 4); i < num_points; ++i) {
+        fst = *src0++;
+        fst = MAX(fst, *cutoff);
+
+        sq = fst * fst;
+        thrd = fst * sq;
+        frth = sq * sq;
+
+        accumulator += (center_point_array[0] * fst + center_point_array[1] * sq +
+                        center_point_array[2] * thrd + center_point_array[3] * frth);
+    }
+
+    *target = accumulator + (float)num_points * center_point_array[4];
+}
+
+#endif /* LV_HAVE_NEONV8 */
 
 #ifdef LV_HAVE_RVV
 #include <riscv_vector.h>
@@ -934,6 +1143,144 @@ static inline void volk_32f_x3_sum_of_poly_32f_a_avx_fma(float* target,
     *target += (float)(num_points)*center_point_array[4];
 }
 #endif /* LV_HAVE_AVX && LV_HAVE_FMA */
+
+#ifdef LV_HAVE_AVX2
+#include <immintrin.h>
+
+static inline void volk_32f_x3_sum_of_poly_32f_a_avx2(float* target,
+                                                       const float* src0,
+                                                       const float* center_point_array,
+                                                       const float* cutoff,
+                                                       unsigned int num_points)
+{
+    const unsigned int eighth_points = num_points / 8;
+    float fst = 0.0;
+    float sq = 0.0;
+    float thrd = 0.0;
+    float frth = 0.0;
+
+    __m256 cpa0, cpa1, cpa2, cpa3, cutoff_vec;
+    __m256 target_vec;
+    __m256 x_to_1, x_to_2, x_to_3, x_to_4;
+
+    cpa0 = _mm256_set1_ps(center_point_array[0]);
+    cpa1 = _mm256_set1_ps(center_point_array[1]);
+    cpa2 = _mm256_set1_ps(center_point_array[2]);
+    cpa3 = _mm256_set1_ps(center_point_array[3]);
+    cutoff_vec = _mm256_set1_ps(*cutoff);
+    target_vec = _mm256_setzero_ps();
+
+    unsigned int i;
+
+    for (i = 0; i < eighth_points; ++i) {
+        x_to_1 = _mm256_load_ps(src0);
+        x_to_1 = _mm256_max_ps(x_to_1, cutoff_vec);
+        x_to_2 = _mm256_mul_ps(x_to_1, x_to_1); // x^2
+        x_to_3 = _mm256_mul_ps(x_to_1, x_to_2); // x^3
+        // x^1 * x^3 is slightly faster than x^2 * x^2
+        x_to_4 = _mm256_mul_ps(x_to_1, x_to_3); // x^4
+
+        x_to_2 = _mm256_mul_ps(x_to_2, cpa1); // cpa[1] * x^2
+        x_to_4 = _mm256_mul_ps(x_to_4, cpa3); // cpa[3] * x^4
+
+        x_to_1 = _mm256_add_ps(_mm256_mul_ps(x_to_1, cpa0), x_to_2);
+        x_to_3 = _mm256_add_ps(_mm256_mul_ps(x_to_3, cpa2), x_to_4);
+        // this is slightly faster than result += (x_to_1 + x_to_3)
+        target_vec = _mm256_add_ps(x_to_1, target_vec);
+        target_vec = _mm256_add_ps(x_to_3, target_vec);
+
+        src0 += 8;
+    }
+
+    // the hadd for vector reduction has very very slight impact @ 50k iters
+    __VOLK_ATTR_ALIGNED(32) float temp_results[8];
+    target_vec = _mm256_hadd_ps(
+        target_vec,
+        target_vec); // x0+x1 | x2+x3 | x0+x1 | x2+x3 || x4+x5 | x6+x7 | x4+x5 | x6+x7
+    _mm256_store_ps(temp_results, target_vec);
+    *target = temp_results[0] + temp_results[1] + temp_results[4] + temp_results[5];
+
+    for (i = eighth_points * 8; i < num_points; ++i) {
+        fst = *src0++;
+        fst = MAX(fst, *cutoff);
+        sq = fst * fst;
+        thrd = fst * sq;
+        frth = sq * sq;
+        *target += (center_point_array[0] * fst + center_point_array[1] * sq +
+                    center_point_array[2] * thrd + center_point_array[3] * frth);
+    }
+    *target += (float)(num_points)*center_point_array[4];
+}
+#endif /* LV_HAVE_AVX2 */
+
+#if LV_HAVE_AVX2 && LV_HAVE_FMA
+#include <immintrin.h>
+
+static inline void volk_32f_x3_sum_of_poly_32f_a_avx2_fma(float* target,
+                                                           const float* src0,
+                                                           const float* center_point_array,
+                                                           const float* cutoff,
+                                                           unsigned int num_points)
+{
+    const unsigned int eighth_points = num_points / 8;
+    float fst = 0.0;
+    float sq = 0.0;
+    float thrd = 0.0;
+    float frth = 0.0;
+
+    __m256 cpa0, cpa1, cpa2, cpa3, cutoff_vec;
+    __m256 target_vec;
+    __m256 x_to_1, x_to_2, x_to_3, x_to_4;
+
+    cpa0 = _mm256_set1_ps(center_point_array[0]);
+    cpa1 = _mm256_set1_ps(center_point_array[1]);
+    cpa2 = _mm256_set1_ps(center_point_array[2]);
+    cpa3 = _mm256_set1_ps(center_point_array[3]);
+    cutoff_vec = _mm256_set1_ps(*cutoff);
+    target_vec = _mm256_setzero_ps();
+
+    unsigned int i;
+
+    for (i = 0; i < eighth_points; ++i) {
+        x_to_1 = _mm256_load_ps(src0);
+        x_to_1 = _mm256_max_ps(x_to_1, cutoff_vec);
+        x_to_2 = _mm256_mul_ps(x_to_1, x_to_1); // x^2
+        x_to_3 = _mm256_mul_ps(x_to_1, x_to_2); // x^3
+        // x^1 * x^3 is slightly faster than x^2 * x^2
+        x_to_4 = _mm256_mul_ps(x_to_1, x_to_3); // x^4
+
+        x_to_2 = _mm256_mul_ps(x_to_2, cpa1); // cpa[1] * x^2
+        x_to_4 = _mm256_mul_ps(x_to_4, cpa3); // cpa[3] * x^4
+
+        x_to_1 = _mm256_fmadd_ps(x_to_1, cpa0, x_to_2);
+        x_to_3 = _mm256_fmadd_ps(x_to_3, cpa2, x_to_4);
+        // this is slightly faster than result += (x_to_1 + x_to_3)
+        target_vec = _mm256_add_ps(x_to_1, target_vec);
+        target_vec = _mm256_add_ps(x_to_3, target_vec);
+
+        src0 += 8;
+    }
+
+    // the hadd for vector reduction has very very slight impact @ 50k iters
+    __VOLK_ATTR_ALIGNED(32) float temp_results[8];
+    target_vec = _mm256_hadd_ps(
+        target_vec,
+        target_vec); // x0+x1 | x2+x3 | x0+x1 | x2+x3 || x4+x5 | x6+x7 | x4+x5 | x6+x7
+    _mm256_store_ps(temp_results, target_vec);
+    *target = temp_results[0] + temp_results[1] + temp_results[4] + temp_results[5];
+
+    for (i = eighth_points * 8; i < num_points; ++i) {
+        fst = *src0++;
+        fst = MAX(fst, *cutoff);
+        sq = fst * fst;
+        thrd = fst * sq;
+        frth = sq * sq;
+        *target += (center_point_array[0] * fst + center_point_array[1] * sq +
+                    center_point_array[2] * thrd + center_point_array[3] * frth);
+    }
+    *target += (float)(num_points)*center_point_array[4];
+}
+#endif /* LV_HAVE_AVX2 && LV_HAVE_FMA */
 
 #ifdef LV_HAVE_AVX512F
 #include <immintrin.h>

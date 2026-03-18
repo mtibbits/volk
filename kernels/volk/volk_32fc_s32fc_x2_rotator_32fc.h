@@ -108,6 +108,36 @@ static inline void volk_32fc_s32fc_x2_rotator_32fc_generic(lv_32fc_t* outVector,
 #endif /* LV_HAVE_GENERIC */
 
 
+#ifdef LV_HAVE_SSE
+
+static inline void volk_32fc_s32fc_x2_rotator_32fc_u_sse(lv_32fc_t* outVector,
+                                                          const lv_32fc_t* inVector,
+                                                          const lv_32fc_t phase_inc,
+                                                          lv_32fc_t* phase,
+                                                          unsigned int num_points)
+{
+    volk_32fc_s32fc_x2_rotator2_32fc_u_sse(
+        outVector, inVector, &phase_inc, phase, num_points);
+}
+
+#endif /* LV_HAVE_SSE */
+
+
+#ifdef LV_HAVE_SSE3
+
+static inline void volk_32fc_s32fc_x2_rotator_32fc_u_sse3(lv_32fc_t* outVector,
+                                                            const lv_32fc_t* inVector,
+                                                            const lv_32fc_t phase_inc,
+                                                            lv_32fc_t* phase,
+                                                            unsigned int num_points)
+{
+    volk_32fc_s32fc_x2_rotator2_32fc_u_sse3(
+        outVector, inVector, &phase_inc, phase, num_points);
+}
+
+#endif /* LV_HAVE_SSE3 */
+
+
 #ifdef LV_HAVE_AVX
 
 static inline void volk_32fc_s32fc_x2_rotator_32fc_u_avx(lv_32fc_t* outVector,
@@ -121,6 +151,21 @@ static inline void volk_32fc_s32fc_x2_rotator_32fc_u_avx(lv_32fc_t* outVector,
 }
 
 #endif /* LV_HAVE_AVX */
+
+
+#ifdef LV_HAVE_AVX512F
+
+static inline void volk_32fc_s32fc_x2_rotator_32fc_u_avx512f(lv_32fc_t* outVector,
+                                                               const lv_32fc_t* inVector,
+                                                               const lv_32fc_t phase_inc,
+                                                               lv_32fc_t* phase,
+                                                               unsigned int num_points)
+{
+    volk_32fc_s32fc_x2_rotator2_32fc_u_avx512f(
+        outVector, inVector, &phase_inc, phase, num_points);
+}
+
+#endif /* LV_HAVE_AVX512F */
 
 
 #ifdef LV_HAVE_NEON
@@ -139,10 +184,81 @@ static inline void volk_32fc_s32fc_x2_rotator_32fc_neon(lv_32fc_t* outVector,
 #endif /* LV_HAVE_NEON */
 
 
+#ifdef LV_HAVE_NEONV8
+
+static inline void volk_32fc_s32fc_x2_rotator_32fc_neonv8(lv_32fc_t* outVector,
+                                                            const lv_32fc_t* inVector,
+                                                            const lv_32fc_t phase_inc,
+                                                            lv_32fc_t* phase,
+                                                            unsigned int num_points)
+{
+    volk_32fc_s32fc_x2_rotator2_32fc_neonv8(
+        outVector, inVector, &phase_inc, phase, num_points);
+}
+
+#endif /* LV_HAVE_NEONV8 */
+
+#ifdef LV_HAVE_RVV
+
+static inline void volk_32fc_s32fc_x2_rotator_32fc_rvv(lv_32fc_t* outVector,
+                                                         const lv_32fc_t* inVector,
+                                                         const lv_32fc_t phase_inc,
+                                                         lv_32fc_t* phase,
+                                                         unsigned int num_points)
+{
+    volk_32fc_s32fc_x2_rotator2_32fc_rvv(
+        outVector, inVector, &phase_inc, phase, num_points);
+}
+#endif /* LV_HAVE_RVV */
+
+#ifdef LV_HAVE_RVVSEG
+
+static inline void volk_32fc_s32fc_x2_rotator_32fc_rvvseg(lv_32fc_t* outVector,
+                                                            const lv_32fc_t* inVector,
+                                                            const lv_32fc_t phase_inc,
+                                                            lv_32fc_t* phase,
+                                                            unsigned int num_points)
+{
+    volk_32fc_s32fc_x2_rotator2_32fc_rvvseg(
+        outVector, inVector, &phase_inc, phase, num_points);
+}
+#endif /* LV_HAVE_RVVSEG */
+
+
 #endif /* INCLUDED_volk_32fc_s32fc_x2_rotator_32fc_u_H */
 
 #ifndef INCLUDED_volk_32fc_s32fc_x2_rotator_32fc_a_H
 #define INCLUDED_volk_32fc_s32fc_x2_rotator_32fc_a_H
+
+
+#ifdef LV_HAVE_SSE
+
+static inline void volk_32fc_s32fc_x2_rotator_32fc_a_sse(lv_32fc_t* outVector,
+                                                          const lv_32fc_t* inVector,
+                                                          const lv_32fc_t phase_inc,
+                                                          lv_32fc_t* phase,
+                                                          unsigned int num_points)
+{
+    volk_32fc_s32fc_x2_rotator2_32fc_a_sse(
+        outVector, inVector, &phase_inc, phase, num_points);
+}
+
+#endif /* LV_HAVE_SSE */
+
+
+#ifdef LV_HAVE_SSE3
+
+static inline void volk_32fc_s32fc_x2_rotator_32fc_a_sse3(lv_32fc_t* outVector,
+                                                            const lv_32fc_t* inVector,
+                                                            const lv_32fc_t phase_inc,
+                                                            lv_32fc_t* phase,
+                                                            unsigned int num_points)
+{
+    volk_32fc_s32fc_x2_rotator2_32fc_a_sse3(
+        outVector, inVector, &phase_inc, phase, num_points);
+}
+
+#endif /* LV_HAVE_SSE3 */
 
 
 #ifdef LV_HAVE_AVX
@@ -158,6 +274,21 @@ static inline void volk_32fc_s32fc_x2_rotator_32fc_a_avx(lv_32fc_t* outVector,
 }
 
 #endif /* LV_HAVE_AVX */
+
+
+#ifdef LV_HAVE_AVX512F
+
+static inline void volk_32fc_s32fc_x2_rotator_32fc_a_avx512f(lv_32fc_t* outVector,
+                                                               const lv_32fc_t* inVector,
+                                                               const lv_32fc_t phase_inc,
+                                                               lv_32fc_t* phase,
+                                                               unsigned int num_points)
+{
+    volk_32fc_s32fc_x2_rotator2_32fc_a_avx512f(
+        outVector, inVector, &phase_inc, phase, num_points);
+}
+
+#endif /* LV_HAVE_AVX512F */
 
 
 #endif /* INCLUDED_volk_32fc_s32fc_x2_rotator_32fc_a_H */

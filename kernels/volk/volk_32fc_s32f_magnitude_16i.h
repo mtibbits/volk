@@ -246,6 +246,64 @@ static inline void volk_32fc_s32f_magnitude_16i_u_avx(int16_t* magnitudeVector,
 }
 #endif /* LV_HAVE_AVX */
 
+#if LV_HAVE_AVX && LV_HAVE_FMA
+#include <immintrin.h>
+
+static inline void volk_32fc_s32f_magnitude_16i_u_avx_fma(int16_t* magnitudeVector,
+                                                            const lv_32fc_t* complexVector,
+                                                            const float scalar,
+                                                            unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int eighthPoints = num_points / 8;
+
+    const float* complexVectorPtr = (const float*)complexVector;
+    int16_t* magnitudeVectorPtr = magnitudeVector;
+
+    __m256 vScalar = _mm256_set1_ps(scalar);
+
+    for (; number < eighthPoints; number++) {
+        __m256 cplxValue1 = _mm256_loadu_ps(complexVectorPtr);
+        complexVectorPtr += 8;
+
+        __m256 cplxValue2 = _mm256_loadu_ps(complexVectorPtr);
+        complexVectorPtr += 8;
+
+        /* Deinterleave real and imaginary within 128-bit lanes */
+        __m256 re = _mm256_shuffle_ps(cplxValue1, cplxValue2, _MM_SHUFFLE(2, 0, 2, 0));
+        __m256 im = _mm256_shuffle_ps(cplxValue1, cplxValue2, _MM_SHUFFLE(3, 1, 3, 1));
+
+        /* mag² = re*re + im*im using FMA (lane-interleaved: [0,1,4,5 | 2,3,6,7]) */
+        __m256 mag_sq = _mm256_fmadd_ps(im, im, _mm256_mul_ps(re, re));
+
+        /* Fix cross-lane ordering: mag_sq = [m0,m1,m4,m5 | m2,m3,m6,m7]
+         * need [m0,m1,m2,m3 | m4,m5,m6,m7] */
+        __m128 lo = _mm256_castps256_ps128(mag_sq);
+        __m128 hi = _mm256_extractf128_ps(mag_sq, 1);
+        __m128 out_lo = _mm_shuffle_ps(lo, hi, _MM_SHUFFLE(1, 0, 1, 0));
+        __m128 out_hi = _mm_shuffle_ps(lo, hi, _MM_SHUFFLE(3, 2, 3, 2));
+
+        /* sqrt and scale */
+        __m128 mag_lo = _mm_sqrt_ps(out_lo);
+        __m128 mag_hi = _mm_sqrt_ps(out_hi);
+        mag_lo = _mm_mul_ps(mag_lo, _mm256_castps256_ps128(vScalar));
+        mag_hi = _mm_mul_ps(mag_hi, _mm256_castps256_ps128(vScalar));
+
+        /* Convert float -> int32 -> int16 (saturating) */
+        __m128i int_lo = _mm_cvtps_epi32(mag_lo);
+        __m128i int_hi = _mm_cvtps_epi32(mag_hi);
+        __m128i resultShort = _mm_packs_epi32(int_lo, int_hi);
+
+        _mm_storeu_si128((__m128i*)magnitudeVectorPtr, resultShort);
+        magnitudeVectorPtr += 8;
+    }
+
+    number = eighthPoints * 8;
+    volk_32fc_s32f_magnitude_16i_generic(
+        magnitudeVector + number, complexVector + number, scalar, num_points - number);
+}
+#endif /* LV_HAVE_AVX && LV_HAVE_FMA */
+
 #ifdef LV_HAVE_AVX2
 #include <immintrin.h>
 
@@ -296,6 +354,48 @@ static inline void volk_32fc_s32f_magnitude_16i_u_avx2(int16_t* magnitudeVector,
         magnitudeVector + number, complexVector + number, scalar, num_points - number);
 }
 #endif /* LV_HAVE_AVX2 */
+
+#if LV_HAVE_AVX2 && LV_HAVE_FMA
+#include <immintrin.h>
+#include <volk/volk_avx2_fma_intrinsics.h>
+
+static inline void volk_32fc_s32f_magnitude_16i_u_avx2_fma(int16_t* magnitudeVector,
+                                                            const lv_32fc_t* complexVector,
+                                                            const float scalar,
+                                                            unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int eighthPoints = num_points / 8;
+
+    const float* complexVectorPtr = (const float*)complexVector;
+    int16_t* magnitudeVectorPtr = magnitudeVector;
+
+    __m256 vScalar = _mm256_set1_ps(scalar);
+
+    for (; number < eighthPoints; number++) {
+        __m256 cplxValue1 = _mm256_loadu_ps(complexVectorPtr);
+        complexVectorPtr += 8;
+        __m256 cplxValue2 = _mm256_loadu_ps(complexVectorPtr);
+        complexVectorPtr += 8;
+
+        __m256 result = _mm256_magnitudesquared_ps_avx2_fma(cplxValue1, cplxValue2);
+
+        result = _mm256_sqrt_ps(result);
+        result = _mm256_mul_ps(result, vScalar);
+
+        __m256i resultInt = _mm256_cvtps_epi32(result);
+        resultInt = _mm256_packs_epi32(resultInt, resultInt);
+        resultInt = _mm256_permute4x64_epi64(resultInt, 0x08);
+        _mm_storeu_si128((__m128i*)magnitudeVectorPtr,
+                         _mm256_extracti128_si256(resultInt, 0));
+        magnitudeVectorPtr += 8;
+    }
+
+    number = eighthPoints * 8;
+    volk_32fc_s32f_magnitude_16i_generic(
+        magnitudeVector + number, complexVector + number, scalar, num_points - number);
+}
+#endif /* LV_HAVE_AVX2 && LV_HAVE_FMA */
 
 #ifdef LV_HAVE_AVX512F
 #include <immintrin.h>
@@ -349,6 +449,74 @@ static inline void volk_32fc_s32f_magnitude_16i_u_avx512f(int16_t* magnitudeVect
         magnitudeVector + number, complexVector + number, scalar, num_points - number);
 }
 #endif /* LV_HAVE_AVX512F */
+
+#ifdef LV_HAVE_AVX512BW
+#include <immintrin.h>
+
+static inline void volk_32fc_s32f_magnitude_16i_u_avx512bw(
+    int16_t* magnitudeVector,
+    const lv_32fc_t* complexVector,
+    const float scalar,
+    unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int thirtySecondPoints = num_points / 32;
+
+    const float* complexVectorPtr = (const float*)complexVector;
+    int16_t* magnitudeVectorPtr = magnitudeVector;
+
+    const __m512 vScalar = _mm512_set1_ps(scalar);
+
+    /* Indices to deinterleave re/im from two consecutive __m512 (32 floats = 16 complex) */
+    const __m512i idx_re = _mm512_set_epi32(30, 28, 26, 24, 22, 20, 18, 16,
+                                            14, 12, 10, 8, 6, 4, 2, 0);
+    const __m512i idx_im = _mm512_set_epi32(31, 29, 27, 25, 23, 21, 19, 17,
+                                            15, 13, 11, 9, 7, 5, 3, 1);
+    /* Fix lane interleaving introduced by _mm512_packs_epi32 */
+    const __m512i pack_fix = _mm512_set_epi64(7, 5, 3, 1, 6, 4, 2, 0);
+
+    for (; number < thirtySecondPoints; number++) {
+        __m512 cplx1 = _mm512_loadu_ps(complexVectorPtr);
+        __m512 cplx2 = _mm512_loadu_ps(complexVectorPtr + 16);
+        __m512 cplx3 = _mm512_loadu_ps(complexVectorPtr + 32);
+        __m512 cplx4 = _mm512_loadu_ps(complexVectorPtr + 48);
+        complexVectorPtr += 64;
+
+        /* Deinterleave: pair 1 → 16 re + 16 im */
+        __m512 re1 = _mm512_permutex2var_ps(cplx1, idx_re, cplx2);
+        __m512 im1 = _mm512_permutex2var_ps(cplx1, idx_im, cplx2);
+
+        /* Deinterleave: pair 2 → 16 re + 16 im */
+        __m512 re2 = _mm512_permutex2var_ps(cplx3, idx_re, cplx4);
+        __m512 im2 = _mm512_permutex2var_ps(cplx3, idx_im, cplx4);
+
+        /* mag = sqrt(re^2 + im^2) * scalar */
+        __m512 mag1 = _mm512_mul_ps(
+            _mm512_sqrt_ps(
+                _mm512_fmadd_ps(re1, re1, _mm512_mul_ps(im1, im1))),
+            vScalar);
+        __m512 mag2 = _mm512_mul_ps(
+            _mm512_sqrt_ps(
+                _mm512_fmadd_ps(re2, re2, _mm512_mul_ps(im2, im2))),
+            vScalar);
+
+        /* Convert float -> int32, pack int32 -> int16 (saturating), fix lane order */
+        __m512i int1 = _mm512_cvtps_epi32(mag1);
+        __m512i int2 = _mm512_cvtps_epi32(mag2);
+        __m512i packed = _mm512_permutexvar_epi64(
+            pack_fix, _mm512_packs_epi32(int1, int2));
+
+        _mm512_storeu_si512((__m512i*)magnitudeVectorPtr, packed);
+        magnitudeVectorPtr += 32;
+    }
+
+    number = thirtySecondPoints * 32;
+    volk_32fc_s32f_magnitude_16i_generic(
+        magnitudeVector + number, complexVector + number, scalar,
+        num_points - number);
+}
+
+#endif /* LV_HAVE_AVX512BW */
 
 #ifdef LV_HAVE_NEON
 #include <arm_neon.h>
@@ -671,6 +839,64 @@ static inline void volk_32fc_s32f_magnitude_16i_a_avx(int16_t* magnitudeVector,
 }
 #endif /* LV_HAVE_AVX */
 
+#if LV_HAVE_AVX && LV_HAVE_FMA
+#include <immintrin.h>
+
+static inline void volk_32fc_s32f_magnitude_16i_a_avx_fma(int16_t* magnitudeVector,
+                                                            const lv_32fc_t* complexVector,
+                                                            const float scalar,
+                                                            unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int eighthPoints = num_points / 8;
+
+    const float* complexVectorPtr = (const float*)complexVector;
+    int16_t* magnitudeVectorPtr = magnitudeVector;
+
+    __m256 vScalar = _mm256_set1_ps(scalar);
+
+    for (; number < eighthPoints; number++) {
+        __m256 cplxValue1 = _mm256_load_ps(complexVectorPtr);
+        complexVectorPtr += 8;
+
+        __m256 cplxValue2 = _mm256_load_ps(complexVectorPtr);
+        complexVectorPtr += 8;
+
+        /* Deinterleave real and imaginary within 128-bit lanes */
+        __m256 re = _mm256_shuffle_ps(cplxValue1, cplxValue2, _MM_SHUFFLE(2, 0, 2, 0));
+        __m256 im = _mm256_shuffle_ps(cplxValue1, cplxValue2, _MM_SHUFFLE(3, 1, 3, 1));
+
+        /* mag² = re*re + im*im using FMA (lane-interleaved: [0,1,4,5 | 2,3,6,7]) */
+        __m256 mag_sq = _mm256_fmadd_ps(im, im, _mm256_mul_ps(re, re));
+
+        /* Fix cross-lane ordering: mag_sq = [m0,m1,m4,m5 | m2,m3,m6,m7]
+         * need [m0,m1,m2,m3 | m4,m5,m6,m7] */
+        __m128 lo = _mm256_castps256_ps128(mag_sq);
+        __m128 hi = _mm256_extractf128_ps(mag_sq, 1);
+        __m128 out_lo = _mm_shuffle_ps(lo, hi, _MM_SHUFFLE(1, 0, 1, 0));
+        __m128 out_hi = _mm_shuffle_ps(lo, hi, _MM_SHUFFLE(3, 2, 3, 2));
+
+        /* sqrt and scale */
+        __m128 mag_lo = _mm_sqrt_ps(out_lo);
+        __m128 mag_hi = _mm_sqrt_ps(out_hi);
+        mag_lo = _mm_mul_ps(mag_lo, _mm256_castps256_ps128(vScalar));
+        mag_hi = _mm_mul_ps(mag_hi, _mm256_castps256_ps128(vScalar));
+
+        /* Convert float -> int32 -> int16 (saturating) */
+        __m128i int_lo = _mm_cvtps_epi32(mag_lo);
+        __m128i int_hi = _mm_cvtps_epi32(mag_hi);
+        __m128i resultShort = _mm_packs_epi32(int_lo, int_hi);
+
+        _mm_store_si128((__m128i*)magnitudeVectorPtr, resultShort);
+        magnitudeVectorPtr += 8;
+    }
+
+    number = eighthPoints * 8;
+    volk_32fc_s32f_magnitude_16i_generic(
+        magnitudeVector + number, complexVector + number, scalar, num_points - number);
+}
+#endif /* LV_HAVE_AVX && LV_HAVE_FMA */
+
 #ifdef LV_HAVE_AVX2
 #include <immintrin.h>
 
@@ -722,6 +948,47 @@ static inline void volk_32fc_s32f_magnitude_16i_a_avx2(int16_t* magnitudeVector,
 }
 #endif /* LV_HAVE_AVX2 */
 
+#if LV_HAVE_AVX2 && LV_HAVE_FMA
+#include <immintrin.h>
+#include <volk/volk_avx2_fma_intrinsics.h>
+
+static inline void volk_32fc_s32f_magnitude_16i_a_avx2_fma(int16_t* magnitudeVector,
+                                                            const lv_32fc_t* complexVector,
+                                                            const float scalar,
+                                                            unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int eighthPoints = num_points / 8;
+
+    const float* complexVectorPtr = (const float*)complexVector;
+    int16_t* magnitudeVectorPtr = magnitudeVector;
+
+    __m256 vScalar = _mm256_set1_ps(scalar);
+
+    for (; number < eighthPoints; number++) {
+        __m256 cplxValue1 = _mm256_load_ps(complexVectorPtr);
+        complexVectorPtr += 8;
+        __m256 cplxValue2 = _mm256_load_ps(complexVectorPtr);
+        complexVectorPtr += 8;
+
+        __m256 result = _mm256_magnitudesquared_ps_avx2_fma(cplxValue1, cplxValue2);
+
+        result = _mm256_sqrt_ps(result);
+        result = _mm256_mul_ps(result, vScalar);
+
+        __m256i resultInt = _mm256_cvtps_epi32(result);
+        resultInt = _mm256_packs_epi32(resultInt, resultInt);
+        resultInt = _mm256_permute4x64_epi64(resultInt, 0x08);
+        _mm_store_si128((__m128i*)magnitudeVectorPtr,
+                        _mm256_extracti128_si256(resultInt, 0));
+        magnitudeVectorPtr += 8;
+    }
+
+    number = eighthPoints * 8;
+    volk_32fc_s32f_magnitude_16i_generic(
+        magnitudeVector + number, complexVector + number, scalar, num_points - number);
+}
+#endif /* LV_HAVE_AVX2 && LV_HAVE_FMA */
 
 #ifdef LV_HAVE_AVX512F
 #include <immintrin.h>
@@ -776,5 +1043,72 @@ static inline void volk_32fc_s32f_magnitude_16i_a_avx512f(int16_t* magnitudeVect
 }
 #endif /* LV_HAVE_AVX512F */
 
+#ifdef LV_HAVE_AVX512BW
+#include <immintrin.h>
+
+static inline void volk_32fc_s32f_magnitude_16i_a_avx512bw(
+    int16_t* magnitudeVector,
+    const lv_32fc_t* complexVector,
+    const float scalar,
+    unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int thirtySecondPoints = num_points / 32;
+
+    const float* complexVectorPtr = (const float*)complexVector;
+    int16_t* magnitudeVectorPtr = magnitudeVector;
+
+    const __m512 vScalar = _mm512_set1_ps(scalar);
+
+    /* Indices to deinterleave re/im from two consecutive __m512 (32 floats = 16 complex) */
+    const __m512i idx_re = _mm512_set_epi32(30, 28, 26, 24, 22, 20, 18, 16,
+                                            14, 12, 10, 8, 6, 4, 2, 0);
+    const __m512i idx_im = _mm512_set_epi32(31, 29, 27, 25, 23, 21, 19, 17,
+                                            15, 13, 11, 9, 7, 5, 3, 1);
+    /* Fix lane interleaving introduced by _mm512_packs_epi32 */
+    const __m512i pack_fix = _mm512_set_epi64(7, 5, 3, 1, 6, 4, 2, 0);
+
+    for (; number < thirtySecondPoints; number++) {
+        __m512 cplx1 = _mm512_load_ps(complexVectorPtr);
+        __m512 cplx2 = _mm512_load_ps(complexVectorPtr + 16);
+        __m512 cplx3 = _mm512_load_ps(complexVectorPtr + 32);
+        __m512 cplx4 = _mm512_load_ps(complexVectorPtr + 48);
+        complexVectorPtr += 64;
+
+        /* Deinterleave: pair 1 → 16 re + 16 im */
+        __m512 re1 = _mm512_permutex2var_ps(cplx1, idx_re, cplx2);
+        __m512 im1 = _mm512_permutex2var_ps(cplx1, idx_im, cplx2);
+
+        /* Deinterleave: pair 2 → 16 re + 16 im */
+        __m512 re2 = _mm512_permutex2var_ps(cplx3, idx_re, cplx4);
+        __m512 im2 = _mm512_permutex2var_ps(cplx3, idx_im, cplx4);
+
+        /* mag = sqrt(re^2 + im^2) * scalar */
+        __m512 mag1 = _mm512_mul_ps(
+            _mm512_sqrt_ps(
+                _mm512_fmadd_ps(re1, re1, _mm512_mul_ps(im1, im1))),
+            vScalar);
+        __m512 mag2 = _mm512_mul_ps(
+            _mm512_sqrt_ps(
+                _mm512_fmadd_ps(re2, re2, _mm512_mul_ps(im2, im2))),
+            vScalar);
+
+        /* Convert float -> int32, pack int32 -> int16 (saturating), fix lane order */
+        __m512i int1 = _mm512_cvtps_epi32(mag1);
+        __m512i int2 = _mm512_cvtps_epi32(mag2);
+        __m512i packed = _mm512_permutexvar_epi64(
+            pack_fix, _mm512_packs_epi32(int1, int2));
+
+        _mm512_store_si512((__m512i*)magnitudeVectorPtr, packed);
+        magnitudeVectorPtr += 32;
+    }
+
+    number = thirtySecondPoints * 32;
+    volk_32fc_s32f_magnitude_16i_generic(
+        magnitudeVector + number, complexVector + number, scalar,
+        num_points - number);
+}
+
+#endif /* LV_HAVE_AVX512BW */
 
 #endif /* INCLUDED_volk_32fc_s32f_magnitude_16i_a_H */

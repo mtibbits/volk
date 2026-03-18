@@ -327,6 +327,47 @@ static inline void volk_16i_s32f_convert_32f_u_avx2(float* outputVector,
 }
 #endif /* LV_HAVE_AVX2 */
 
+#if LV_HAVE_AVX2 && LV_HAVE_FMA
+#include <immintrin.h>
+
+static inline void volk_16i_s32f_convert_32f_u_avx2_fma(float* outputVector,
+                                                         const int16_t* inputVector,
+                                                         const float scalar,
+                                                         unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int eighthPoints = num_points / 8;
+
+    const float reciprocal = 1.0f / scalar;
+    float* outputVectorPtr = outputVector;
+    __m256 invScalar = _mm256_set1_ps(reciprocal);
+    const int16_t* inputPtr = inputVector;
+    __m128i inputVal;
+    __m256i inputVal2;
+    __m256 ret;
+
+    for (; number < eighthPoints; number++) {
+
+        // Load the 8 values
+        inputVal = _mm_loadu_si128((const __m128i*)inputPtr);
+
+        // Convert int16 → int32 → float, then scale
+        inputVal2 = _mm256_cvtepi16_epi32(inputVal);
+        ret = _mm256_cvtepi32_ps(inputVal2);
+        ret = _mm256_mul_ps(ret, invScalar);
+
+        _mm256_storeu_ps(outputVectorPtr, ret);
+
+        outputVectorPtr += 8;
+        inputPtr += 8;
+    }
+
+    number = eighthPoints * 8;
+    volk_16i_s32f_convert_32f_generic(
+        outputVector + number, inputVector + number, scalar, num_points - number);
+}
+#endif /* LV_HAVE_AVX2 && LV_HAVE_FMA */
+
 #ifdef LV_HAVE_AVX512F
 #include <immintrin.h>
 
@@ -484,6 +525,24 @@ static inline void volk_16i_s32f_convert_32f_rvv(float* outputVector,
     }
 }
 #endif /* LV_HAVE_RVV */
+
+#ifdef LV_HAVE_ORC
+
+extern void volk_16i_s32f_convert_32f_a_orc_impl(float* outputVector,
+                                                   const int16_t* inputVector,
+                                                   const float scalar,
+                                                   int num_points);
+
+static inline void volk_16i_s32f_convert_32f_u_orc(float* outputVector,
+                                                     const int16_t* inputVector,
+                                                     const float scalar,
+                                                     unsigned int num_points)
+{
+    float invScalar = 1.0f / scalar;
+    volk_16i_s32f_convert_32f_a_orc_impl(outputVector, inputVector, invScalar, num_points);
+}
+
+#endif /* LV_HAVE_ORC */
 
 #endif /* INCLUDED_volk_16i_s32f_convert_32f_u_H */
 #ifndef INCLUDED_volk_16i_s32f_convert_32f_a_H
@@ -727,6 +786,47 @@ static inline void volk_16i_s32f_convert_32f_a_avx2(float* outputVector,
     }
 }
 #endif /* LV_HAVE_AVX2 */
+
+#if LV_HAVE_AVX2 && LV_HAVE_FMA
+#include <immintrin.h>
+
+static inline void volk_16i_s32f_convert_32f_a_avx2_fma(float* outputVector,
+                                                         const int16_t* inputVector,
+                                                         const float scalar,
+                                                         unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int eighthPoints = num_points / 8;
+
+    const float reciprocal = 1.0f / scalar;
+    float* outputVectorPtr = outputVector;
+    __m256 invScalar = _mm256_set1_ps(reciprocal);
+    const int16_t* inputPtr = inputVector;
+    __m128i inputVal;
+    __m256i inputVal2;
+    __m256 ret;
+
+    for (; number < eighthPoints; number++) {
+
+        // Load the 8 values (aligned)
+        inputVal = _mm_load_si128((const __m128i*)inputPtr);
+
+        // Convert int16 → int32 → float, then scale
+        inputVal2 = _mm256_cvtepi16_epi32(inputVal);
+        ret = _mm256_cvtepi32_ps(inputVal2);
+        ret = _mm256_mul_ps(ret, invScalar);
+
+        _mm256_store_ps(outputVectorPtr, ret);
+
+        outputVectorPtr += 8;
+        inputPtr += 8;
+    }
+
+    number = eighthPoints * 8;
+    volk_16i_s32f_convert_32f_generic(
+        outputVector + number, inputVector + number, scalar, num_points - number);
+}
+#endif /* LV_HAVE_AVX2 && LV_HAVE_FMA */
 
 #ifdef LV_HAVE_AVX512F
 #include <immintrin.h>

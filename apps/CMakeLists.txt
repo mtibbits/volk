@@ -49,6 +49,39 @@ install(
     DESTINATION bin
     COMPONENT "volk")
 
+# MAKE volk_ulp_profile
+add_executable(
+    volk_ulp_profile
+    ${CMAKE_CURRENT_SOURCE_DIR}/volk_ulp_profile.cc ${PROJECT_SOURCE_DIR}/lib/qa_utils.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/volk_option_helpers.cc)
+target_compile_features(volk_ulp_profile PUBLIC cxx_std_17)
+
+if(MSVC)
+    target_include_directories(
+        volk_ulp_profile PRIVATE $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/cmake/msvc>)
+endif(MSVC)
+
+target_include_directories(
+    volk_ulp_profile
+    PRIVATE $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/include>
+    PRIVATE $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
+    PRIVATE $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/lib>
+    PRIVATE $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/lib>
+    PRIVATE ${CMAKE_CURRENT_BINARY_DIR}
+    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+if(ENABLE_STATIC_LIBS)
+    target_link_libraries(volk_ulp_profile PRIVATE volk_static fmt::fmt)
+    set_target_properties(volk_ulp_profile PROPERTIES LINK_FLAGS "-static")
+else()
+    target_link_libraries(volk_ulp_profile PRIVATE volk fmt::fmt)
+endif()
+
+install(
+    TARGETS volk_ulp_profile
+    DESTINATION bin
+    COMPONENT "volk")
+
 # MAKE volk-config-info
 add_executable(volk-config-info volk-config-info.cc
                                 ${CMAKE_CURRENT_SOURCE_DIR}/volk_option_helpers.cc)

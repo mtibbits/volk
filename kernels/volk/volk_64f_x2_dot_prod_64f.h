@@ -155,6 +155,51 @@ static inline void volk_64f_x2_dot_prod_64f_u_avx(double* result,
 #endif /* LV_HAVE_AVX */
 
 
+#if LV_HAVE_AVX && LV_HAVE_FMA
+#include <immintrin.h>
+
+static inline void volk_64f_x2_dot_prod_64f_u_avx_fma(double* result,
+                                                       const double* input,
+                                                       const double* taps,
+                                                       unsigned int num_points)
+{
+    const unsigned int sixteenthPoints = num_points / 16;
+    unsigned int number = 0;
+
+    __m256d acc0 = _mm256_setzero_pd();
+    __m256d acc1 = _mm256_setzero_pd();
+    __m256d acc2 = _mm256_setzero_pd();
+    __m256d acc3 = _mm256_setzero_pd();
+
+    for (; number < sixteenthPoints; number++) {
+        acc0 = _mm256_fmadd_pd(_mm256_loadu_pd(input), _mm256_loadu_pd(taps), acc0);
+        acc1 =
+            _mm256_fmadd_pd(_mm256_loadu_pd(input + 4), _mm256_loadu_pd(taps + 4), acc1);
+        acc2 =
+            _mm256_fmadd_pd(_mm256_loadu_pd(input + 8), _mm256_loadu_pd(taps + 8), acc2);
+        acc3 = _mm256_fmadd_pd(
+            _mm256_loadu_pd(input + 12), _mm256_loadu_pd(taps + 12), acc3);
+        input += 16;
+        taps += 16;
+    }
+
+    acc0 = _mm256_add_pd(acc0, acc1);
+    acc2 = _mm256_add_pd(acc2, acc3);
+    acc0 = _mm256_add_pd(acc0, acc2);
+
+    __VOLK_ATTR_ALIGNED(32) double tmp[4];
+    _mm256_storeu_pd(tmp, acc0);
+    double dot = tmp[0] + tmp[1] + tmp[2] + tmp[3];
+
+    for (number = sixteenthPoints * 16; number < num_points; number++) {
+        dot += (*input++) * (*taps++);
+    }
+    *result = dot;
+}
+
+#endif /* LV_HAVE_AVX && LV_HAVE_FMA */
+
+
 #if LV_HAVE_AVX2 && LV_HAVE_FMA
 #include <immintrin.h>
 
@@ -380,6 +425,51 @@ static inline void volk_64f_x2_dot_prod_64f_a_avx(double* result,
 }
 
 #endif /* LV_HAVE_AVX */
+
+
+#if LV_HAVE_AVX && LV_HAVE_FMA
+#include <immintrin.h>
+
+static inline void volk_64f_x2_dot_prod_64f_a_avx_fma(double* result,
+                                                       const double* input,
+                                                       const double* taps,
+                                                       unsigned int num_points)
+{
+    const unsigned int sixteenthPoints = num_points / 16;
+    unsigned int number = 0;
+
+    __m256d acc0 = _mm256_setzero_pd();
+    __m256d acc1 = _mm256_setzero_pd();
+    __m256d acc2 = _mm256_setzero_pd();
+    __m256d acc3 = _mm256_setzero_pd();
+
+    for (; number < sixteenthPoints; number++) {
+        acc0 = _mm256_fmadd_pd(_mm256_load_pd(input), _mm256_load_pd(taps), acc0);
+        acc1 =
+            _mm256_fmadd_pd(_mm256_load_pd(input + 4), _mm256_load_pd(taps + 4), acc1);
+        acc2 =
+            _mm256_fmadd_pd(_mm256_load_pd(input + 8), _mm256_load_pd(taps + 8), acc2);
+        acc3 =
+            _mm256_fmadd_pd(_mm256_load_pd(input + 12), _mm256_load_pd(taps + 12), acc3);
+        input += 16;
+        taps += 16;
+    }
+
+    acc0 = _mm256_add_pd(acc0, acc1);
+    acc2 = _mm256_add_pd(acc2, acc3);
+    acc0 = _mm256_add_pd(acc0, acc2);
+
+    __VOLK_ATTR_ALIGNED(32) double tmp[4];
+    _mm256_store_pd(tmp, acc0);
+    double dot = tmp[0] + tmp[1] + tmp[2] + tmp[3];
+
+    for (number = sixteenthPoints * 16; number < num_points; number++) {
+        dot += (*input++) * (*taps++);
+    }
+    *result = dot;
+}
+
+#endif /* LV_HAVE_AVX && LV_HAVE_FMA */
 
 
 #if LV_HAVE_AVX2 && LV_HAVE_FMA

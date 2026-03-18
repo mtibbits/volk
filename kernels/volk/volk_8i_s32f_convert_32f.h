@@ -202,6 +202,54 @@ static inline void volk_8i_s32f_convert_32f_u_sse4_1(float* outputVector,
 }
 #endif /* LV_HAVE_SSE4_1 */
 
+#ifdef LV_HAVE_AVX
+#include <immintrin.h>
+
+static inline void volk_8i_s32f_convert_32f_u_avx(float* outputVector,
+                                                   const int8_t* inputVector,
+                                                   const float scalar,
+                                                   unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int sixteenthPoints = num_points / 16;
+
+    float* outputVectorPtr = outputVector;
+    const float iScalar = 1.0f / scalar;
+    const __m256 invScalar = _mm256_set1_ps(iScalar);
+    const int8_t* inputVectorPtr = inputVector;
+
+    for (; number < sixteenthPoints; number++) {
+        __m128i inputVal = _mm_loadu_si128((const __m128i*)inputVectorPtr);
+
+        /* Widen low 8 bytes: int8 -> int32 via int16, combine to __m256 */
+        __m128i lo8 = inputVal;
+        __m128i lo32_0 = _mm_cvtepi8_epi32(lo8);
+        lo8 = _mm_srli_si128(lo8, 4);
+        __m128i lo32_1 = _mm_cvtepi8_epi32(lo8);
+        __m256 loFloat = _mm256_mul_ps(
+            _mm256_cvtepi32_ps(_mm256_set_m128i(lo32_1, lo32_0)), invScalar);
+        _mm256_storeu_ps(outputVectorPtr, loFloat);
+        outputVectorPtr += 8;
+
+        /* Widen high 8 bytes */
+        __m128i hi8 = _mm_srli_si128(inputVal, 8);
+        __m128i hi32_0 = _mm_cvtepi8_epi32(hi8);
+        hi8 = _mm_srli_si128(hi8, 4);
+        __m128i hi32_1 = _mm_cvtepi8_epi32(hi8);
+        __m256 hiFloat = _mm256_mul_ps(
+            _mm256_cvtepi32_ps(_mm256_set_m128i(hi32_1, hi32_0)), invScalar);
+        _mm256_storeu_ps(outputVectorPtr, hiFloat);
+        outputVectorPtr += 8;
+
+        inputVectorPtr += 16;
+    }
+
+    number = sixteenthPoints * 16;
+    volk_8i_s32f_convert_32f_generic(
+        outputVector + number, inputVector + number, scalar, num_points - number);
+}
+#endif /* LV_HAVE_AVX */
+
 #ifdef LV_HAVE_AVX2
 #include <immintrin.h>
 
@@ -544,6 +592,54 @@ static inline void volk_8i_s32f_convert_32f_a_sse4_1(float* outputVector,
     }
 }
 #endif /* LV_HAVE_SSE4_1 */
+
+#ifdef LV_HAVE_AVX
+#include <immintrin.h>
+
+static inline void volk_8i_s32f_convert_32f_a_avx(float* outputVector,
+                                                   const int8_t* inputVector,
+                                                   const float scalar,
+                                                   unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int sixteenthPoints = num_points / 16;
+
+    float* outputVectorPtr = outputVector;
+    const float iScalar = 1.0f / scalar;
+    const __m256 invScalar = _mm256_set1_ps(iScalar);
+    const int8_t* inputVectorPtr = inputVector;
+
+    for (; number < sixteenthPoints; number++) {
+        __m128i inputVal = _mm_load_si128((const __m128i*)inputVectorPtr);
+
+        /* Widen low 8 bytes: int8 -> int32 via SSE4.1, combine to __m256 */
+        __m128i lo8 = inputVal;
+        __m128i lo32_0 = _mm_cvtepi8_epi32(lo8);
+        lo8 = _mm_srli_si128(lo8, 4);
+        __m128i lo32_1 = _mm_cvtepi8_epi32(lo8);
+        __m256 loFloat = _mm256_mul_ps(
+            _mm256_cvtepi32_ps(_mm256_set_m128i(lo32_1, lo32_0)), invScalar);
+        _mm256_store_ps(outputVectorPtr, loFloat);
+        outputVectorPtr += 8;
+
+        /* Widen high 8 bytes */
+        __m128i hi8 = _mm_srli_si128(inputVal, 8);
+        __m128i hi32_0 = _mm_cvtepi8_epi32(hi8);
+        hi8 = _mm_srli_si128(hi8, 4);
+        __m128i hi32_1 = _mm_cvtepi8_epi32(hi8);
+        __m256 hiFloat = _mm256_mul_ps(
+            _mm256_cvtepi32_ps(_mm256_set_m128i(hi32_1, hi32_0)), invScalar);
+        _mm256_store_ps(outputVectorPtr, hiFloat);
+        outputVectorPtr += 8;
+
+        inputVectorPtr += 16;
+    }
+
+    number = sixteenthPoints * 16;
+    volk_8i_s32f_convert_32f_generic(
+        outputVector + number, inputVector + number, scalar, num_points - number);
+}
+#endif /* LV_HAVE_AVX */
 
 #ifdef LV_HAVE_AVX2
 #include <immintrin.h>

@@ -263,6 +263,23 @@ static inline void volk_8i_x2_add_saturated_8i_rvv(int8_t* outVector,
 #endif /* LV_HAVE_RVV */
 
 
+#ifdef LV_HAVE_ORC
+
+extern void volk_8i_x2_add_saturated_8i_a_orc_impl(int8_t* outVector,
+                                                     const int8_t* inVectorA,
+                                                     const int8_t* inVectorB,
+                                                     int num_points);
+
+static inline void volk_8i_x2_add_saturated_8i_u_orc(int8_t* outVector,
+                                                       const int8_t* inVectorA,
+                                                       const int8_t* inVectorB,
+                                                       unsigned int num_points)
+{
+    volk_8i_x2_add_saturated_8i_a_orc_impl(outVector, inVectorA, inVectorB, num_points);
+}
+
+#endif /* LV_HAVE_ORC */
+
 #endif /* INCLUDED_volk_8i_x2_add_saturated_8i_u_H */
 
 

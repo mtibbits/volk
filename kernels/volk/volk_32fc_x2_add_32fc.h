@@ -156,6 +156,44 @@ static inline void volk_32fc_x2_add_32fc_u_avx(lv_32fc_t* cVector,
 }
 #endif /* LV_HAVE_AVX */
 
+#ifdef LV_HAVE_AVX2
+#include <immintrin.h>
+
+static inline void volk_32fc_x2_add_32fc_u_avx2(lv_32fc_t* cVector,
+                                               const lv_32fc_t* aVector,
+                                               const lv_32fc_t* bVector,
+                                               unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int quarterPoints = num_points / 4;
+
+    lv_32fc_t* cPtr = cVector;
+    const lv_32fc_t* aPtr = aVector;
+    const lv_32fc_t* bPtr = bVector;
+
+    __m256 aVal, bVal, cVal;
+    for (; number < quarterPoints; number++) {
+
+        aVal = _mm256_loadu_ps((const float*)aPtr);
+        bVal = _mm256_loadu_ps((const float*)bPtr);
+
+        cVal = _mm256_add_ps(aVal, bVal);
+
+        _mm256_storeu_ps((float*)cPtr,
+                         cVal); // Store the results back into the C container
+
+        aPtr += 4;
+        bPtr += 4;
+        cPtr += 4;
+    }
+
+    number = quarterPoints * 4;
+    for (; number < num_points; number++) {
+        *cPtr++ = (*aPtr++) + (*bPtr++);
+    }
+}
+#endif /* LV_HAVE_AVX2 */
+
 
 #ifdef LV_HAVE_AVX512F
 #include <immintrin.h>
@@ -288,6 +326,48 @@ static inline void volk_32fc_x2_add_32fc_rvv(lv_32fc_t* cVector,
 }
 #endif /* LV_HAVE_RVV */
 
+#ifdef LV_HAVE_RVVSEG
+#include <riscv_vector.h>
+
+static inline void volk_32fc_x2_add_32fc_rvvseg(lv_32fc_t* cVector,
+                                                  const lv_32fc_t* aVector,
+                                                  const lv_32fc_t* bVector,
+                                                  unsigned int num_points)
+{
+    size_t n = num_points;
+    for (size_t vl; n > 0; n -= vl, aVector += vl, bVector += vl, cVector += vl) {
+        vl = __riscv_vsetvl_e32m4(n);
+        vfloat32m4x2_t va =
+            __riscv_vlseg2e32_v_f32m4x2((const float*)aVector, vl);
+        vfloat32m4x2_t vb =
+            __riscv_vlseg2e32_v_f32m4x2((const float*)bVector, vl);
+        vfloat32m4_t vr =
+            __riscv_vfadd(__riscv_vget_f32m4(va, 0), __riscv_vget_f32m4(vb, 0), vl);
+        vfloat32m4_t vi =
+            __riscv_vfadd(__riscv_vget_f32m4(va, 1), __riscv_vget_f32m4(vb, 1), vl);
+        __riscv_vsseg2e32_v_f32m4x2(
+            (float*)cVector, __riscv_vcreate_v_f32m4x2(vr, vi), vl);
+    }
+}
+#endif /* LV_HAVE_RVVSEG */
+
+#ifdef LV_HAVE_ORC
+
+extern void volk_32fc_x2_add_32fc_a_orc_impl(lv_32fc_t* cVector,
+                                              const lv_32fc_t* aVector,
+                                              const lv_32fc_t* bVector,
+                                              int num_points);
+
+static inline void volk_32fc_x2_add_32fc_u_orc(lv_32fc_t* cVector,
+                                                const lv_32fc_t* aVector,
+                                                const lv_32fc_t* bVector,
+                                                unsigned int num_points)
+{
+    volk_32fc_x2_add_32fc_a_orc_impl(cVector, aVector, bVector, num_points);
+}
+
+#endif /* LV_HAVE_ORC */
+
 #endif /* INCLUDED_volk_32fc_x2_add_32fc_u_H */
 
 #ifndef INCLUDED_volk_32fc_x2_add_32fc_a_H
@@ -367,6 +447,44 @@ static inline void volk_32fc_x2_add_32fc_a_avx(lv_32fc_t* cVector,
     }
 }
 #endif /* LV_HAVE_AVX */
+
+#ifdef LV_HAVE_AVX2
+#include <immintrin.h>
+
+static inline void volk_32fc_x2_add_32fc_a_avx2(lv_32fc_t* cVector,
+                                               const lv_32fc_t* aVector,
+                                               const lv_32fc_t* bVector,
+                                               unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int quarterPoints = num_points / 4;
+
+    lv_32fc_t* cPtr = cVector;
+    const lv_32fc_t* aPtr = aVector;
+    const lv_32fc_t* bPtr = bVector;
+
+    __m256 aVal, bVal, cVal;
+    for (; number < quarterPoints; number++) {
+
+        aVal = _mm256_load_ps((const float*)aPtr);
+        bVal = _mm256_load_ps((const float*)bPtr);
+
+        cVal = _mm256_add_ps(aVal, bVal);
+
+        _mm256_store_ps((float*)cPtr,
+                        cVal); // Store the results back into the C container
+
+        aPtr += 4;
+        bPtr += 4;
+        cPtr += 4;
+    }
+
+    number = quarterPoints * 4;
+    for (; number < num_points; number++) {
+        *cPtr++ = (*aPtr++) + (*bPtr++);
+    }
+}
+#endif /* LV_HAVE_AVX2 */
 
 
 #ifdef LV_HAVE_AVX512F

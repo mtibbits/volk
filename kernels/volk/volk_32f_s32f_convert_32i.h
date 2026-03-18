@@ -254,6 +254,61 @@ static inline void volk_32f_s32f_convert_32i_u_avx(int32_t* outputVector,
 
 #endif /* LV_HAVE_AVX */
 
+#ifdef LV_HAVE_AVX2
+#include <immintrin.h>
+
+static inline void volk_32f_s32f_convert_32i_u_avx2(int32_t* outputVector,
+                                                   const float* inputVector,
+                                                   const float scalar,
+                                                   unsigned int num_points)
+{
+    unsigned int number = 0;
+
+    const unsigned int eighthPoints = num_points / 8;
+
+    const float* inputVectorPtr = (const float*)inputVector;
+    int32_t* outputVectorPtr = outputVector;
+
+    float min_val = INT_MIN;
+    float max_val = (uint32_t)INT_MAX + 1;
+    float r;
+
+    __m256 vScalar = _mm256_set1_ps(scalar);
+    __m256 inputVal1;
+    __m256i intInputVal1;
+    __m256 vmin_val = _mm256_set1_ps(min_val);
+    __m256 vmax_val = _mm256_set1_ps(max_val);
+
+    for (; number < eighthPoints; number++) {
+        inputVal1 = _mm256_loadu_ps(inputVectorPtr);
+        inputVectorPtr += 8;
+
+        inputVal1 = _mm256_max_ps(
+            _mm256_min_ps(_mm256_mul_ps(inputVal1, vScalar), vmax_val), vmin_val);
+        intInputVal1 = _mm256_cvtps_epi32(inputVal1);
+        // Fix positive overflow: VCVTPS2DQ returns 0x80000000 for values >= 2^31
+        intInputVal1 = _mm256_castps_si256(_mm256_xor_ps(
+            _mm256_castsi256_ps(intInputVal1),
+            _mm256_cmp_ps(inputVal1, vmax_val, _CMP_GE_OS)));
+
+        _mm256_storeu_si256((__m256i*)outputVectorPtr, intInputVal1);
+        outputVectorPtr += 8;
+    }
+
+    number = eighthPoints * 8;
+    for (; number < num_points; number++) {
+        r = inputVector[number] * scalar;
+        if (r >= max_val)
+            outputVector[number] = INT_MAX;
+        else if (r < min_val)
+            outputVector[number] = INT_MIN;
+        else
+            outputVector[number] = (int32_t)rintf(r);
+    }
+}
+
+#endif /* LV_HAVE_AVX2 */
+
 #ifdef LV_HAVE_AVX512F
 #include <immintrin.h>
 
@@ -415,6 +470,23 @@ static inline void volk_32f_s32f_convert_32i_rvv(int32_t* outputVector,
     }
 }
 #endif /* LV_HAVE_RVV */
+
+#ifdef LV_HAVE_ORC
+
+extern void volk_32f_s32f_convert_32i_a_orc_impl(int32_t* outputVector,
+                                                   const float* inputVector,
+                                                   const float scalar,
+                                                   int num_points);
+
+static inline void volk_32f_s32f_convert_32i_u_orc(int32_t* outputVector,
+                                                     const float* inputVector,
+                                                     const float scalar,
+                                                     unsigned int num_points)
+{
+    volk_32f_s32f_convert_32i_a_orc_impl(outputVector, inputVector, scalar, num_points);
+}
+
+#endif /* LV_HAVE_ORC */
 
 #endif /* INCLUDED_volk_32f_s32f_convert_32i_u_H */
 #ifndef INCLUDED_volk_32f_s32f_convert_32i_a_H
@@ -589,6 +661,61 @@ static inline void volk_32f_s32f_convert_32i_a_avx(int32_t* outputVector,
 }
 
 #endif /* LV_HAVE_AVX */
+
+#ifdef LV_HAVE_AVX2
+#include <immintrin.h>
+
+static inline void volk_32f_s32f_convert_32i_a_avx2(int32_t* outputVector,
+                                                   const float* inputVector,
+                                                   const float scalar,
+                                                   unsigned int num_points)
+{
+    unsigned int number = 0;
+
+    const unsigned int eighthPoints = num_points / 8;
+
+    const float* inputVectorPtr = (const float*)inputVector;
+    int32_t* outputVectorPtr = outputVector;
+
+    float min_val = INT_MIN;
+    float max_val = (uint32_t)INT_MAX + 1;
+    float r;
+
+    __m256 vScalar = _mm256_set1_ps(scalar);
+    __m256 inputVal1;
+    __m256i intInputVal1;
+    __m256 vmin_val = _mm256_set1_ps(min_val);
+    __m256 vmax_val = _mm256_set1_ps(max_val);
+
+    for (; number < eighthPoints; number++) {
+        inputVal1 = _mm256_load_ps(inputVectorPtr);
+        inputVectorPtr += 8;
+
+        inputVal1 = _mm256_max_ps(
+            _mm256_min_ps(_mm256_mul_ps(inputVal1, vScalar), vmax_val), vmin_val);
+        intInputVal1 = _mm256_cvtps_epi32(inputVal1);
+        // Fix positive overflow: VCVTPS2DQ returns 0x80000000 for values >= 2^31
+        intInputVal1 = _mm256_castps_si256(_mm256_xor_ps(
+            _mm256_castsi256_ps(intInputVal1),
+            _mm256_cmp_ps(inputVal1, vmax_val, _CMP_GE_OS)));
+
+        _mm256_store_si256((__m256i*)outputVectorPtr, intInputVal1);
+        outputVectorPtr += 8;
+    }
+
+    number = eighthPoints * 8;
+    for (; number < num_points; number++) {
+        r = inputVector[number] * scalar;
+        if (r >= max_val)
+            outputVector[number] = INT_MAX;
+        else if (r < min_val)
+            outputVector[number] = INT_MIN;
+        else
+            outputVector[number] = (int32_t)rintf(r);
+    }
+}
+
+#endif /* LV_HAVE_AVX2 */
 
 #ifdef LV_HAVE_AVX512F
 #include <immintrin.h>

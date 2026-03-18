@@ -302,6 +302,38 @@ static inline void volk_32fc_deinterleave_real_32f_rvv(float* iBuffer,
 }
 #endif /* LV_HAVE_RVV */
 
+#ifdef LV_HAVE_RVVSEG
+#include <riscv_vector.h>
+
+static inline void volk_32fc_deinterleave_real_32f_rvvseg(float* iBuffer,
+                                                           const lv_32fc_t* complexVector,
+                                                           unsigned int num_points)
+{
+    size_t n = num_points;
+    for (size_t vl; n > 0; n -= vl, complexVector += vl, iBuffer += vl) {
+        vl = __riscv_vsetvl_e32m4(n);
+        vfloat32m4x2_t vc =
+            __riscv_vlseg2e32_v_f32m4x2((const float*)complexVector, vl);
+        __riscv_vse32(iBuffer, __riscv_vget_f32m4(vc, 0), vl);
+    }
+}
+#endif /* LV_HAVE_RVVSEG */
+
+#ifdef LV_HAVE_ORC
+
+extern void volk_32fc_deinterleave_real_32f_a_orc_impl(float* iBuffer,
+                                                        const lv_32fc_t* complexVector,
+                                                        int num_points);
+
+static inline void volk_32fc_deinterleave_real_32f_u_orc(float* iBuffer,
+                                                          const lv_32fc_t* complexVector,
+                                                          unsigned int num_points)
+{
+    volk_32fc_deinterleave_real_32f_a_orc_impl(iBuffer, complexVector, num_points);
+}
+
+#endif /* LV_HAVE_ORC */
+
 #endif /* INCLUDED_volk_32fc_deinterleave_real_32f_u_H */
 
 

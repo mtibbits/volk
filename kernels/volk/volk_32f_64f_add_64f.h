@@ -178,6 +178,59 @@ static inline void volk_32f_64f_add_64f_u_avx(double* cVector,
 
 #endif /* LV_HAVE_AVX */
 
+#ifdef LV_HAVE_AVX2
+
+#include <immintrin.h>
+#include <xmmintrin.h>
+
+static inline void volk_32f_64f_add_64f_u_avx2(double* cVector,
+                                              const float* aVector,
+                                              const double* bVector,
+                                              unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int eighth_points = num_points / 8;
+
+    double* cPtr = cVector;
+    const float* aPtr = aVector;
+    const double* bPtr = bVector;
+
+    __m256 aVal;
+    __m128 aVal1, aVal2;
+    __m256d aDbl1, aDbl2, bVal1, bVal2, cVal1, cVal2;
+    for (; number < eighth_points; number++) {
+
+        aVal = _mm256_loadu_ps(aPtr);
+        bVal1 = _mm256_loadu_pd(bPtr);
+        bVal2 = _mm256_loadu_pd(bPtr + 4);
+
+        aVal1 = _mm256_extractf128_ps(aVal, 0);
+        aVal2 = _mm256_extractf128_ps(aVal, 1);
+
+        aDbl1 = _mm256_cvtps_pd(aVal1);
+        aDbl2 = _mm256_cvtps_pd(aVal2);
+
+        cVal1 = _mm256_add_pd(aDbl1, bVal1);
+        cVal2 = _mm256_add_pd(aDbl2, bVal2);
+
+        _mm256_storeu_pd(cPtr,
+                         cVal1); // Store the results back into the C container
+        _mm256_storeu_pd(cPtr + 4,
+                         cVal2); // Store the results back into the C container
+
+        aPtr += 8;
+        bPtr += 8;
+        cPtr += 8;
+    }
+
+    number = eighth_points * 8;
+    for (; number < num_points; number++) {
+        *cPtr++ = ((double)(*aPtr++)) + (*bPtr++);
+    }
+}
+
+#endif /* LV_HAVE_AVX2 */
+
 #ifdef LV_HAVE_AVX512F
 
 #include <immintrin.h>
@@ -290,6 +343,23 @@ static inline void volk_32f_64f_add_64f_rvv(double* cVector,
 }
 #endif /* LV_HAVE_RVV */
 
+#ifdef LV_HAVE_ORC
+
+extern void volk_32f_64f_add_64f_a_orc_impl(double* cVector,
+                                              const float* aVector,
+                                              const double* bVector,
+                                              int num_points);
+
+static inline void volk_32f_64f_add_64f_u_orc(double* cVector,
+                                                const float* aVector,
+                                                const double* bVector,
+                                                unsigned int num_points)
+{
+    volk_32f_64f_add_64f_a_orc_impl(cVector, aVector, bVector, num_points);
+}
+
+#endif /* LV_HAVE_ORC */
+
 #endif /* INCLUDED_volk_32f_64f_add_64f_u_H */
 
 #ifndef INCLUDED_volk_32f_64f_add_64f_a_H
@@ -390,6 +460,58 @@ static inline void volk_32f_64f_add_64f_a_avx(double* cVector,
 }
 
 #endif /* LV_HAVE_AVX */
+
+#ifdef LV_HAVE_AVX2
+
+#include <immintrin.h>
+#include <xmmintrin.h>
+
+static inline void volk_32f_64f_add_64f_a_avx2(double* cVector,
+                                              const float* aVector,
+                                              const double* bVector,
+                                              unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int eighth_points = num_points / 8;
+
+    double* cPtr = cVector;
+    const float* aPtr = aVector;
+    const double* bPtr = bVector;
+
+    __m256 aVal;
+    __m128 aVal1, aVal2;
+    __m256d aDbl1, aDbl2, bVal1, bVal2, cVal1, cVal2;
+    for (; number < eighth_points; number++) {
+
+        aVal = _mm256_load_ps(aPtr);
+        bVal1 = _mm256_load_pd(bPtr);
+        bVal2 = _mm256_load_pd(bPtr + 4);
+
+        aVal1 = _mm256_extractf128_ps(aVal, 0);
+        aVal2 = _mm256_extractf128_ps(aVal, 1);
+
+        aDbl1 = _mm256_cvtps_pd(aVal1);
+        aDbl2 = _mm256_cvtps_pd(aVal2);
+
+        cVal1 = _mm256_add_pd(aDbl1, bVal1);
+        cVal2 = _mm256_add_pd(aDbl2, bVal2);
+
+        _mm256_store_pd(cPtr, cVal1); // Store the results back into the C container
+        _mm256_store_pd(cPtr + 4,
+                        cVal2); // Store the results back into the C container
+
+        aPtr += 8;
+        bPtr += 8;
+        cPtr += 8;
+    }
+
+    number = eighth_points * 8;
+    for (; number < num_points; number++) {
+        *cPtr++ = ((double)(*aPtr++)) + (*bPtr++);
+    }
+}
+
+#endif /* LV_HAVE_AVX2 */
 
 #ifdef LV_HAVE_AVX512F
 

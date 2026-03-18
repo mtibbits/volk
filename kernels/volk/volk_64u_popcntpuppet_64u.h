@@ -36,6 +36,17 @@ static inline void volk_64u_popcntpuppet_64u_a_sse4_2(uint64_t* outVector,
 }
 #endif /* LV_HAVE_SSE4_2 */
 
+#if LV_HAVE_SSE4_2 && LV_HAVE_64
+static inline void volk_64u_popcntpuppet_64u_u_sse4_2(uint64_t* outVector,
+                                                      const uint64_t* inVector,
+                                                      unsigned int num_points)
+{
+    for (size_t i = 0; i < num_points; ++i) {
+        volk_64u_popcnt_u_sse4_2(outVector + i, inVector[i]);
+    }
+}
+#endif /* LV_HAVE_SSE4_2 && LV_HAVE_64 */
+
 #ifdef LV_HAVE_NEON
 static inline void volk_64u_popcntpuppet_64u_neon(uint64_t* outVector,
                                                   const uint64_t* inVector,

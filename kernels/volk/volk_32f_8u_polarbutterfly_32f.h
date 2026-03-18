@@ -507,6 +507,113 @@ static inline void volk_32f_8u_polarbutterfly_32f_u_avx512f(float* llrs,
 
 #endif /* LV_HAVE_AVX512F */
 
+#ifdef LV_HAVE_NEON
+#include <arm_neon.h>
+
+static inline void volk_32f_8u_polarbutterfly_32f_neon(float* llrs,
+                                                        unsigned char* u,
+                                                        const int frame_exp,
+                                                        const int stage,
+                                                        const int u_num,
+                                                        const int row)
+{
+    const int frame_size = 0x01 << frame_exp;
+    if (row % 2) {
+        const float* next_llrs = llrs + frame_size + row;
+        *(llrs + row) = llr_even(*(next_llrs - 1), *next_llrs, u[u_num - 1]);
+        return;
+    }
+
+    const int max_stage_depth = calculate_max_stage_depth_for_row(frame_exp, row);
+    if (max_stage_depth < 2) {
+        volk_32f_8u_polarbutterfly_32f_generic(llrs, u, frame_exp, stage, u_num, row);
+        return;
+    }
+
+    int loop_stage = max_stage_depth;
+    int stage_size = 0x01 << loop_stage;
+
+    float* src_llr_ptr;
+    float* dst_llr_ptr;
+
+    const uint32x4_t sign_bit = vdupq_n_u32(0x80000000);
+
+    if (row) {
+        unsigned char* u_target = u + frame_size;
+        unsigned char* u_temp = u + 2 * frame_size;
+        memcpy(u_temp, u + u_num - stage_size, sizeof(unsigned char) * stage_size);
+
+        volk_8u_x2_encodeframepolar_8u_neon(u_target, u_temp, stage_size);
+
+        src_llr_ptr = llrs + (max_stage_depth + 1) * frame_size + row - stage_size;
+        dst_llr_ptr = llrs + max_stage_depth * frame_size + row;
+
+        int p;
+        for (p = 0; p < stage_size; p += 4) {
+            uint8x8_t fb8 = vld1_u8(u_target);
+            u_target += 4;
+            uint32x4_t fbits32 = vmovl_u16(vget_low_u16(vmovl_u8(fb8)));
+            uint32x4_t fsign = vshlq_n_u32(fbits32, 31);
+
+            float32x4_t v0 = vld1q_f32(src_llr_ptr);
+            float32x4_t v1 = vld1q_f32(src_llr_ptr + 4);
+            src_llr_ptr += 8;
+
+            float32x4x2_t deint = vuzpq_f32(v0, v1);
+            float32x4_t llr0 = deint.val[0];
+            float32x4_t llr1 = deint.val[1];
+
+            llr0 = vreinterpretq_f32_u32(
+                veorq_u32(vreinterpretq_u32_f32(llr0), fsign));
+            float32x4_t dst = vaddq_f32(llr0, llr1);
+
+            vst1q_f32(dst_llr_ptr, dst);
+            dst_llr_ptr += 4;
+        }
+
+        --loop_stage;
+        stage_size >>= 1;
+    }
+
+    const int min_stage = stage > 1 ? stage : 1;
+
+    int el;
+    while (min_stage < loop_stage) {
+        dst_llr_ptr = llrs + loop_stage * frame_size + row;
+        src_llr_ptr = dst_llr_ptr + frame_size;
+        for (el = 0; el < stage_size; el += 4) {
+            float32x4_t v0 = vld1q_f32(src_llr_ptr);
+            float32x4_t v1 = vld1q_f32(src_llr_ptr + 4);
+            src_llr_ptr += 8;
+
+            float32x4x2_t deint = vuzpq_f32(v0, v1);
+            float32x4_t llr0 = deint.val[0];
+            float32x4_t llr1 = deint.val[1];
+
+            uint32x4_t s0 = vandq_u32(vreinterpretq_u32_f32(llr0), sign_bit);
+            uint32x4_t s1 = vandq_u32(vreinterpretq_u32_f32(llr1), sign_bit);
+            uint32x4_t sign = veorq_u32(s0, s1);
+
+            float32x4_t abs0 = vabsq_f32(llr0);
+            float32x4_t abs1 = vabsq_f32(llr1);
+            float32x4_t min_val = vminq_f32(abs0, abs1);
+
+            float32x4_t dst = vreinterpretq_f32_u32(
+                vorrq_u32(vreinterpretq_u32_f32(min_val), sign));
+
+            vst1q_f32(dst_llr_ptr, dst);
+            dst_llr_ptr += 4;
+        }
+
+        --loop_stage;
+        stage_size >>= 1;
+    }
+
+    llr_odd_stages(llrs, stage, loop_stage + 1, frame_size, row);
+}
+
+#endif /* LV_HAVE_NEON */
+
 #ifdef LV_HAVE_RVV
 #include <riscv_vector.h>
 

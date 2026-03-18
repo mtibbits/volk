@@ -245,6 +245,59 @@ volk_16ic_s32f_deinterleave_32f_x2_u_sse4_1(float* iBuffer,
 }
 #endif /* LV_HAVE_SSE4_1 */
 
+#ifdef LV_HAVE_AVX
+#include <immintrin.h>
+
+static inline void
+volk_16ic_s32f_deinterleave_32f_x2_u_avx(float* iBuffer,
+                                         float* qBuffer,
+                                         const lv_16sc_t* complexVector,
+                                         const float scalar,
+                                         unsigned int num_points)
+{
+    float* iBufferPtr = iBuffer;
+    float* qBufferPtr = qBuffer;
+
+    uint64_t number = 0;
+    const uint64_t eighthPoints = num_points / 8;
+
+    const float invScalar_f = 1.0f / scalar;
+    __m256 invScalar = _mm256_set1_ps(invScalar_f);
+    const int16_t* complexVectorPtr = (const int16_t*)complexVector;
+
+    for (; number < eighthPoints; number++) {
+        /* Load 8 complex int16 samples as two 128-bit halves.
+         * Each 128-bit register holds 4 complex samples: [I0,Q0,I1,Q1,I2,Q2,I3,Q3]
+         * where each I/Q is a 16-bit value packed into a 32-bit lane. */
+        __m128i v0 = _mm_loadu_si128((const __m128i*)complexVectorPtr);
+        __m128i v1 = _mm_loadu_si128((const __m128i*)(complexVectorPtr + 8));
+        complexVectorPtr += 16;
+
+        /* Sign-extend: real = lower 16 bits (sll16/sra16), imag = upper 16 bits (sra16) */
+        __m128i i0 = _mm_srai_epi32(_mm_slli_epi32(v0, 16), 16); /* [I0,I1,I2,I3] */
+        __m128i q0 = _mm_srai_epi32(v0, 16);                     /* [Q0,Q1,Q2,Q3] */
+        __m128i i1 = _mm_srai_epi32(_mm_slli_epi32(v1, 16), 16); /* [I4,I5,I6,I7] */
+        __m128i q1 = _mm_srai_epi32(v1, 16);                     /* [Q4,Q5,Q6,Q7] */
+
+        /* Convert to float and scale; combine pairs into 256-bit vectors */
+        __m256 iValue = _mm256_mul_ps(
+            _mm256_set_m128(_mm_cvtepi32_ps(i1), _mm_cvtepi32_ps(i0)), invScalar);
+        __m256 qValue = _mm256_mul_ps(
+            _mm256_set_m128(_mm_cvtepi32_ps(q1), _mm_cvtepi32_ps(q0)), invScalar);
+
+        _mm256_storeu_ps(iBufferPtr, iValue);
+        _mm256_storeu_ps(qBufferPtr, qValue);
+
+        iBufferPtr += 8;
+        qBufferPtr += 8;
+    }
+
+    number = eighthPoints * 8;
+    volk_16ic_s32f_deinterleave_32f_x2_generic(
+        iBufferPtr, qBufferPtr, &complexVector[number], scalar, num_points - number);
+}
+#endif /* LV_HAVE_AVX */
+
 #ifdef LV_HAVE_AVX2
 #include <immintrin.h>
 
@@ -697,6 +750,59 @@ volk_16ic_s32f_deinterleave_32f_x2_a_sse4_1(float* iBuffer,
         iBufferPtr, qBufferPtr, &complexVector[number], scalar, num_points - number);
 }
 #endif /* LV_HAVE_SSE4_1 */
+
+#ifdef LV_HAVE_AVX
+#include <immintrin.h>
+
+static inline void
+volk_16ic_s32f_deinterleave_32f_x2_a_avx(float* iBuffer,
+                                         float* qBuffer,
+                                         const lv_16sc_t* complexVector,
+                                         const float scalar,
+                                         unsigned int num_points)
+{
+    float* iBufferPtr = iBuffer;
+    float* qBufferPtr = qBuffer;
+
+    uint64_t number = 0;
+    const uint64_t eighthPoints = num_points / 8;
+
+    const float invScalar_f = 1.0f / scalar;
+    __m256 invScalar = _mm256_set1_ps(invScalar_f);
+    const int16_t* complexVectorPtr = (const int16_t*)complexVector;
+
+    for (; number < eighthPoints; number++) {
+        /* Load 8 complex int16 samples as two 128-bit halves.
+         * Each 128-bit register holds 4 complex samples: [I0,Q0,I1,Q1,I2,Q2,I3,Q3]
+         * where each I/Q is a 16-bit value packed into a 32-bit lane. */
+        __m128i v0 = _mm_load_si128((const __m128i*)complexVectorPtr);
+        __m128i v1 = _mm_load_si128((const __m128i*)(complexVectorPtr + 8));
+        complexVectorPtr += 16;
+
+        /* Sign-extend: real = lower 16 bits (sll16/sra16), imag = upper 16 bits (sra16) */
+        __m128i i0 = _mm_srai_epi32(_mm_slli_epi32(v0, 16), 16); /* [I0,I1,I2,I3] */
+        __m128i q0 = _mm_srai_epi32(v0, 16);                     /* [Q0,Q1,Q2,Q3] */
+        __m128i i1 = _mm_srai_epi32(_mm_slli_epi32(v1, 16), 16); /* [I4,I5,I6,I7] */
+        __m128i q1 = _mm_srai_epi32(v1, 16);                     /* [Q4,Q5,Q6,Q7] */
+
+        /* Convert to float and scale; combine pairs into 256-bit vectors */
+        __m256 iValue = _mm256_mul_ps(
+            _mm256_set_m128(_mm_cvtepi32_ps(i1), _mm_cvtepi32_ps(i0)), invScalar);
+        __m256 qValue = _mm256_mul_ps(
+            _mm256_set_m128(_mm_cvtepi32_ps(q1), _mm_cvtepi32_ps(q0)), invScalar);
+
+        _mm256_store_ps(iBufferPtr, iValue);
+        _mm256_store_ps(qBufferPtr, qValue);
+
+        iBufferPtr += 8;
+        qBufferPtr += 8;
+    }
+
+    number = eighthPoints * 8;
+    volk_16ic_s32f_deinterleave_32f_x2_generic(
+        iBufferPtr, qBufferPtr, &complexVector[number], scalar, num_points - number);
+}
+#endif /* LV_HAVE_AVX */
 
 #ifdef LV_HAVE_AVX2
 #include <immintrin.h>

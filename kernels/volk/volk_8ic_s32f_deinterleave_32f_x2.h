@@ -154,6 +154,62 @@ static inline void volk_8ic_s32f_deinterleave_32f_x2_u_sse(float* iBuffer,
 #endif /* LV_HAVE_SSE */
 
 
+#ifdef LV_HAVE_SSE2
+#include <emmintrin.h>
+
+static inline void volk_8ic_s32f_deinterleave_32f_x2_u_sse2(
+    float* iBuffer,
+    float* qBuffer,
+    const lv_8sc_t* complexVector,
+    const float scalar,
+    unsigned int num_points)
+{
+    float* iBufferPtr = iBuffer;
+    float* qBufferPtr = qBuffer;
+    unsigned int number = 0;
+    const unsigned int quarterPoints = num_points / 4;
+
+    const float iScalar = 1.0f / scalar;
+    __m128 invScalar = _mm_set_ps1(iScalar);
+    const int8_t* complexVectorPtr = (const int8_t*)complexVector;
+    __m128i zero = _mm_setzero_si128();
+
+    for (; number < quarterPoints; number++) {
+        /* Load 4 complex int8 samples (8 bytes) */
+        __m128i raw = _mm_loadl_epi64((const __m128i*)complexVectorPtr);
+        complexVectorPtr += 8;
+
+        /* Sign-extend int8 -> int16 */
+        __m128i sign8 = _mm_cmpgt_epi8(zero, raw);
+        __m128i wide16 = _mm_unpacklo_epi8(raw, sign8);
+
+        /* Sign-extend int16 -> int32 */
+        __m128i sign16 = _mm_srai_epi16(wide16, 15);
+        __m128i lo32 = _mm_unpacklo_epi16(wide16, sign16); /* [I0,Q0,I1,Q1] as int32 */
+        __m128i hi32 = _mm_unpackhi_epi16(wide16, sign16); /* [I2,Q2,I3,Q3] as int32 */
+
+        /* Convert to float and scale */
+        __m128 flo = _mm_mul_ps(_mm_cvtepi32_ps(lo32), invScalar);
+        __m128 fhi = _mm_mul_ps(_mm_cvtepi32_ps(hi32), invScalar);
+
+        /* Deinterleave I and Q */
+        __m128 iVal = _mm_shuffle_ps(flo, fhi, _MM_SHUFFLE(2, 0, 2, 0));
+        __m128 qVal = _mm_shuffle_ps(flo, fhi, _MM_SHUFFLE(3, 1, 3, 1));
+
+        _mm_storeu_ps(iBufferPtr, iVal);
+        _mm_storeu_ps(qBufferPtr, qVal);
+
+        iBufferPtr += 4;
+        qBufferPtr += 4;
+    }
+
+    number = quarterPoints * 4;
+    volk_8ic_s32f_deinterleave_32f_x2_generic(
+        iBufferPtr, qBufferPtr, &complexVector[number], scalar, num_points - number);
+}
+#endif /* LV_HAVE_SSE2 */
+
+
 #ifdef LV_HAVE_SSE4_1
 #include <smmintrin.h>
 
@@ -222,6 +278,68 @@ volk_8ic_s32f_deinterleave_32f_x2_u_sse4_1(float* iBuffer,
         iBufferPtr, qBufferPtr, (const lv_8sc_t*)complexVectorPtr, scalar, num_points - number);
 }
 #endif /* LV_HAVE_SSE4_1 */
+
+
+#ifdef LV_HAVE_AVX
+#include <immintrin.h>
+
+static inline void
+volk_8ic_s32f_deinterleave_32f_x2_u_avx(float* iBuffer,
+                                         float* qBuffer,
+                                         const lv_8sc_t* complexVector,
+                                         const float scalar,
+                                         unsigned int num_points)
+{
+    float* iBufferPtr = iBuffer;
+    float* qBufferPtr = qBuffer;
+
+    unsigned int number = 0;
+    const unsigned int eighthPoints = num_points / 8;
+
+    const float iScalar = 1.0f / scalar;
+    const __m256 invScalar = _mm256_set1_ps(iScalar);
+    const int8_t* complexVectorPtr = (const int8_t*)complexVector;
+
+    /* Masks to gather real (even) and imaginary (odd) bytes from 8 complex pairs.
+     * Input: [I0,Q0, I1,Q1, I2,Q2, I3,Q3, I4,Q4, I5,Q5, I6,Q6, I7,Q7]
+     * iMoveMask -> [I0,I1,I2,I3,I4,I5,I6,I7, 0,0,0,0,0,0,0,0]
+     * qMoveMask -> [Q0,Q1,Q2,Q3,Q4,Q5,Q6,Q7, 0,0,0,0,0,0,0,0] */
+    const __m128i iMoveMask = _mm_set_epi8(
+        0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 14, 12, 10, 8, 6, 4, 2, 0);
+    const __m128i qMoveMask = _mm_set_epi8(
+        0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 15, 13, 11, 9, 7, 5, 3, 1);
+
+    for (; number < eighthPoints; number++) {
+        __m128i complexVal = _mm_loadu_si128((const __m128i*)complexVectorPtr);
+        complexVectorPtr += 16;
+
+        __m128i iComplexVal = _mm_shuffle_epi8(complexVal, iMoveMask);
+        __m128i qComplexVal = _mm_shuffle_epi8(complexVal, qMoveMask);
+
+        /* Sign-extend low 4 I bytes to int32, convert to float */
+        __m128i iInt0 = _mm_cvtepi8_epi32(iComplexVal);
+        __m128 iFloat0 = _mm_mul_ps(_mm_cvtepi32_ps(iInt0), _mm256_castps256_ps128(invScalar));
+        iComplexVal = _mm_srli_si128(iComplexVal, 4);
+        __m128i iInt1 = _mm_cvtepi8_epi32(iComplexVal);
+        __m128 iFloat1 = _mm_mul_ps(_mm_cvtepi32_ps(iInt1), _mm256_castps256_ps128(invScalar));
+        _mm256_storeu_ps(iBufferPtr, _mm256_set_m128(iFloat1, iFloat0));
+        iBufferPtr += 8;
+
+        /* Sign-extend low 4 Q bytes to int32, convert to float */
+        __m128i qInt0 = _mm_cvtepi8_epi32(qComplexVal);
+        __m128 qFloat0 = _mm_mul_ps(_mm_cvtepi32_ps(qInt0), _mm256_castps256_ps128(invScalar));
+        qComplexVal = _mm_srli_si128(qComplexVal, 4);
+        __m128i qInt1 = _mm_cvtepi8_epi32(qComplexVal);
+        __m128 qFloat1 = _mm_mul_ps(_mm_cvtepi32_ps(qInt1), _mm256_castps256_ps128(invScalar));
+        _mm256_storeu_ps(qBufferPtr, _mm256_set_m128(qFloat1, qFloat0));
+        qBufferPtr += 8;
+    }
+
+    number = eighthPoints * 8;
+    volk_8ic_s32f_deinterleave_32f_x2_generic(
+        iBufferPtr, qBufferPtr, (const lv_8sc_t*)complexVectorPtr, scalar, num_points - number);
+}
+#endif /* LV_HAVE_AVX */
 
 
 #ifdef LV_HAVE_AVX2
@@ -584,6 +702,63 @@ static inline void volk_8ic_s32f_deinterleave_32f_x2_neon(float* iBuffer,
 }
 #endif /* LV_HAVE_NEON */
 
+#ifdef LV_HAVE_NEONV8
+#include <arm_neon.h>
+
+static inline void
+volk_8ic_s32f_deinterleave_32f_x2_neonv8(float* iBuffer,
+                                           float* qBuffer,
+                                           const lv_8sc_t* complexVector,
+                                           const float scalar,
+                                           unsigned int num_points)
+{
+    unsigned int number = 0;
+    const unsigned int eighth_points = num_points / 8;
+
+    const int8_t* complexVectorPtr = (const int8_t*)complexVector;
+    float* iBufferPtr = iBuffer;
+    float* qBufferPtr = qBuffer;
+    const float invScalar = 1.0f / scalar;
+    float32x4_t vInvScalar = vdupq_n_f32(invScalar);
+
+    for (; number < eighth_points; number++) {
+        int8x8x2_t input = vld2_s8(complexVectorPtr);
+        complexVectorPtr += 16;
+
+        /* Widen I: int8 -> int16 -> int32 -> float */
+        int16x8_t iWide = vmovl_s8(input.val[0]);
+        int32x4_t iLo = vmovl_s16(vget_low_s16(iWide));
+        int32x4_t iHi = vmovl_s16(vget_high_s16(iWide));
+        float32x4_t iFltLo = vmulq_f32(vcvtq_f32_s32(iLo), vInvScalar);
+        float32x4_t iFltHi = vmulq_f32(vcvtq_f32_s32(iHi), vInvScalar);
+
+        vst1q_f32(iBufferPtr, iFltLo);
+        iBufferPtr += 4;
+        vst1q_f32(iBufferPtr, iFltHi);
+        iBufferPtr += 4;
+
+        /* Widen Q: int8 -> int16 -> int32 -> float */
+        int16x8_t qWide = vmovl_s8(input.val[1]);
+        int32x4_t qLo = vmovl_s16(vget_low_s16(qWide));
+        int32x4_t qHi = vmovl_s16(vget_high_s16(qWide));
+        float32x4_t qFltLo = vmulq_f32(vcvtq_f32_s32(qLo), vInvScalar);
+        float32x4_t qFltHi = vmulq_f32(vcvtq_f32_s32(qHi), vInvScalar);
+
+        vst1q_f32(qBufferPtr, qFltLo);
+        qBufferPtr += 4;
+        vst1q_f32(qBufferPtr, qFltHi);
+        qBufferPtr += 4;
+    }
+
+    number = eighth_points * 8;
+    complexVectorPtr = (const int8_t*)&complexVector[number];
+    for (; number < num_points; number++) {
+        *iBufferPtr++ = (float)(*complexVectorPtr++) * invScalar;
+        *qBufferPtr++ = (float)(*complexVectorPtr++) * invScalar;
+    }
+}
+#endif /* LV_HAVE_NEONV8 */
+
 #ifdef LV_HAVE_RVV
 #include <riscv_vector.h>
 
@@ -607,6 +782,31 @@ static inline void volk_8ic_s32f_deinterleave_32f_x2_rvv(float* iBuffer,
     }
 }
 #endif /*LV_HAVE_RVV*/
+
+#ifdef LV_HAVE_RVVSEG
+#include <riscv_vector.h>
+
+static inline void volk_8ic_s32f_deinterleave_32f_x2_rvvseg(float* iBuffer,
+                                                              float* qBuffer,
+                                                              const lv_8sc_t* complexVector,
+                                                              const float scalar,
+                                                              unsigned int num_points)
+{
+    const float invScalar = 1.0f / scalar;
+    size_t n = num_points;
+    for (size_t vl; n > 0; n -= vl, complexVector += vl, iBuffer += vl, qBuffer += vl) {
+        vl = __riscv_vsetvl_e8m2(n);
+        vint8m2x2_t vc =
+            __riscv_vlseg2e8_v_i8m2x2((const int8_t*)complexVector, vl);
+        vfloat32m8_t vrf =
+            __riscv_vfwcvt_f(__riscv_vsext_vf2(__riscv_vget_i8m2(vc, 0), vl), vl);
+        vfloat32m8_t vif =
+            __riscv_vfwcvt_f(__riscv_vsext_vf2(__riscv_vget_i8m2(vc, 1), vl), vl);
+        __riscv_vse32(iBuffer, __riscv_vfmul(vrf, invScalar, vl), vl);
+        __riscv_vse32(qBuffer, __riscv_vfmul(vif, invScalar, vl), vl);
+    }
+}
+#endif /* LV_HAVE_RVVSEG */
 
 #endif /* INCLUDED_volk_8ic_s32f_deinterleave_32f_x2_u_H */
 
@@ -681,6 +881,65 @@ static inline void volk_8ic_s32f_deinterleave_32f_x2_a_sse(float* iBuffer,
 #endif /* LV_HAVE_SSE */
 
 
+#ifdef LV_HAVE_SSE2
+#include <emmintrin.h>
+
+static inline void volk_8ic_s32f_deinterleave_32f_x2_a_sse2(
+    float* iBuffer,
+    float* qBuffer,
+    const lv_8sc_t* complexVector,
+    const float scalar,
+    unsigned int num_points)
+{
+    float* iBufferPtr = iBuffer;
+    float* qBufferPtr = qBuffer;
+    unsigned int number = 0;
+    const unsigned int quarterPoints = num_points / 4;
+
+    const float iScalar = 1.0f / scalar;
+    __m128 invScalar = _mm_set_ps1(iScalar);
+    const int8_t* complexVectorPtr = (const int8_t*)complexVector;
+    __m128i zero = _mm_setzero_si128();
+
+    for (; number < quarterPoints; number++) {
+        /* Load 4 complex int8 samples (8 bytes) */
+        __m128i raw = _mm_loadl_epi64((const __m128i*)complexVectorPtr);
+        complexVectorPtr += 8;
+
+        /* Sign-extend int8 -> int16 */
+        __m128i sign8 = _mm_cmpgt_epi8(zero, raw);
+        __m128i wide16 = _mm_unpacklo_epi8(raw, sign8);
+
+        /* Sign-extend int16 -> int32 */
+        __m128i sign16 = _mm_srai_epi16(wide16, 15);
+        __m128i lo32 = _mm_unpacklo_epi16(wide16, sign16); /* [I0,Q0,I1,Q1] as int32 */
+        __m128i hi32 = _mm_unpackhi_epi16(wide16, sign16); /* [I2,Q2,I3,Q3] as int32 */
+
+        /* Convert to float and scale */
+        __m128 flo = _mm_mul_ps(_mm_cvtepi32_ps(lo32), invScalar);
+        __m128 fhi = _mm_mul_ps(_mm_cvtepi32_ps(hi32), invScalar);
+
+        /* Deinterleave I and Q */
+        __m128 iVal = _mm_shuffle_ps(flo, fhi, _MM_SHUFFLE(2, 0, 2, 0));
+        __m128 qVal = _mm_shuffle_ps(flo, fhi, _MM_SHUFFLE(3, 1, 3, 1));
+
+        _mm_store_ps(iBufferPtr, iVal);
+        _mm_store_ps(qBufferPtr, qVal);
+
+        iBufferPtr += 4;
+        qBufferPtr += 4;
+    }
+
+    number = quarterPoints * 4;
+    complexVectorPtr = (const int8_t*)&complexVector[number];
+    for (; number < num_points; number++) {
+        *iBufferPtr++ = (float)(*complexVectorPtr++) * iScalar;
+        *qBufferPtr++ = (float)(*complexVectorPtr++) * iScalar;
+    }
+}
+#endif /* LV_HAVE_SSE2 */
+
+
 #ifdef LV_HAVE_SSE4_1
 #include <smmintrin.h>
 
@@ -751,6 +1010,70 @@ volk_8ic_s32f_deinterleave_32f_x2_a_sse4_1(float* iBuffer,
     }
 }
 #endif /* LV_HAVE_SSE4_1 */
+
+
+#ifdef LV_HAVE_AVX
+#include <immintrin.h>
+
+static inline void
+volk_8ic_s32f_deinterleave_32f_x2_a_avx(float* iBuffer,
+                                         float* qBuffer,
+                                         const lv_8sc_t* complexVector,
+                                         const float scalar,
+                                         unsigned int num_points)
+{
+    float* iBufferPtr = iBuffer;
+    float* qBufferPtr = qBuffer;
+
+    unsigned int number = 0;
+    const unsigned int eighthPoints = num_points / 8;
+
+    const float iScalar = 1.0f / scalar;
+    const __m256 invScalar = _mm256_set1_ps(iScalar);
+    const int8_t* complexVectorPtr = (const int8_t*)complexVector;
+
+    /* Masks to gather real (even) and imaginary (odd) bytes from 8 complex pairs.
+     * Input: [I0,Q0, I1,Q1, I2,Q2, I3,Q3, I4,Q4, I5,Q5, I6,Q6, I7,Q7]
+     * iMoveMask -> [I0,I1,I2,I3,I4,I5,I6,I7, 0,0,0,0,0,0,0,0]
+     * qMoveMask -> [Q0,Q1,Q2,Q3,Q4,Q5,Q6,Q7, 0,0,0,0,0,0,0,0] */
+    const __m128i iMoveMask = _mm_set_epi8(
+        0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 14, 12, 10, 8, 6, 4, 2, 0);
+    const __m128i qMoveMask = _mm_set_epi8(
+        0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 15, 13, 11, 9, 7, 5, 3, 1);
+
+    for (; number < eighthPoints; number++) {
+        __m128i complexVal = _mm_load_si128((const __m128i*)complexVectorPtr);
+        complexVectorPtr += 16;
+
+        __m128i iComplexVal = _mm_shuffle_epi8(complexVal, iMoveMask);
+        __m128i qComplexVal = _mm_shuffle_epi8(complexVal, qMoveMask);
+
+        /* Sign-extend low 4 I bytes to int32, convert to float */
+        __m128i iInt0 = _mm_cvtepi8_epi32(iComplexVal);
+        __m128 iFloat0 = _mm_mul_ps(_mm_cvtepi32_ps(iInt0), _mm256_castps256_ps128(invScalar));
+        iComplexVal = _mm_srli_si128(iComplexVal, 4);
+        __m128i iInt1 = _mm_cvtepi8_epi32(iComplexVal);
+        __m128 iFloat1 = _mm_mul_ps(_mm_cvtepi32_ps(iInt1), _mm256_castps256_ps128(invScalar));
+        _mm256_store_ps(iBufferPtr, _mm256_set_m128(iFloat1, iFloat0));
+        iBufferPtr += 8;
+
+        /* Sign-extend low 4 Q bytes to int32, convert to float */
+        __m128i qInt0 = _mm_cvtepi8_epi32(qComplexVal);
+        __m128 qFloat0 = _mm_mul_ps(_mm_cvtepi32_ps(qInt0), _mm256_castps256_ps128(invScalar));
+        qComplexVal = _mm_srli_si128(qComplexVal, 4);
+        __m128i qInt1 = _mm_cvtepi8_epi32(qComplexVal);
+        __m128 qFloat1 = _mm_mul_ps(_mm_cvtepi32_ps(qInt1), _mm256_castps256_ps128(invScalar));
+        _mm256_store_ps(qBufferPtr, _mm256_set_m128(qFloat1, qFloat0));
+        qBufferPtr += 8;
+    }
+
+    number = eighthPoints * 8;
+    for (; number < num_points; number++) {
+        *iBufferPtr++ = (float)(*complexVectorPtr++) * iScalar;
+        *qBufferPtr++ = (float)(*complexVectorPtr++) * iScalar;
+    }
+}
+#endif /* LV_HAVE_AVX */
 
 
 #ifdef LV_HAVE_AVX2
