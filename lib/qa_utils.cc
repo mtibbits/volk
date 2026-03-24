@@ -1336,6 +1336,7 @@ bool run_volk_tests(volk_func_desc_t desc,
 
     for (size_t i = 0; i < arch_list.size(); i++) {
         fail = false;
+        bool arch_fail = false;
         if (i != generic_offset) {
             for (size_t j = 0; j < outputsig.size(); j++) {
                 std::vector<unsigned int> fail_indices;
@@ -1477,6 +1478,7 @@ bool run_volk_tests(volk_func_desc_t desc,
                     arch_max_err[i] = max_err;
                 }
                 if (fail) {
+                    arch_fail = true;
                     volk_test_time_t* result = &results->back().results[arch_list[i]];
                     result->pass = false;
                     fail_global = true;
@@ -1491,7 +1493,7 @@ bool run_volk_tests(volk_func_desc_t desc,
                 }
             }
         }
-        arch_results.push_back(!fail);
+        arch_results.push_back(!arch_fail);
     }
 
     double best_time_a = std::numeric_limits<double>::max();
