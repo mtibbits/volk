@@ -47,7 +47,7 @@ list(
 # checks the value set in the cmake interface against the list of
 # known build types in AVAIL_BUILDTYPES. If the build type is found,
 # the function exits immediately. If nothing is found by the end of
-# checking all available build types, we exit with an error and list
+# checking all available build types, we issue a warning and list
 # the available build types.
 ########################################################################
 function(VOLK_CHECK_BUILD_TYPE settype)
@@ -58,10 +58,10 @@ function(VOLK_CHECK_BUILD_TYPE settype)
             return() # found it; exit cleanly
         endif(${_settype} STREQUAL ${_btype})
     endforeach(btype)
-    # Build type not found; error out
+    # Build type not found; warn but allow (distros may use custom build types)
     message(
-        FATAL_ERROR
-            "Build type '${settype}' not valid, must be one of: ${AVAIL_BUILDTYPES}")
+        WARNING
+            "Build type '${settype}' not recognized; no VOLK-defined flags will apply. Known types: ${AVAIL_BUILDTYPES}")
 endfunction(VOLK_CHECK_BUILD_TYPE)
 
 ########################################################################
