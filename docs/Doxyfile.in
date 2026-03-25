@@ -179,7 +179,10 @@ STRIP_FROM_PATH        = @CMAKE_BINARY_DIR@ @CMAKE_SOURCE_DIR@
 # specify the list of include paths that are normally passed to the compiler
 # using the -I flag.
 
-STRIP_FROM_INC_PATH    =
+STRIP_FROM_INC_PATH    = @CMAKE_SOURCE_DIR@/include \
+                         @CMAKE_BINARY_DIR@/include \
+                         @CMAKE_SOURCE_DIR@/lib \
+                         @CMAKE_SOURCE_DIR@/kernels
 
 # If the SHORT_NAMES tag is set to YES, doxygen will generate much shorter (but
 # less readable) file names. This can be useful is your file systems doesn't
