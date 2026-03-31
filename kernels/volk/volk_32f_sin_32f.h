@@ -13,7 +13,13 @@
  *
  * \b Overview
  *
- * Computes the sine of the input vector and stores the results in the output vector.
+ * Computes the sine of each element in the input vector and stores the results
+ * in the output vector: out[i] = sin(in[i]).
+ *
+ * The sine function is fundamental to many DSP operations including signal
+ * generation, modulation, and frequency synthesis. This kernel is commonly used
+ * to generate carrier waveforms for modulators, compute quadrature components
+ * in IQ processing, or evaluate trigonometric terms in spectral analysis.
  *
  * <b>Dispatcher Prototype</b>
  * \code
@@ -21,39 +27,33 @@
  * \endcode
  *
  * \b Inputs
- * \li aVector: The input vector of floats.
- * \li num_points: The number of data points.
+ * \li aVector: The input vector of phase values in radians (float).
+ * \li num_points: The number of samples to process.
  *
  * \b Outputs
- * \li bVector: The output vector of floats.
+ * \li bVector: The output vector of sine values (float).
  *
  * \b Example
- * Calculate sin(theta) for several common angles.
+ * Compute sine of a constant vector where every element is pi/6 (expected sin = 0.5).
  * \code
- *   int N = 10;
- *   unsigned int alignment = volk_get_alignment();
- *   float* in = (float*)volk_malloc(sizeof(float)*N, alignment);
- *   float* out = (float*)volk_malloc(sizeof(float)*N, alignment);
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
+ * float* in = (float*)volk_malloc(sizeof(float) * N, alignment);
+ * float* out = (float*)volk_malloc(sizeof(float) * N, alignment);
  *
- *   in[0] = 0.000;
- *   in[1] = 0.524;
- *   in[2] = 0.786;
- *   in[3] = 1.047;
- *   in[4] = 1.571;
- *   in[5] = 1.571;
- *   in[6] = 2.094;
- *   in[7] = 2.356;
- *   in[8] = 2.618;
- *   in[9] = 3.142;
+ * for (unsigned int i = 0; i < N; ++i) {
+ *     in[i] = 0.5235988f; // pi/6
+ * }
  *
- *   volk_32f_sin_32f(out, in, N);
+ * float expected = 0.5f; // sin(pi/6) = 0.5
  *
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       printf("sin(%1.3f) = %1.3f\n", in[ii], out[ii]);
- *   }
+ * volk_32f_sin_32f(out, in, N);
  *
- *   volk_free(in);
- *   volk_free(out);
+ * printf("Expected: %1.6f\n", expected);
+ * printf("Result:   %1.6f\n", out[0]);
+ *
+ * volk_free(in);
+ * volk_free(out);
  * \endcode
  */
 #include <volk/volk_mathematical_functions.h>

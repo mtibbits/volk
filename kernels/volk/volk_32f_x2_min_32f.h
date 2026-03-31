@@ -12,10 +12,15 @@
  *
  * \b Overview
  *
- * Selects minimum value from each entry between bVector and aVector
- * and store their results in the cVector
+ * Selects the minimum value from each corresponding pair of elements in two
+ * input vectors and stores the results in the output vector.
  *
  * c[i] = min(a[i], b[i])
+ *
+ * Element-wise minimum is commonly used in signal processing for clipping or
+ * bounding sample values, implementing envelope detectors, or applying
+ * element-wise constraints such as per-bin noise floor thresholds in spectral
+ * analysis.
  *
  * <b>Dispatcher Prototype</b>
  * \code
@@ -23,35 +28,35 @@
  * unsigned int num_points) \endcode
  *
  * \b Inputs
- * \li aVector: First input vector.
- * \li bVector: Second input vector.
- * \li num_points: The number of values in both input vectors.
+ * \li aVector: First input vector (float).
+ * \li bVector: Second input vector (float).
+ * \li num_points: The number of samples in each input vector.
  *
  * \b Outputs
- * \li cVector: The output vector.
+ * \li cVector: The output vector containing element-wise minima (float).
  *
  * \b Example
+ * Compute element-wise minimum of two short vectors and verify the result.
  * \code
- *   int N = 10;
- *   unsigned int alignment = volk_get_alignment();
- *   float* increasing = (float*)volk_malloc(sizeof(float)*N, alignment);
- *   float* decreasing = (float*)volk_malloc(sizeof(float)*N, alignment);
- *   float* out = (float*)volk_malloc(sizeof(float)*N, alignment);
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
+ * float* aVector = (float*)volk_malloc(sizeof(float) * N, alignment);
+ * float* bVector = (float*)volk_malloc(sizeof(float) * N, alignment);
+ * float* out = (float*)volk_malloc(sizeof(float) * N, alignment);
  *
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       increasing[ii] = (float)ii;
- *       decreasing[ii] = 10.f - (float)ii;
- *   }
+ * aVector[0] = 1.0f; aVector[1] = 5.0f; aVector[2] = 3.0f; aVector[3] = 7.0f;
+ * bVector[0] = 4.0f; bVector[1] = 2.0f; bVector[2] = 6.0f; bVector[3] = 0.0f;
  *
- *   volk_32f_x2_min_32f(out, increasing, decreasing, N);
+ * // Expected: min(1,4)=1, min(5,2)=2, min(3,6)=3, min(7,0)=0
  *
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       printf("out[%u] = %1.2f\n", ii, out[ii]);
- *   }
+ * volk_32f_x2_min_32f(out, aVector, bVector, N);
  *
- *   volk_free(increasing);
- *   volk_free(decreasing);
- *   volk_free(out);
+ * printf("Expected: %1.1f %1.1f %1.1f %1.1f\n", 1.0f, 2.0f, 3.0f, 0.0f);
+ * printf("Result:   %1.1f %1.1f %1.1f %1.1f\n", out[0], out[1], out[2], out[3]);
+ *
+ * volk_free(aVector);
+ * volk_free(bVector);
+ * volk_free(out);
  * \endcode
  */
 

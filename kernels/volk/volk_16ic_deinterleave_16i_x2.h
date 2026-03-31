@@ -12,63 +12,52 @@
  *
  * \b Overview
  *
- * Deinterleaves a complex 16-bit integer vector into separate I (real) and Q
- * (imaginary) output vectors.
+ * Deinterleaves a complex 16-bit integer vector into separate in-phase (I) and
+ * quadrature (Q) sample streams. Each interleaved lv_16sc_t element (real, imag)
+ * is split so that iBuffer receives the real components and qBuffer receives the
+ * imaginary components.
+ *
+ * Deinterleaving is a fundamental operation in digital radio receivers where an
+ * ADC or front-end delivers interleaved I/Q sample pairs. Separating the
+ * components enables independent processing such as matched filtering, carrier
+ * recovery, or IQ imbalance correction on each branch.
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_16ic_deinterleave_16i_x2(int16_t* iBuffer, int16_t* qBuffer, const
- * lv_16sc_t* complexVector, unsigned int num_points) \endcode
+ * void volk_16ic_deinterleave_16i_x2(int16_t* iBuffer, int16_t* qBuffer, const lv_16sc_t* complexVector, unsigned int num_points)
+ * \endcode
  *
  * \b Inputs
- * \li complexVector: The complex input vector (lv_16sc_t).
- * \li num_points: The number of complex data values to be deinterleaved.
+ * \li complexVector: The interleaved complex input samples (lv_16sc_t).
+ * \li num_points: The number of complex samples to deinterleave.
  *
  * \b Outputs
- * \li iBuffer: The in-phase (real) output vector (int16_t).
- * \li qBuffer: The quadrature (imaginary) output vector (int16_t).
+ * \li iBuffer: The in-phase (real) output samples (int16_t).
+ * \li qBuffer: The quadrature (imaginary) output samples (int16_t).
  *
  * \b Example
- * Deinterleave a complex signal into its I and Q components.
+ * Deinterleave 4 complex samples and verify the first I and Q values.
  * \code
- *   #include <volk/volk.h>
- *   #include <stdio.h>
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
  *
- *   int main() {
- *     unsigned int N = 8;
- *     unsigned int alignment = volk_get_alignment();
+ * lv_16sc_t* complexVector = (lv_16sc_t*)volk_malloc(sizeof(lv_16sc_t) * N, alignment);
+ * int16_t* iBuffer = (int16_t*)volk_malloc(sizeof(int16_t) * N, alignment);
+ * int16_t* qBuffer = (int16_t*)volk_malloc(sizeof(int16_t) * N, alignment);
  *
- *     // Allocate input complex vector and output I/Q buffers
- *     lv_16sc_t* complexVector =
- *         (lv_16sc_t*)volk_malloc(N * sizeof(lv_16sc_t), alignment);
- *     int16_t* iBuffer = (int16_t*)volk_malloc(N * sizeof(int16_t), alignment);
- *     int16_t* qBuffer = (int16_t*)volk_malloc(N * sizeof(int16_t), alignment);
+ * for (unsigned int i = 0; i < N; ++i) {
+ *   complexVector[i] = (lv_16sc_t){ (int16_t)(i + 1), (int16_t)(-(i + 1)) };
+ * }
+ * // complexVector = [(1,-1), (2,-2), (3,-3), (4,-4)]
  *
- *     // Fill with complex samples representing a signal
- *     complexVector[0] = lv_cmake((int16_t)100, (int16_t)200);
- *     complexVector[1] = lv_cmake((int16_t)-300, (int16_t)400);
- *     complexVector[2] = lv_cmake((int16_t)500, (int16_t)-600);
- *     complexVector[3] = lv_cmake((int16_t)-700, (int16_t)-800);
- *     complexVector[4] = lv_cmake((int16_t)1000, (int16_t)2000);
- *     complexVector[5] = lv_cmake((int16_t)-3000, (int16_t)4000);
- *     complexVector[6] = lv_cmake((int16_t)5000, (int16_t)-6000);
- *     complexVector[7] = lv_cmake((int16_t)32767, (int16_t)-32768);
+ * volk_16ic_deinterleave_16i_x2(iBuffer, qBuffer, complexVector, N);
  *
- *     // Deinterleave into separate I and Q vectors
- *     volk_16ic_deinterleave_16i_x2(iBuffer, qBuffer, complexVector, N);
+ * printf("Expected I[0]: 1, Q[0]: -1\n");
+ * printf("Result   I[0]: %d, Q[0]: %d\n", iBuffer[0], qBuffer[0]);
  *
- *     // Print results
- *     for (unsigned int i = 0; i < N; i++) {
- *       printf("complex(%d, %d) -> I: %d  Q: %d\n",
- *              lv_creal(complexVector[i]), lv_cimag(complexVector[i]),
- *              iBuffer[i], qBuffer[i]);
- *     }
- *
- *     volk_free(complexVector);
- *     volk_free(iBuffer);
- *     volk_free(qBuffer);
- *     return 0;
- *   }
+ * volk_free(complexVector);
+ * volk_free(iBuffer);
+ * volk_free(qBuffer);
  * \endcode
  */
 

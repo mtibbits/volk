@@ -12,45 +12,50 @@
  *
  * \b Overview
  *
- * Slices input floats and returns 1 when the input >= 0 and 0
- * when < 0. Results are returned as 32-bit ints.
+ * Performs binary slicing on a vector of float samples, outputting 1 when the
+ * input sample is >= 0 and 0 when < 0. Results are returned as 32-bit ints.
+ *
+ * Binary slicing (hard decision) is a fundamental operation in digital
+ * demodulation and decoding. It converts soft-decision values (e.g. matched
+ * filter output or log-likelihood ratios) into hard-decision bits, as needed
+ * by downstream symbol detectors, Viterbi decoders, or bit-error-rate
+ * measurement blocks.
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_32f_binary_slicer_32i(int* cVector, const float* aVector, unsigned int
- * num_points) \endcode
+ * void volk_32f_binary_slicer_32i(int* cVector, const float* aVector, unsigned int num_points)
+ * \endcode
  *
  * \b Inputs
- * \li aVector: The input vector of floats.
- * \li num_points: The number of data points.
+ * \li aVector: Input vector of soft-decision float samples.
+ * \li num_points: The number of samples to slice.
  *
  * \b Outputs
- * \li cVector: The output vector of 32-bit ints.
+ * \li cVector: Output vector of hard-decision bits (int, 1 or 0).
  *
  * \b Example
- * Generate ints of a 7-bit barker code from floats.
+ * Slice four soft-decision samples and verify the binary output.
  * \code
- *   int N = 7;
- *   unsigned int alignment = volk_get_alignment();
- *   float* in = (float*)volk_malloc(sizeof(float)*N, alignment);
- *   int32_t* out = (int32_t*)volk_malloc(sizeof(int32_t)*N, alignment);
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
+ * float* in = (float*)volk_malloc(sizeof(float) * N, alignment);
+ * int* out = (int*)volk_malloc(sizeof(int) * N, alignment);
  *
- *   in[0] = 0.9f;
- *   in[1] = 1.1f;
- *   in[2] = 0.4f;
- *   in[3] = -0.7f;
- *   in[4] = -1.2f;
- *   in[5] = 0.2f;
- *   in[6] = -0.8f;
+ * in[0] =  1.5f;
+ * in[1] = -0.3f;
+ * in[2] =  0.0f;
+ * in[3] = -2.0f;
  *
- *   volk_32f_binary_slicer_32i(out, in, N);
+ * // Expected: {1, 0, 1, 0} (>= 0 yields 1, < 0 yields 0)
  *
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       printf("out(%i) = %i\n", ii, out[ii]);
- *   }
+ * volk_32f_binary_slicer_32i(out, in, N);
  *
- *   volk_free(in);
- *   volk_free(out);
+ * for (unsigned int i = 0; i < N; ++i) {
+ *     printf("Expected: %d  Result: %d\n", (in[i] >= 0) ? 1 : 0, out[i]);
+ * }
+ *
+ * volk_free(in);
+ * volk_free(out);
  * \endcode
  */
 

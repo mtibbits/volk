@@ -12,7 +12,14 @@
  *
  * \b Overview
  *
- * Byteswaps (in-place) a vector of uint64_t's.
+ * Reverses the byte order of each 64-bit unsigned integer in-place, converting
+ * between big-endian and little-endian representations.
+ *
+ * Byte-order conversion is essential in signal processing pipelines that exchange
+ * data between systems with different endianness, such as receiving IQ samples
+ * over a network interface or reading capture files recorded on a different
+ * platform. This kernel performs the swap efficiently across an entire buffer of
+ * 64-bit values.
  *
  * <b>Dispatcher Prototype</b>
  * \code
@@ -20,43 +27,39 @@
  * \endcode
  *
  * \b Inputs
- * \li intsToSwap: The vector of data to byte swap
- * \li num_points: The number of data points
+ * \li intsToSwap: The vector of uint64_t values to byte swap.
+ * \li num_points: The number of uint64_t elements.
  *
  * \b Outputs
- * \li intsToSwap: returns as an in-place calculation.
+ * \li intsToSwap: The byte-swapped values, written in-place.
  *
  * \b Example
+ * Byte-swap a short vector and verify the result by hand.
  * \code
- *   unsigned int N = 10;
- *   unsigned int alignment = volk_get_alignment();
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
  *
- *   uint64_t* bitstring = (uint64_t*)volk_malloc(N * sizeof(uint64_t), alignment);
+ * uint64_t* data = (uint64_t*)volk_malloc(sizeof(uint64_t) * N, alignment);
  *
- *   bitstring[0] = 0x0;
- *   bitstring[1] = 0x1;
- *   bitstring[2] = 0xf;
- *   bitstring[3] = 0xffffffffffffffff;
- *   bitstring[4] = 0x5a5a5a5a5a5a5a5a;
- *   bitstring[5] = 0xa5a5a5a5a5a5a5a5;
- *   bitstring[6] = 0x2a2a2a2a2a2a2a2a;
- *   bitstring[7] = 0xffffffff;
- *   bitstring[8] = 0x32;
- *   bitstring[9] = 0x64;
+ * data[0] = 0x0102030405060708;
+ * data[1] = 0x00000000000000FF;
+ * data[2] = 0xFF00000000000000;
+ * data[3] = 0x0000000000000000;
  *
- *   printf("byteswap vector =\n");
- *   for (unsigned int ii = 0; ii < N; ++ii) {
- *       printf("    %.16lx\n", bitstring[ii]);
- *   }
+ * // Expected after byte-swap:
+ * // data[0]: 0x0807060504030201
+ * // data[1]: 0xFF00000000000000
+ * // data[2]: 0x00000000000000FF
+ * // data[3]: 0x0000000000000000
  *
- *   volk_64u_byteswap(bitstring, N);
+ * volk_64u_byteswap(data, N);
  *
- *   printf("byteswapped vector =\n");
- *   for (unsigned int ii = 0; ii < N; ++ii) {
- *       printf("    %.16lx\n", bitstring[ii]);
- *   }
+ * printf("Expected: 0x0807060504030201  Result: 0x%016lx\n", data[0]);
+ * printf("Expected: 0xFF00000000000000  Result: 0x%016lx\n", data[1]);
+ * printf("Expected: 0x00000000000000FF  Result: 0x%016lx\n", data[2]);
+ * printf("Expected: 0x0000000000000000  Result: 0x%016lx\n", data[3]);
  *
- *   volk_free(bitstring);
+ * volk_free(data);
  * \endcode
  */
 

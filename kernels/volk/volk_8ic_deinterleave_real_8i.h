@@ -12,54 +12,50 @@
  *
  * \b Overview
  *
- * Deinterleaves the complex 8-bit char vector into just the real (I)
- * component as 8-bit chars. The imaginary (Q) values are discarded.
+ * Deinterleaves a complex 8-bit integer vector into just the real (I)
+ * component. For each complex sample (I + jQ), the kernel extracts the
+ * in-phase value and discards the quadrature value.
+ *
+ * This operation is common in receivers where only the real part of a
+ * baseband signal is needed, such as after demodulation of real-valued
+ * modulation schemes (e.g. BPSK, ASK) or when separating I/Q streams
+ * for independent processing in digital downconverters.
  *
  * <b>Dispatcher Prototype</b>
  * \code
  * void volk_8ic_deinterleave_real_8i(int8_t* iBuffer, const lv_8sc_t* complexVector,
- * unsigned int num_points) \endcode
+ * unsigned int num_points)
+ * \endcode
  *
  * \b Inputs
- * \li complexVector: The complex input vector of interleaved 8-bit I/Q pairs (lv_8sc_t).
- * \li num_points: The number of complex data values to be deinterleaved.
+ * \li complexVector: The complex input vector (lv_8sc_t).
+ * \li num_points: The number of complex samples to be deinterleaved.
  *
  * \b Outputs
- * \li iBuffer: The real (I) output vector of 8-bit chars (int8_t).
+ * \li iBuffer: The real (I) component output vector (int8_t).
  *
  * \b Example
- * Extract the real component from complex 8-bit samples.
+ * Generate a small complex vector and extract just the real (I) components.
  * \code
- * #include <volk/volk.h>
- * #include <stdio.h>
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
  *
- * int main() {
- *     unsigned int N = 4;
- *     unsigned int alignment = volk_get_alignment();
+ * lv_8sc_t* complexVector = (lv_8sc_t*)volk_malloc(sizeof(lv_8sc_t) * N, alignment);
+ * int8_t* iBuffer = (int8_t*)volk_malloc(sizeof(int8_t) * N, alignment);
  *
- *     lv_8sc_t* complexVector =
- *         (lv_8sc_t*)volk_malloc(sizeof(lv_8sc_t) * N, alignment);
- *     int8_t* iBuffer = (int8_t*)volk_malloc(sizeof(int8_t) * N, alignment);
- *
- *     // Simulate complex 8-bit samples: (I, Q) pairs
- *     complexVector[0] = lv_cmake((int8_t)127, (int8_t)-128);
- *     complexVector[1] = lv_cmake((int8_t)50, (int8_t)-50);
- *     complexVector[2] = lv_cmake((int8_t)0, (int8_t)100);
- *     complexVector[3] = lv_cmake((int8_t)-30, (int8_t)30);
- *
- *     // Extract real (I) component, discarding Q
- *     volk_8ic_deinterleave_real_8i(iBuffer, complexVector, N);
- *
- *     for (unsigned int i = 0; i < N; i++) {
- *         printf("complex[%u] = (%4d, %4d)  ->  I = %4d\n",
- *                i, lv_creal(complexVector[i]), lv_cimag(complexVector[i]),
- *                iBuffer[i]);
- *     }
- *
- *     volk_free(complexVector);
- *     volk_free(iBuffer);
- *     return 0;
+ * // Initialize: (1,2), (3,4), (5,6), (7,8)
+ * for (unsigned int i = 0; i < N; ++i) {
+ *   complexVector[i] = lv_cmake((int8_t)(2 * i + 1), (int8_t)(2 * i + 2));
  * }
+ *
+ * volk_8ic_deinterleave_real_8i(iBuffer, complexVector, N);
+ *
+ * // Expected: iBuffer = {1, 3, 5, 7}
+ * printf("Expected: 1, 3, 5, 7\n");
+ * printf("Result:   %d, %d, %d, %d\n", iBuffer[0], iBuffer[1], iBuffer[2], iBuffer[3]);
+ *
+ * volk_free(complexVector);
+ * volk_free(iBuffer);
  * \endcode
  */
 

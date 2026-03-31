@@ -12,54 +12,53 @@
  *
  * \b Deprecation
  *
- * This kernel is deprecated. No replacement has been identified.
+ * This kernel is deprecated.
  *
  * \b Overview
  *
- * Computes the max* (max-star) operation over a vector of 16-bit signed integers,
- * returning the maximum value. In log-MAP decoding the max* operation selects the
- * dominant path metric; this implementation performs the max selection without the
- * log-domain correction term.
+ * Computes the maximum value in a vector of 16-bit signed integers using the
+ * max* (max-star) operation and stores the result in the output. The kernel
+ * iterates through the input samples, keeping a running maximum via
+ * element-wise comparison.
+ *
+ * The max* operation appears in log-domain decoding algorithms such as
+ * log-MAP and SOVA used in turbo and convolutional decoders, where branch
+ * metrics represented as fixed-point values must be reduced to a single
+ * maximum.
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_16i_max_star_16i(short* target, const short* src0, unsigned int num_points);
+ * void volk_16i_max_star_16i(short* target, short* src0, unsigned int num_points);
  * \endcode
  *
  * \b Inputs
- * \li src0: The input vector of 16-bit signed integers (short).
+ * \li src0: The input vector of samples (short).
  * \li num_points: The number of data points in the input vector.
  *
  * \b Outputs
- * \li target: The maximum value found in the input vector (single short value).
+ * \li target: The maximum value found in the input vector (short).
  *
  * \b Example
+ * Find the maximum value in a small vector of known values.
  * \code
- *   #include <volk/volk.h>
- *   #include <stdio.h>
+ * unsigned int N = 6;
+ * unsigned int alignment = volk_get_alignment();
  *
- *   int main() {
- *     unsigned int N = 10;
- *     unsigned int alignment = volk_get_alignment();
+ * short* src0 = (short*)volk_malloc(sizeof(short) * N, alignment);
+ * short* target = (short*)volk_malloc(sizeof(short), alignment);
  *
- *     short* src0 = (short*)volk_malloc(sizeof(short) * N, alignment);
- *     short* target = (short*)volk_malloc(sizeof(short), alignment);
+ * src0[0] = 3; src0[1] = -2; src0[2] = 7;
+ * src0[3] = 1; src0[4] = 7; src0[5] = -5;
  *
- *     // Initialize with sample path metrics
- *     for (unsigned int i = 0; i < N; ++i) {
- *       src0[i] = (short)(100 - (int)(i * 20));
- *     }
- *     // src0 = {100, 80, 60, 40, 20, 0, -20, -40, -60, -80}
+ * short expected = 7;
  *
- *     volk_16i_max_star_16i(target, src0, N);
+ * volk_16i_max_star_16i(target, src0, N);
  *
- *     printf("max* = %d\n", target[0]);
- *     // Expected output: max* = 100
+ * printf("Expected: %d\n", expected);
+ * printf("Result:   %d\n", target[0]);
  *
- *     volk_free(src0);
- *     volk_free(target);
- *     return 0;
- *   }
+ * volk_free(src0);
+ * volk_free(target);
  * \endcode
  */
 

@@ -12,47 +12,56 @@
  *
  * \b Overview
  *
- * Computes sine and cosine of the input vector simultaneously.
- * More efficient than calling sin and cos separately since
- * argument reduction is shared.
+ * Computes the sine and cosine of each sample in the input vector simultaneously:
+ * sinVector[i] = sin(inVector[i]), cosVector[i] = cos(inVector[i]).
+ * This is more efficient than computing sin and cos separately since argument
+ * reduction is shared between the two evaluations.
+ *
+ * Simultaneous sincos computation is fundamental to numerically controlled
+ * oscillators (NCOs), carrier generation, and quadrature demodulation, where
+ * both the in-phase (cosine) and quadrature (sine) components are needed for
+ * every sample. It is also used in signal generation and frequency translation.
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_32f_sincos_32f_x2(float* sinVector, float* cosVector, const float* inVector,
- * unsigned int num_points)
+ * void volk_32f_sincos_32f_x2(float* sinVector, float* cosVector,
+ * const float* inVector, unsigned int num_points)
  * \endcode
  *
  * \b Inputs
- * \li inVector: The input vector of angles in radians.
- * \li num_points: The number of data points.
+ * \li inVector: The input vector of phase angles in radians (float).
+ * \li num_points: The number of samples to process.
  *
  * \b Outputs
- * \li sinVector: The output vector of sine values.
- * \li cosVector: The output vector of cosine values.
+ * \li sinVector: The output vector of sine values (float).
+ * \li cosVector: The output vector of cosine values (float).
  *
  * \b Example
- * Calculate sin and cos for common angles.
+ * Compute sine and cosine for well-known angles (0, pi/6, pi/3, pi/2).
  * \code
- *   int N = 4;
- *   unsigned int alignment = volk_get_alignment();
- *   float* in = (float*)volk_malloc(sizeof(float)*N, alignment);
- *   float* sin_out = (float*)volk_malloc(sizeof(float)*N, alignment);
- *   float* cos_out = (float*)volk_malloc(sizeof(float)*N, alignment);
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
+ * float* in = (float*)volk_malloc(sizeof(float) * N, alignment);
+ * float* sin_out = (float*)volk_malloc(sizeof(float) * N, alignment);
+ * float* cos_out = (float*)volk_malloc(sizeof(float) * N, alignment);
  *
- *   in[0] = 0.000;
- *   in[1] = 0.524;    // ~pi/6
- *   in[2] = 1.047;    // ~pi/3
- *   in[3] = 1.571;    // ~pi/2
+ * in[0] = 0.000f;
+ * in[1] = 0.524f;  // ~pi/6
+ * in[2] = 1.047f;  // ~pi/3
+ * in[3] = 1.571f;  // ~pi/2
  *
- *   volk_32f_sincos_32f_x2(sin_out, cos_out, in, N);
+ * // Expected: sin = {0.0, 0.5, 0.866, 1.0}, cos = {1.0, 0.866, 0.5, 0.0}
  *
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       printf("sincos(%1.3f) = (%1.3f, %1.3f)\n", in[ii], sin_out[ii], cos_out[ii]);
- *   }
+ * volk_32f_sincos_32f_x2(sin_out, cos_out, in, N);
  *
- *   volk_free(in);
- *   volk_free(sin_out);
- *   volk_free(cos_out);
+ * printf("Expected sin(0):    %1.3f, Result: %1.3f\n", 0.0f, sin_out[0]);
+ * printf("Expected cos(0):    %1.3f, Result: %1.3f\n", 1.0f, cos_out[0]);
+ * printf("Expected sin(pi/2): %1.3f, Result: %1.3f\n", 1.0f, sin_out[3]);
+ * printf("Expected cos(pi/2): %1.3f, Result: %1.3f\n", 0.0f, cos_out[3]);
+ *
+ * volk_free(in);
+ * volk_free(sin_out);
+ * volk_free(cos_out);
  * \endcode
  */
 #include <volk/volk_mathematical_functions.h>

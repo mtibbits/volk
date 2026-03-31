@@ -12,38 +12,48 @@
  *
  * \b Overview
  *
- * Accumulates the values in the input buffer.
+ * Accumulates (sums) all values in the input buffer and stores the scalar
+ * result: result[0] = sum(inputBuffer[0..num_points-1]).
+ *
+ * This accumulator is a fundamental building block in many DSP operations,
+ * including computing signal energy or power estimates, evaluating DC offset,
+ * and forming the reduction step in block-based statistics such as mean or
+ * variance calculations.
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_32f_accumulator_s32f(float* result, const float* inputBuffer, unsigned int
- * num_points) \endcode
+ * void volk_32f_accumulator_s32f(float* result, const float* inputBuffer, unsigned int num_points)
+ * \endcode
  *
  * \b Inputs
- * \li inputBuffer The buffer of data to be accumulated
- * \li num_points: The number of data points.
+ * \li inputBuffer: The buffer of samples to be accumulated (float).
+ * \li num_points: The number of samples in the input buffer.
  *
  * \b Outputs
- * \li result The accumulated result.
+ * \li result: The accumulated sum (float scalar).
  *
  * \b Example
- * Calculate the sum of numbers  0 through 99
+ * Sum five constant values and verify the result.
  * \code
- *   int N = 100;
- *   unsigned int alignment = volk_get_alignment();
- *   float* increasing = (float*)volk_malloc(sizeof(float)*N, alignment);
- *   float* out = (float*)volk_malloc(sizeof(float), alignment);
+ * unsigned int N = 5;
+ * unsigned int alignment = volk_get_alignment();
+ * float* input = (float*)volk_malloc(sizeof(float) * N, alignment);
+ * float* out = (float*)volk_malloc(sizeof(float), alignment);
  *
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       increasing[ii] = (float)ii;
- *   }
+ * for (unsigned int i = 0; i < N; ++i) {
+ *     input[i] = 3.0f;
+ * }
  *
- *   volk_32f_accumulator_s32f(out, increasing, N);
+ * // Expected: 5 * 3.0 = 15.0
+ * float expected = 15.0f;
  *
- *   printf("sum(0..99) = %1.2f\n", out[0]);
+ * volk_32f_accumulator_s32f(out, input, N);
  *
- *   volk_free(increasing);
- *   volk_free(out);
+ * printf("Expected: %1.1f\n", expected);
+ * printf("Result:   %1.1f\n", out[0]);
+ *
+ * volk_free(input);
+ * volk_free(out);
  * \endcode
  */
 

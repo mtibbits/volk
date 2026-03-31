@@ -13,8 +13,12 @@
  *
  * \b Overview
  *
- * Computes the inverse square root of the input vector and stores
- * the result in the output vector.
+ * Computes the inverse square root of each element in the input vector,
+ * i.e. cVector[i] = 1 / sqrt(aVector[i]). The inverse square root is a
+ * fundamental operation in signal processing for normalizing vectors,
+ * computing magnitudes, and scaling sample amplitudes. It is commonly used
+ * in automatic gain control (AGC), power normalization, and beamforming
+ * weight computation where dividing by a signal's RMS magnitude is required.
  *
  * <b>Dispatcher Prototype</b>
  * \code
@@ -22,28 +26,30 @@
  * \endcode
  *
  * \b Inputs
- * \li aVector: The input vector of floats.
- * \li num_points: The number of data points.
+ * \li aVector: The input vector of sample values (float).
+ * \li num_points: The number of samples to process.
  *
  * \b Outputs
- * \li cVector: The output vector of floats.
+ * \li cVector: The output vector of inverse square root values (float).
  *
  * \b Example
+ * Compute the inverse square root of constant-valued inputs for easy verification.
  * \code
- *   int N = 10;
+ *   unsigned int N = 4;
  *   unsigned int alignment = volk_get_alignment();
- *   float* in = (float*)volk_malloc(sizeof(float)*N, alignment);
- *   float* out = (float*)volk_malloc(sizeof(float)*N, alignment);
+ *   float* in = (float*)volk_malloc(sizeof(float) * N, alignment);
+ *   float* out = (float*)volk_malloc(sizeof(float) * N, alignment);
  *
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       in[ii] = 1.0 / (float)(ii*ii);
+ *   for (unsigned int i = 0; i < N; ++i) {
+ *       in[i] = 4.0f;
  *   }
+ *
+ *   float expected = 1.0f / sqrtf(4.0f); // 0.5
  *
  *   volk_32f_invsqrt_32f(out, in, N);
  *
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       printf("out(%i) = %f\n", ii, out[ii]);
- *   }
+ *   printf("Expected: %f\n", expected);
+ *   printf("Result:   %f\n", out[0]);
  *
  *   volk_free(in);
  *   volk_free(out);

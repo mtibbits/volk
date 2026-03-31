@@ -12,54 +12,58 @@
  *
  * \b Overview
  *
- * Computes the squared distance between a single complex input and each
- * point in a complex vector, scaled by a scalar value.
+ * Computes the scaled squared distance from a single complex sample to each
+ * point in a complex reference vector:
+ * target[i] = scalar * |src0[0] - points[i]|^2.
+ *
+ * This kernel is commonly used in digital demodulation to compute soft-decision
+ * metrics for constellation decoding. Given a received sample and a set of
+ * constellation points (e.g. QAM or PSK symbols), it produces a distance
+ * measure for each candidate symbol, scaled by a factor such as SNR or
+ * inverse constellation energy for normalization.
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_32fc_x2_s32f_square_dist_scalar_mult_32f(float* target, const lv_32fc_t*
- * src0, const lv_32fc_t* points, float scalar, unsigned int num_points) \endcode
+ * void volk_32fc_x2_s32f_square_dist_scalar_mult_32f(float* target, const lv_32fc_t* src0, const lv_32fc_t* points, float scalar, unsigned int num_points)
+ * \endcode
  *
  * \b Inputs
- * \li src0: The complex input. Only the first point is used.
- * \li points: A complex vector of reference points.
- * \li scalar: A float to scale the distances by.
- * \li num_points: The number of data points.
+ * \li src0: The received complex sample (lv_32fc_t). Only the first element is used.
+ * \li points: A vector of complex constellation reference points (lv_32fc_t).
+ * \li scalar: A float scaling factor applied to each squared distance (e.g. SNR or normalization constant).
+ * \li num_points: The number of constellation points.
  *
  * \b Outputs
- * \li target: A vector of scaled squared distances between src0 and the vector of points.
+ * \li target: A vector of scaled squared distances (float), one per constellation point.
  *
  * \b Example
- * Calculate the distance between an input and reference points in a square
- * 16-qam constellation. Normalize distances by the area of the constellation.
+ * Compute scaled squared distances from a received sample to four QPSK constellation points.
  * \code
- *   int N = 16;
- *   unsigned int alignment = volk_get_alignment();
- *   lv_32fc_t* constellation  = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t)*N, alignment);
- *   lv_32fc_t* rx  = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t)*N, alignment);
- *   float* out = (float*)volk_malloc(sizeof(float)*N, alignment);
- *   float const_vals[] = {-3, -1, 1, 3};
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
+ * lv_32fc_t* rx = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t), alignment);
+ * lv_32fc_t* constellation = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t) * N, alignment);
+ * float* out = (float*)volk_malloc(sizeof(float) * N, alignment);
  *
- *   unsigned int jj = 0;
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       constellation[ii] = lv_cmake(const_vals[ii%4], const_vals[jj]);
- *       if((ii+1)%4 == 0) ++jj;
- *   }
+ * *rx = lv_cmake(3.0f, 4.0f);
+ * constellation[0] = lv_cmake(1.0f, 1.0f);
+ * constellation[1] = lv_cmake(1.0f, -1.0f);
+ * constellation[2] = lv_cmake(-1.0f, 1.0f);
+ * constellation[3] = lv_cmake(-1.0f, -1.0f);
+ * float scalar = 0.5f;
  *
- *   *rx = lv_cmake(0.5f, 2.f);
- *   float scale = 1.f/64.f; // 1 / constellation area
+ * // Expected: |rx - constellation[i]|^2 * scalar
+ * // [0]: (4+9)*0.5 = 6.5, [1]: (4+25)*0.5 = 14.5,
+ * // [2]: (16+9)*0.5 = 12.5, [3]: (16+25)*0.5 = 20.5
  *
- *   volk_32fc_x2_s32f_square_dist_scalar_mult_32f(out, rx, constellation, scale, N);
+ * volk_32fc_x2_s32f_square_dist_scalar_mult_32f(out, rx, constellation, scalar, N);
  *
- *   printf("Distance from each constellation point:\n");
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       printf("%.4f  ", out[ii]);
- *       if((ii+1)%4 == 0) printf("\n");
- *   }
+ * printf("Expected: 6.5, 14.5, 12.5, 20.5\n");
+ * printf("Result:   %.1f, %.1f, %.1f, %.1f\n", out[0], out[1], out[2], out[3]);
  *
- *   volk_free(rx);
- *   volk_free(constellation);
- *   volk_free(out);
+ * volk_free(rx);
+ * volk_free(constellation);
+ * volk_free(out);
  * \endcode
  */
 

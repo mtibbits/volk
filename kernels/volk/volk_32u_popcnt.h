@@ -12,9 +12,15 @@
  *
  * \b Overview
  *
- * Computes the population count (popcnt), or Hamming weight, of a
- * binary value. This kernel takes in a single unsigned 32-bit value
- * and returns the count of 1's that the value contains.
+ * Computes the population count (popcnt) of an unsigned 32-bit integer,
+ * returning the number of bits set to 1. This is equivalent to computing
+ * the Hamming weight of the binary representation.
+ *
+ * Population count is fundamental in digital communications for computing
+ * Hamming distances between codewords in error-correcting codes (e.g. LDPC,
+ * turbo codes), syndrome decoding, and bit-error-rate (BER) measurement.
+ * It is also used in correlation-based synchronization when comparing
+ * binary sequences.
  *
  * <b>Dispatcher Prototype</b>
  * \code
@@ -22,18 +28,24 @@
  * \endcode
  *
  * \b Inputs
- * \li value: The input value.
+ * \li value: The unsigned 32-bit input value (uint32_t).
  *
  * \b Outputs
- * \li ret: The return value containing the popcnt.
+ * \li ret: Pointer to the result containing the population count (uint32_t).
  *
  * \b Example
+ * Count the number of set bits in an alternating bit pattern.
  * \code
-    uint32_t bitstring = 0x55555555;
-    uint32_t hamming_distance = 0;
-
-    volk_32u_popcnt(&hamming_distance, bitstring);
-    printf("hamming distance of %x = %i\n", bitstring, hamming_distance);
+ * uint32_t bitstring = 0x55555555;
+ * uint32_t result = 0;
+ *
+ * // 0x55555555 = 0101...0101 in binary, so 16 of 32 bits are set
+ * uint32_t expected = 16;
+ *
+ * volk_32u_popcnt(&result, bitstring);
+ *
+ * printf("Expected: %u\n", expected);
+ * printf("Result:   %u\n", result);
  * \endcode
  */
 

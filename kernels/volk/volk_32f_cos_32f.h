@@ -12,7 +12,13 @@
  *
  * \b Overview
  *
- * Computes cosine of the input vector and stores results in the output vector.
+ * Computes the element-wise cosine of an input vector of phase angles (in
+ * radians) and stores the results in the output vector: out[i] = cos(in[i]).
+ *
+ * In DSP applications this kernel is commonly used for signal generation and
+ * modulation, such as producing the in-phase component of a carrier or local
+ * oscillator. It is also useful in spectral analysis and any operation that
+ * requires mapping phase samples to their real-valued cosine representation.
  *
  * <b>Dispatcher Prototype</b>
  * \code
@@ -20,39 +26,32 @@
  * \endcode
  *
  * \b Inputs
- * \li aVector: The input vector of floats.
- * \li num_points: The number of data points.
+ * \li aVector: Input vector of phase angles in radians (float).
+ * \li num_points: The number of samples to process.
  *
  * \b Outputs
- * \li bVector: The vector where results will be stored.
+ * \li bVector: Output vector of cosine values (float).
  *
  * \b Example
- * Calculate cos(theta) for common angles.
+ * Compute cosine for common angles: 0, pi/3, pi/2, and pi.
  * \code
- *   int N = 10;
- *   unsigned int alignment = volk_get_alignment();
- *   float* in = (float*)volk_malloc(sizeof(float)*N, alignment);
- *   float* out = (float*)volk_malloc(sizeof(float)*N, alignment);
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
+ * float* in = (float*)volk_malloc(sizeof(float) * N, alignment);
+ * float* out = (float*)volk_malloc(sizeof(float) * N, alignment);
  *
- *   in[0] = 0.000;
- *   in[1] = 0.524;
- *   in[2] = 0.786;
- *   in[3] = 1.047;
- *   in[4] = 1.571;
- *   in[5] = 1.571;
- *   in[6] = 2.094;
- *   in[7] = 2.356;
- *   in[8] = 2.618;
- *   in[9] = 3.142;
+ * in[0] = 0.0f;          // cos(0)     =  1.0
+ * in[1] = 1.04719755f;   // cos(pi/3)  =  0.5
+ * in[2] = 1.57079633f;   // cos(pi/2)  =  0.0
+ * in[3] = 3.14159265f;   // cos(pi)    = -1.0
  *
- *   volk_32f_cos_32f(out, in, N);
+ * volk_32f_cos_32f(out, in, N);
  *
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       printf("cos(%1.3f) = %1.3f\n", in[ii], out[ii]);
- *   }
+ * printf("Expected: 1.000, 0.500, 0.000, -1.000\n");
+ * printf("Result:   %1.3f, %1.3f, %1.3f, %1.3f\n", out[0], out[1], out[2], out[3]);
  *
- *   volk_free(in);
- *   volk_free(out);
+ * volk_free(in);
+ * volk_free(out);
  * \endcode
  */
 #include <volk/volk_mathematical_functions.h>

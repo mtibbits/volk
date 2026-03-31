@@ -12,8 +12,13 @@
  *
  * \b Overview
  *
- * Returns Argmin_i x[i]. Finds and returns the index which contains the first minimum
- * value in the given vector.
+ * Returns Argmin_i x[i]. Finds and returns the index of the first minimum
+ * value in the given vector of floats.
+ *
+ * In signal processing, finding the index of the minimum sample is useful for
+ * timing synchronization, where the minimum correlation error indicates the
+ * best symbol alignment, or for adaptive equalization and channel estimation
+ * where the smallest metric identifies an optimal parameter.
  *
  * <b>Dispatcher Prototype</b>
  * \code
@@ -21,31 +26,36 @@
  * \endcode
  *
  * \b Inputs
- * \li source: The input vector of floats.
- * \li num_points: The number of data points.
+ * \li source: The input vector of samples (float).
+ * \li num_points: The number of samples in the input vector.
  *
  * \b Outputs
- * \li target: The index of the first minimum value in the input buffer.
+ * \li target: The index of the first minimum value in the input vector (uint32_t).
  *
  * \b Example
+ * Five floats with an obvious minimum at index 2.
  * \code
- *   int N = 10;
- *   uint32_t alignment = volk_get_alignment();
- *   float* in = (float*)volk_malloc(sizeof(float)*N, alignment);
- *   uint32_t* out = (uint32_t*)volk_malloc(sizeof(uint32_t), alignment);
+ * unsigned int N = 5;
+ * unsigned int alignment = volk_get_alignment();
+ * float* in = (float*)volk_malloc(sizeof(float) * N, alignment);
+ * uint32_t* out = (uint32_t*)volk_malloc(sizeof(uint32_t), alignment);
  *
- *   for(uint32_t ii = 0; ii < N; ++ii){
- *       float x = (float)ii;
- *       // a parabola with a minimum at x=4
- *       in[ii] = (x-4) * (x-4) - 5;
- *   }
+ * in[0] = 3.0f;
+ * in[1] = 5.0f;
+ * in[2] = 1.0f;
+ * in[3] = 4.0f;
+ * in[4] = 2.0f;
  *
- *   volk_32f_index_min_32u(out, in, N);
+ * // Minimum value is 1.0 at index 2
+ * uint32_t expected = 2;
  *
- *   printf("minimum is %1.2f at index %u\n", in[*out], *out);
+ * volk_32f_index_min_32u(out, in, N);
  *
- *   volk_free(in);
- *   volk_free(out);
+ * printf("Expected: %u\n", expected);
+ * printf("Result:   %u\n", *out);
+ *
+ * volk_free(in);
+ * volk_free(out);
  * \endcode
  */
 

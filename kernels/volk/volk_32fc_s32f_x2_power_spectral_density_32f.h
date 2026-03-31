@@ -12,63 +12,60 @@
  *
  * \b Overview
  *
- * Computes the power spectral density (PSD) of complex FFT data. Each output sample is
- * 10 * log10((real/norm)^2 + (imag/norm)^2) normalized by the resolution bandwidth (RBW).
- * When RBW is not 1.0, the normalization factor is scaled by sqrt(RBW) so that the result
- * represents power per unit bandwidth in dB.
+ * Computes the power spectral density (PSD) of complex FFT output in decibels.
+ * Each input sample is first normalized by the given factor, then the log power
+ * is computed and divided by the resolution bandwidth (RBW):
+ * output[i] = 10 * log10((r*r + i*i) / (norm^2 * rbw)).
+ *
+ * This kernel is used in spectral analysis to convert raw FFT output into
+ * calibrated power spectral density, as displayed by spectrum analyzers. The
+ * normalization factor accounts for FFT length and windowing gain, while the
+ * RBW division converts power to power density (dB/Hz), enabling comparison
+ * across different FFT sizes and sample rates.
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_32fc_s32f_x2_power_spectral_density_32f(float* logPowerOutput, const
- * lv_32fc_t* complexFFTInput, const float normalizationFactor, const float rbw, unsigned
- * int num_points) \endcode
+ * void volk_32fc_s32f_x2_power_spectral_density_32f(float* logPowerOutput,
+ *   const lv_32fc_t* complexFFTInput, const float normalizationFactor,
+ *   const float rbw, unsigned int num_points)
+ * \endcode
  *
  * \b Inputs
- * \li complexFFTInput: The complex data output from the FFT.
- * \li normalizationFactor: Each input value is divided by this factor before the power is
- * calculated.
+ * \li complexFFTInput: The complex FFT output samples (lv_32fc_t).
+ * \li normalizationFactor: Scale factor applied to each sample before computing
+ *   power (accounts for FFT length and window gain).
  * \li rbw: The resolution bandwidth of the FFT spectrum.
  * \li num_points: The number of FFT data points.
  *
  * \b Outputs
- * \li logPowerOutput: The 10.0 * log10((r*r + i*i) / (norm*norm * rbw)) for each data
- * point.
+ * \li logPowerOutput: The power spectral density in dB for each point (float).
  *
  * \b Example
- * Compute the power spectral density in dB/Hz from simulated FFT output.
+ * Compute PSD of a constant-magnitude complex signal with unit normalization and RBW.
  * \code
- * #include <volk/volk.h>
- * #include <stdio.h>
- * #include <math.h>
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
  *
- * int main() {
- *     unsigned int N = 8;
- *     unsigned int alignment = volk_get_alignment();
- *     float normalizationFactor = (float)N;
- *     // RBW = sample_rate / N; e.g. 1000 Hz / 8 = 125 Hz
- *     float rbw = 125.0f;
+ * lv_32fc_t* input = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t) * N, alignment);
+ * float* output = (float*)volk_malloc(sizeof(float) * N, alignment);
  *
- *     lv_32fc_t* fftOutput =
- *         (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t) * N, alignment);
- *     float* psd = (float*)volk_malloc(sizeof(float) * N, alignment);
- *
- *     // Simulate FFT output with a strong bin at index 1
- *     for (unsigned int i = 0; i < N; i++) {
- *         fftOutput[i] = lv_cmake(0.01f, 0.01f);
- *     }
- *     fftOutput[1] = lv_cmake(4.0f, 3.0f); // magnitude 5.0
- *
- *     volk_32fc_s32f_x2_power_spectral_density_32f(
- *         psd, fftOutput, normalizationFactor, rbw, N);
- *
- *     for (unsigned int i = 0; i < N; i++) {
- *         printf("bin[%u] = %+.2f dB/Hz\n", i, psd[i]);
- *     }
- *
- *     volk_free(fftOutput);
- *     volk_free(psd);
- *     return 0;
+ * // Input: (3, 4) has magnitude 5, so |x|^2 = 25
+ * for (unsigned int i = 0; i < N; ++i) {
+ *     input[i] = lv_cmake(3.0f, 4.0f);
  * }
+ * float norm = 1.0f;
+ * float rbw = 1.0f;
+ *
+ * // Expected: 10 * log10(25 / (1^2 * 1)) = 10 * log10(25) ~ 13.979 dB
+ * float expected = 10.0f * log10f(25.0f);
+ *
+ * volk_32fc_s32f_x2_power_spectral_density_32f(output, input, norm, rbw, N);
+ *
+ * printf("Expected: %f\n", expected);
+ * printf("Result:   %f\n", output[0]);
+ *
+ * volk_free(input);
+ * volk_free(output);
  * \endcode
  */
 

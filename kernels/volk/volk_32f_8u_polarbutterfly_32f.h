@@ -12,49 +12,66 @@
  *
  * \b Overview
  *
- * decode butterfly for one bit in polar decoder graph.
+ * Decodes one butterfly stage in a polar decoder graph using the min-sum
+ * approximation. Recursively combines log-likelihood ratios (LLRs) from
+ * higher stages with previously decoded bits to produce the LLR at the
+ * target row and stage.
+ *
+ * Polar codes are capacity-achieving codes used in 5G NR control channels
+ * and other modern communication systems. This kernel implements the
+ * successive cancellation (SC) decoding butterfly, where received channel
+ * LLRs propagate through the factor graph to yield per-bit soft decisions.
+ * Frozen bit positions (known a priori) are skipped; information bits are
+ * decided by the sign of the resulting LLR.
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * volk_32f_8u_polarbutterfly_32f(float* llrs, unsigned char* u,
- *    const int frame_exp, const int stage, const int u_num, const int row)
+ * void volk_32f_8u_polarbutterfly_32f(float* llrs, unsigned char* u,
+ *     const int frame_exp, const int stage, const int u_num, const int row)
  * \endcode
  *
  * \b Inputs
- * \li llrs: buffer with LLRs. contains received LLRs and already decoded LLRs.
- * \li u: previously decoded bits
- * \li frame_exp: power of 2 value for frame size.
- * \li stage: value in range [0, frame_exp). start stage algorithm goes deeper.
- * \li u_num: bit number currently to be decoded
- * \li row: row in graph to start decoding.
+ * \li llrs: LLR buffer (float) of size (frame_exp + 1) * 2^frame_exp.
+ *     Received channel LLRs are stored at offset frame_exp * 2^frame_exp;
+ *     intermediate decoded LLRs fill lower stages.
+ * \li u: Previously decoded bits (unsigned char), at least 3 * 2^frame_exp bytes.
+ * \li frame_exp: Log2 of the frame size (frame_size = 2^frame_exp).
+ * \li stage: Stage index in range [0, frame_exp) at which decoding starts.
+ * \li u_num: Index of the bit currently being decoded.
+ * \li row: Row in the decoding graph to compute.
  *
  * \b Outputs
- * \li llrs: necessary LLRs for bit [u_num] to be decoded
+ * \li llrs: The LLR at llrs[row] is updated with the decoded value for bit u_num.
  *
  * \b Example
+ * Decode the first bit (u_num = 0) of a frame_exp = 2 polar code.
  * \code
- * int frame_exp = 10;
- * int frame_size = 0x01 << frame_exp;
- *
+ * int frame_exp = 2;
+ * int frame_size = 0x01 << frame_exp;  // 4
  * unsigned int alignment = volk_get_alignment();
- * float* llrs = (float*)volk_malloc(sizeof(float) * frame_size * (frame_exp + 1),
- *     alignment);
- * unsigned char* u = (unsigned char*)volk_malloc(sizeof(unsigned char) * frame_size *
- *     (frame_exp + 1), alignment);
+ *
+ * float* llrs = (float*)volk_malloc(
+ *     sizeof(float) * frame_size * (frame_exp + 1), alignment);
+ * unsigned char* u = (unsigned char*)volk_malloc(
+ *     sizeof(unsigned char) * frame_size * 3, alignment);
  *
  * memset(llrs, 0, sizeof(float) * frame_size * (frame_exp + 1));
- * memset(u, 0, sizeof(unsigned char) * frame_size * (frame_exp + 1));
- * // write received channel LLRs into the last stage
- * for(unsigned int i = 0; i < (unsigned int)frame_size; i++){
- *     llrs[frame_size * frame_exp + i] = 1.0f - 2.0f * (i % 2);
- * }
+ * memset(u, 0, sizeof(unsigned char) * frame_size * 3);
  *
- * unsigned int u_num;
- * for(u_num = 0; u_num < (unsigned int)frame_size; u_num++){
- *     volk_32f_8u_polarbutterfly_32f(llrs, u, frame_exp, 0, u_num, u_num);
- *     // next line could first search for frozen bit value and then do bit decision.
- *     u[u_num] = llrs[u_num] > 0 ? 0 : 1;
- * }
+ * // Place received channel LLRs in the last layer (index frame_exp * frame_size)
+ * llrs[frame_exp * frame_size + 0] =  2.0f;
+ * llrs[frame_exp * frame_size + 1] = -3.0f;
+ * llrs[frame_exp * frame_size + 2] =  1.0f;
+ * llrs[frame_exp * frame_size + 3] =  4.0f;
+ *
+ * // Decode bit 0 via successive cancellation butterfly
+ * volk_32f_8u_polarbutterfly_32f(llrs, u, frame_exp, 0, 0, 0);
+ *
+ * // Expected: min-sum through the factor graph for row 0, stage 0:
+ * //   layer2->layer1: llr_odd(2.0, -3.0) = -2.0,  llr_odd(1.0, 4.0) = 1.0
+ * //   layer1->layer0: llr_odd(-2.0, 1.0) = -1.0
+ * printf("Expected: %f\n", -1.0f);
+ * printf("Result:   %f\n", llrs[0]);
  *
  * volk_free(llrs);
  * volk_free(u);

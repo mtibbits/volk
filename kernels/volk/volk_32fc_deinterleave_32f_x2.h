@@ -12,48 +12,51 @@
  *
  * \b Overview
  *
- * Deinterleaves the complex floating point vector into I & Q vector
- * data.
+ * Deinterleaves a complex floating-point vector into separate I (in-phase)
+ * and Q (quadrature) real-valued vectors. Each complex sample is split so
+ * that its real part goes to iBuffer and its imaginary part goes to qBuffer.
+ *
+ * This operation is common in SDR and DSP pipelines where downstream
+ * processing requires separate access to the I and Q channels, such as
+ * independent AGC, spectral analysis on a single component, or feeding
+ * real-valued DAC paths after demodulation.
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_32fc_deinterleave_32f_x2(float* iBuffer, float* qBuffer, const lv_32fc_t*
- * complexVector, unsigned int num_points) \endcode
+ * void volk_32fc_deinterleave_32f_x2(float* iBuffer, float* qBuffer, const lv_32fc_t* complexVector, unsigned int num_points)
+ * \endcode
  *
  * \b Inputs
- * \li complexVector: The complex input vector.
- * \li num_points: The number of complex data values to be deinterleaved.
+ * \li complexVector: The complex input vector (lv_32fc_t).
+ * \li num_points: The number of complex samples to be deinterleaved.
  *
  * \b Outputs
- * \li iBuffer: The I buffer output data.
- * \li qBuffer: The Q buffer output data.
+ * \li iBuffer: The in-phase (real) output samples (float).
+ * \li qBuffer: The quadrature (imaginary) output samples (float).
  *
  * \b Example
- * Generate complex numbers around the top half of the unit circle and
- * deinterleave in to real and imaginary buffers.
+ * Deinterleave a vector of constant complex values and verify the I and Q outputs.
  * \code
- *   int N = 10;
- *   unsigned int alignment = volk_get_alignment();
- *   lv_32fc_t* in  = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t)*N, alignment);
- *   float* re = (float*)volk_malloc(sizeof(float)*N, alignment);
- *   float* im = (float*)volk_malloc(sizeof(float)*N, alignment);
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
+ * lv_32fc_t* in = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t) * N, alignment);
+ * float* iBuffer = (float*)volk_malloc(sizeof(float) * N, alignment);
+ * float* qBuffer = (float*)volk_malloc(sizeof(float) * N, alignment);
  *
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       float real = 2.f * ((float)ii / (float)N) - 1.f;
- *       float imag = std::sqrt(1.f - real * real);
- *       in[ii] = lv_cmake(real, imag);
- *   }
+ * for (unsigned int i = 0; i < N; ++i) {
+ *     in[i] = lv_cmake(3.0f, 4.0f);
+ * }
  *
- *   volk_32fc_deinterleave_32f_x2(re, im, in, N);
+ * // Expected: iBuffer[i] = 3.0, qBuffer[i] = 4.0 for all i
  *
- *   printf("          re  | im\n");
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       printf("out(%i) = %+.1f | %+.1f\n", ii, re[ii], im[ii]);
- *   }
+ * volk_32fc_deinterleave_32f_x2(iBuffer, qBuffer, in, N);
  *
- *   volk_free(in);
- *   volk_free(re);
- *   volk_free(im);
+ * printf("Expected I: 3.0, Q: 4.0\n");
+ * printf("Result   I: %.1f, Q: %.1f\n", iBuffer[0], qBuffer[0]);
+ *
+ * volk_free(in);
+ * volk_free(iBuffer);
+ * volk_free(qBuffer);
  * \endcode
  */
 

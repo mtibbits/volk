@@ -13,54 +13,51 @@
  * \b Overview
  *
  * Deinterleaves the complex 8-bit char vector into just the real (I)
- * component and converts it to 16-bit shorts. Each 8-bit value is
- * sign-extended to 16 bits and scaled by 128 (left-shifted by 7).
+ * component and converts each sample to a 16-bit short by multiplying
+ * by 128. The imaginary (Q) component is discarded.
+ *
+ * This kernel is useful in receiver front-ends where baseband I/Q samples
+ * arrive as interleaved 8-bit pairs and only the in-phase channel is needed
+ * for further processing such as real-valued demodulation or power detection.
+ * The 128x scaling maps the 8-bit dynamic range into the upper bits of a
+ * 16-bit word, preserving resolution for downstream DSP stages.
  *
  * <b>Dispatcher Prototype</b>
  * \code
  * void volk_8ic_deinterleave_real_16i(int16_t* iBuffer, const lv_8sc_t* complexVector,
- * unsigned int num_points) \endcode
+ * unsigned int num_points)
+ * \endcode
  *
  * \b Inputs
- * \li complexVector: The complex input vector of interleaved 8-bit I/Q pairs (lv_8sc_t).
- * \li num_points: The number of complex data values to be deinterleaved.
+ * \li complexVector: The complex input vector of interleaved I/Q samples (lv_8sc_t).
+ * \li num_points: The number of complex samples to be deinterleaved.
  *
  * \b Outputs
- * \li iBuffer: The real (I) output vector of 16-bit shorts (int16_t).
+ * \li iBuffer: The deinterleaved real (I) output samples scaled by 128 (int16_t).
  *
  * \b Example
- * Extract the real component from complex 8-bit samples into a 16-bit vector.
+ * Deinterleave 4 complex 8-bit samples and verify the real output is scaled by 128.
  * \code
- * #include <volk/volk.h>
- * #include <stdio.h>
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
  *
- * int main() {
- *     unsigned int N = 4;
- *     unsigned int alignment = volk_get_alignment();
+ * lv_8sc_t* complexVector = (lv_8sc_t*)volk_malloc(sizeof(lv_8sc_t) * N, alignment);
+ * int16_t* iBuffer = (int16_t*)volk_malloc(sizeof(int16_t) * N, alignment);
  *
- *     lv_8sc_t* complexVector =
- *         (lv_8sc_t*)volk_malloc(sizeof(lv_8sc_t) * N, alignment);
- *     int16_t* iBuffer = (int16_t*)volk_malloc(sizeof(int16_t) * N, alignment);
- *
- *     // Simulate complex 8-bit samples: (I, Q) pairs
- *     complexVector[0] = lv_cmake((int8_t)127, (int8_t)-128);
- *     complexVector[1] = lv_cmake((int8_t)50, (int8_t)-50);
- *     complexVector[2] = lv_cmake((int8_t)0, (int8_t)100);
- *     complexVector[3] = lv_cmake((int8_t)-30, (int8_t)30);
- *
- *     // Extract real (I) component, scaled by 128
- *     volk_8ic_deinterleave_real_16i(iBuffer, complexVector, N);
- *
- *     for (unsigned int i = 0; i < N; i++) {
- *         printf("complex[%u] = (%4d, %4d)  ->  I = %6d\n",
- *                i, lv_creal(complexVector[i]), lv_cimag(complexVector[i]),
- *                iBuffer[i]);
- *     }
- *
- *     volk_free(complexVector);
- *     volk_free(iBuffer);
- *     return 0;
+ * for (unsigned int i = 0; i < N; ++i) {
+ *   complexVector[i] = lv_cmake((int8_t)(i + 1), (int8_t)(-(i + 1)));
  * }
+ *
+ * // Expected: real part * 128, so first element = 1 * 128 = 128
+ * int16_t expected = 1 * 128;
+ *
+ * volk_8ic_deinterleave_real_16i(iBuffer, complexVector, N);
+ *
+ * printf("Expected: %d\n", expected);
+ * printf("Result:   %d\n", iBuffer[0]);
+ *
+ * volk_free(complexVector);
+ * volk_free(iBuffer);
  * \endcode
  */
 

@@ -12,46 +12,50 @@
  *
  * \b Overview
  *
- * Deinterleaves the complex floating point vector and return the real
- * part (inphase) of the samples that have been converted to doubles.
+ * Deinterleaves the complex floating point vector and returns the real
+ * (in-phase) component of each sample, converted to double precision.
+ *
+ * Extracting the in-phase component is a common step in IQ signal processing
+ * pipelines where downstream operations — such as spectral analysis,
+ * synchronization, or demodulation — require only the real part of the
+ * baseband signal at higher numeric precision.
  *
  * <b>Dispatcher Prototype</b>
  * \code
  * void volk_32fc_deinterleave_real_64f(double* iBuffer, const lv_32fc_t*
- * complexVector, unsigned int num_points) \endcode
+ * complexVector, unsigned int num_points)
+ * \endcode
  *
  * \b Inputs
- * \li complexVector: The complex input vector.
- * \li num_points: The number of complex data values to be deinterleaved.
+ * \li complexVector: The complex input vector of baseband samples (lv_32fc_t).
+ * \li num_points: The number of complex samples to be deinterleaved.
  *
  * \b Outputs
- * \li iBuffer: The I buffer output data.
+ * \li iBuffer: The double-precision output buffer containing the in-phase
+ * (real) component of each sample (double).
  *
  * \b Example
- *
- * Generate complex numbers around the top half of the unit circle and
- * extract all of the real parts to a double buffer.
+ * Extract real parts from constant complex values and verify the result.
  * \code
- *   int N = 10;
- *   unsigned int alignment = volk_get_alignment();
- *   lv_32fc_t* in  = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t)*N, alignment);
- *   double* re = (double*)volk_malloc(sizeof(double)*N, alignment);
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
+ * lv_32fc_t* in = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t) * N, alignment);
+ * double* re = (double*)volk_malloc(sizeof(double) * N, alignment);
  *
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       float real = 2.f * ((float)ii / (float)N) - 1.f;
- *       float imag = std::sqrt(1.f - real * real);
- *       in[ii] = lv_cmake(real, imag);
- *   }
+ * for (unsigned int i = 0; i < N; ++i) {
+ *     in[i] = lv_cmake(3.0f, 4.0f);
+ * }
  *
- *   volk_32fc_deinterleave_real_64f(re, in, N);
+ * // Expected: each output element equals 3.0
+ * double expected = 3.0;
  *
- *   printf("          real part\n");
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       printf("out(%i) = %+.1g\n", ii, re[ii]);
- *   }
+ * volk_32fc_deinterleave_real_64f(re, in, N);
  *
- *   volk_free(in);
- *   volk_free(re);
+ * printf("Expected: %f\n", expected);
+ * printf("Result:   %f\n", re[0]);
+ *
+ * volk_free(in);
+ * volk_free(re);
  * \endcode
  */
 

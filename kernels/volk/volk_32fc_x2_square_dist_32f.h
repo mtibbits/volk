@@ -12,53 +12,54 @@
  *
  * \b Overview
  *
- * Calculates the square distance between a single complex input for each
- * point in a complex vector.
+ * Computes the squared Euclidean distance between a single complex reference
+ * sample and each point in a complex vector:
+ * target[i] = |src0[0] - points[i]|^2.
+ *
+ * This kernel is commonly used in constellation decoding for digital
+ * modulation schemes such as QAM and PSK. By computing the squared distance
+ * from a received sample to every constellation reference point, a
+ * minimum-distance detector can identify the most likely transmitted symbol
+ * without the cost of a square-root operation.
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_32fc_x2_square_dist_32f(float* target, const lv_32fc_t* src0, const lv_32fc_t*
- * points, unsigned int num_points) { \endcode
+ * void volk_32fc_x2_square_dist_32f(float* target, const lv_32fc_t* src0,
+ *   const lv_32fc_t* points, unsigned int num_points)
+ * \endcode
  *
  * \b Inputs
- * \li src0: The complex input. Only the first point is used.
- * \li points: A complex vector of reference points.
- * \li num_points: The number of data points.
+ * \li src0: The received complex sample (lv_32fc_t). Only the first element is used.
+ * \li points: A complex vector of constellation reference points (lv_32fc_t).
+ * \li num_points: The number of constellation points.
  *
  * \b Outputs
- * \li target: A vector of squared distances between src0 and the vector of points.
+ * \li target: The squared distance from src0[0] to each constellation point (float).
  *
  * \b Example
- * Calculate the distance between an input and reference points in a square
- * 16-qam constellation.
+ * Compute squared distances from a received sample to four constellation points.
  * \code
- *   int N = 16;
- *   unsigned int alignment = volk_get_alignment();
- *   lv_32fc_t* constellation  = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t)*N, alignment);
- *   lv_32fc_t* rx  = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t)*N, alignment);
- *   float* out = (float*)volk_malloc(sizeof(float)*N, alignment);
- *   float const_vals[] = {-3, -1, 1, 3};
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
+ * lv_32fc_t* src = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t), alignment);
+ * lv_32fc_t* pts = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t) * N, alignment);
+ * float* out = (float*)volk_malloc(sizeof(float) * N, alignment);
  *
- *   // Generate 16-QAM constellation points
- *   unsigned int jj = 0;
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       constellation[ii] = lv_cmake(const_vals[ii%4], const_vals[jj]);
- *       if((ii+1)%4 == 0) ++jj;
- *   }
+ * src[0] = lv_cmake(1.0f, 2.0f);
+ * pts[0] = lv_cmake(0.0f, 0.0f);  // |1+2j|^2 = 5
+ * pts[1] = lv_cmake(1.0f, 1.0f);  // |0+1j|^2 = 1
+ * pts[2] = lv_cmake(3.0f, 4.0f);  // |-2-2j|^2 = 8
+ * pts[3] = lv_cmake(1.0f, 2.0f);  // |0+0j|^2 = 0
  *
- *   *rx = lv_cmake(0.5f, 2.f);
+ * volk_32fc_x2_square_dist_32f(out, src, pts, N);
  *
- *   volk_32fc_x2_square_dist_32f(out, rx, constellation, N);
+ * // Expected: 5.0, 1.0, 8.0, 0.0
+ * printf("Expected: 5.0, 1.0, 8.0, 0.0\n");
+ * printf("Result:   %.1f, %.1f, %.1f, %.1f\n", out[0], out[1], out[2], out[3]);
  *
- *   printf("Distance from each constellation point:\n");
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       printf("%.4f  ", out[ii]);
- *       if((ii+1)%4 == 0) printf("\n");
- *   }
- *
- *   volk_free(rx);
- *   volk_free(constellation);
- *   volk_free(out);
+ * volk_free(src);
+ * volk_free(pts);
+ * volk_free(out);
  * \endcode
  */
 

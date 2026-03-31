@@ -12,9 +12,14 @@
  *
  * \b Overview
  *
- * Swaps the high and low bytes of each 16-bit unsigned integer in the input
- * vector, in-place. This is useful for converting between big-endian and
- * little-endian byte order.
+ * Byteswaps (in-place) a vector of uint16_t values, reversing the byte order
+ * of each 16-bit element. For a value with bytes [A, B], the result is [B, A].
+ *
+ * Byte-order conversion is essential when ingesting sample data from SDR
+ * hardware or network interfaces whose endianness differs from the host.
+ * This kernel efficiently converts an entire buffer of 16-bit samples so
+ * that downstream DSP blocks (demodulation, filtering, spectral analysis)
+ * receive correctly ordered data.
  *
  * <b>Dispatcher Prototype</b>
  * \code
@@ -22,48 +27,34 @@
  * \endcode
  *
  * \b Inputs
- * \li intsToSwap: The vector of uint16_t values to byte swap.
- * \li num_points: The number of 16-bit values to process.
+ * \li intsToSwap: The vector of 16-bit unsigned samples to byte swap (uint16_t).
+ * \li num_points: The number of data points.
  *
  * \b Outputs
- * \li intsToSwap: The byte-swapped values, written in-place.
+ * \li intsToSwap: The byte-swapped values, returned in-place (uint16_t).
  *
  * \b Example
- * Byte-swap a small vector of 16-bit unsigned integers.
+ * Byteswap 4 uint16_t values and verify one result by hand.
  * \code
- *   #include <volk/volk.h>
- *   #include <stdio.h>
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
  *
- *   int main() {
- *     unsigned int N = 4;
- *     unsigned int alignment = volk_get_alignment();
+ * uint16_t* x = (uint16_t*)volk_malloc(sizeof(uint16_t) * N, alignment);
  *
- *     // Allocate aligned buffer
- *     uint16_t* data =
- *         (uint16_t*)volk_malloc(N * sizeof(uint16_t), alignment);
+ * // 0x0102 -> after swap -> 0x0201
+ * for (unsigned int i = 0; i < N; ++i) {
+ *   x[i] = 0x0102;
+ * }
  *
- *     // Initialize with values whose bytes are easy to verify after swapping
- *     // 0x0102 -> 0x0201, 0xAABB -> 0xBBAA, etc.
- *     data[0] = 0x0102;
- *     data[1] = 0xAABB;
- *     data[2] = 0xFF00;
- *     data[3] = 0x1234;
+ * // Expected: swapping bytes of 0x0102 gives 0x0201 = 513
+ * uint16_t expected = 0x0201;
  *
- *     // Byte-swap each 16-bit element in-place
- *     volk_16u_byteswap(data, N);
+ * volk_16u_byteswap(x, N);
  *
- *     for (unsigned int i = 0; i < N; i++) {
- *       printf("data[%u] = 0x%04X\n", i, data[i]);
- *     }
- *     // Expected output:
- *     // data[0] = 0x0201
- *     // data[1] = 0xBBAA
- *     // data[2] = 0x00FF
- *     // data[3] = 0x3412
+ * printf("Expected: %u\n", expected);
+ * printf("Result:   %u\n", x[0]);
  *
- *     volk_free(data);
- *     return 0;
- *   }
+ * volk_free(x);
  * \endcode
  */
 

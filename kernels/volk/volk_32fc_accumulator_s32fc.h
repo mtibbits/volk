@@ -12,39 +12,51 @@
  *
  * \b Overview
  *
- * Accumulates the values in the input buffer.
+ * Accumulates all complex values in the input buffer, returning the complex
+ * sum: result = sum(inputBuffer[i], i = 0..num_points-1). Real and imaginary
+ * components are summed independently.
+ *
+ * This accumulator is a common building block in DSP pipelines where a
+ * reduction over complex samples is needed — for example, computing the DC
+ * component of a signal, integrating energy across a block for power
+ * estimation, or combining partial correlation results in synchronization
+ * algorithms.
  *
  * <b>Dispatcher Prototype</b>
  * \code
  * void volk_32fc_accumulator_s32fc(lv_32fc_t* result, const lv_32fc_t* inputBuffer,
- * unsigned int num_points) \endcode
+ * unsigned int num_points)
+ * \endcode
  *
  * \b Inputs
- * \li inputBuffer: The buffer of data to be accumulated
- * \li num_points: The number of data points.
+ * \li inputBuffer: The buffer of complex samples to be accumulated (lv_32fc_t).
+ * \li num_points: The number of complex samples.
  *
  * \b Outputs
- * \li result: The accumulated result.
+ * \li result: The accumulated complex sum (lv_32fc_t).
  *
  * \b Example
- * Calculate the sum of numbers 0 through 99
+ * Sum four identical complex values and verify the result.
  * \code
- *   int N = 100;
- *   unsigned int alignment = volk_get_alignment();
- *   lv_32fc_t* vec = (lv_32fc_t*) volk_malloc(sizeof(lv_32fc_t)*N, alignment);
- *   lv_32fc_t* out = (lv_32fc_t*) volk_malloc(sizeof(lv_32fc_t), alignment);
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
+ * lv_32fc_t* vec = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t) * N, alignment);
+ * lv_32fc_t* out = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t), alignment);
  *
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       vec[ii] = lv_cmake( (float) ii, (float) -ii );
- *   }
+ * for (unsigned int i = 0; i < N; ++i) {
+ *     vec[i] = lv_cmake(3.0f, -2.0f);
+ * }
  *
- *   volk_32fc_accumulator_s32fc(out, vec, N);
+ * // Expected: 4 * (3 - 2j) = 12 - 8j
+ * lv_32fc_t expected = lv_cmake(12.0f, -8.0f);
  *
- *   printf("sum(0..99)+1j*sum(0..-99) = %1.2f %1.2f \n", lv_creal(*out) , lv_cimag(*out)
- * );
+ * volk_32fc_accumulator_s32fc(out, vec, N);
  *
- *   volk_free(vec);
- *   volk_free(out);
+ * printf("Expected: %1.2f %1.2fj\n", lv_creal(expected), lv_cimag(expected));
+ * printf("Result:   %1.2f %1.2fj\n", lv_creal(*out), lv_cimag(*out));
+ *
+ * volk_free(vec);
+ * volk_free(out);
  * \endcode
  */
 

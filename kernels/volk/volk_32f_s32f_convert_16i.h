@@ -12,46 +12,51 @@
  *
  * \b Overview
  *
- * Converts a floating point number to a 16-bit short after applying a
- * scaling factor.
+ * Scales each floating-point sample by a scalar factor and converts the
+ * result to a 16-bit integer with rounding and saturation clamping to
+ * [SHRT_MIN, SHRT_MAX]: out[i] = (int16_t)rintf(in[i] * scalar).
+ *
+ * This quantization operation is common when preparing baseband signal
+ * samples for a DAC, for fixed-point DSP pipelines, or for compact storage
+ * of scaled sample data. The scalar typically maps the full-scale
+ * floating-point range to the 16-bit integer range.
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_32f_s32f_convert_16i(int16_t* outputVector, const float* inputVector, const
- * float scalar, unsigned int num_points) \endcode
+ * void volk_32f_s32f_convert_16i(int16_t* outputVector, const float* inputVector,
+ *     const float scalar, unsigned int num_points)
+ * \endcode
  *
  * \b Inputs
- * \li inputVector: the input vector of floats.
- * \li scalar: The value multiplied against each point in the input buffer.
- * \li num_points: The number of data points.
+ * \li inputVector: The input vector of floating-point samples (float).
+ * \li scalar: The scaling factor multiplied against each sample (float).
+ * \li num_points: The number of samples to convert.
  *
  * \b Outputs
- * \li outputVector: The output vector.
+ * \li outputVector: The output vector of scaled, quantized 16-bit integers (int16_t).
  *
  * \b Example
- * Convert floats from [-1,1] to 16-bit integers with a scale of 5 to maintain smallest
- * delta
+ * Scale four float samples by 1000 and convert to int16.
  * \code
- *   int N = 10;
- *   unsigned int alignment = volk_get_alignment();
- *   float* increasing = (float*)volk_malloc(sizeof(float)*N, alignment);
- *   int16_t* out = (int16_t*)volk_malloc(sizeof(int16_t)*N, alignment);
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
+ * float* in = (float*)volk_malloc(sizeof(float) * N, alignment);
+ * int16_t* out = (int16_t*)volk_malloc(sizeof(int16_t) * N, alignment);
  *
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       increasing[ii] = 2.f * ((float)ii / (float)N) - 1.f;
- *   }
+ * for (unsigned int i = 0; i < N; ++i) {
+ *     in[i] = 1.5f;
+ * }
  *
- *   // Normalize by the smallest delta (0.2 in this example)
- *   float scale = 5.f;
+ * float scalar = 1000.0f;
  *
- *   volk_32f_s32f_convert_16i(out, increasing, scale, N);
+ * // Expected: 1.5 * 1000 = 1500 for each sample
+ * volk_32f_s32f_convert_16i(out, in, scalar, N);
  *
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       printf("out[%u] = %i\n", ii, out[ii]);
- *   }
+ * printf("Expected: 1500\n");
+ * printf("Result:   %d\n", out[0]);
  *
- *   volk_free(increasing);
- *   volk_free(out);
+ * volk_free(in);
+ * volk_free(out);
  * \endcode
  */
 

@@ -12,69 +12,68 @@
  *
  * \b Deprecation
  *
- * This kernel is deprecated, no replacement has been identified.
+ * This kernel is deprecated.
  *
  * \b Overview
  *
- * Computes the element-wise maximum across four 16-bit integer input vectors using a
- * tournament-style comparison. For each element index, the kernel first selects the
- * larger value from each pair (src0 vs src1, and src2 vs src3), then selects the larger
- * of those two results. This implements the max-log-MAP approximation of the max-star
- * operation used in turbo and Viterbi decoding.
+ * Computes the element-wise maximum across four 16-bit integer input vectors
+ * using a tree-structured max-star reduction:
+ * target[i] = max(max(src0[i], src1[i]), max(src2[i], src3[i])).
+ *
+ * The max-star operation is used in log-MAP and max-log-MAP turbo decoding,
+ * where branch metrics from multiple trellis paths must be compared
+ * element-wise to select the surviving path. This kernel accelerates the
+ * four-way path selection step common in quad-rate convolutional decoders
+ * and BCJR-based turbo decoders operating on 16-bit fixed-point metrics.
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_16i_x4_quad_max_star_16i(short* target, const short* src0, const short* src1,
- * const short* src2, const short* src3, unsigned int num_points)
+ * void volk_16i_x4_quad_max_star_16i(short* target, short* src0, short* src1,
+ * short* src2, short* src3, unsigned int num_points)
  * \endcode
  *
  * \b Inputs
- * \li src0: First input vector of 16-bit integers (short).
- * \li src1: Second input vector of 16-bit integers (short).
- * \li src2: Third input vector of 16-bit integers (short).
- * \li src3: Fourth input vector of 16-bit integers (short).
- * \li num_points: The number of elements in each input/output vector.
+ * \li src0: First branch metric vector (short).
+ * \li src1: Second branch metric vector (short).
+ * \li src2: Third branch metric vector (short).
+ * \li src3: Fourth branch metric vector (short).
+ * \li num_points: The number of 16-bit metric values to process.
  *
  * \b Outputs
- * \li target: Output vector of 16-bit integers (short) containing
- * max(max(src0[i], src1[i]), max(src2[i], src3[i])) for each element.
+ * \li target: The element-wise maximum across all four inputs (short).
  *
  * \b Example
+ * Compute the four-way element-wise maximum of constant metric vectors.
  * \code
- * #include <volk/volk.h>
- * #include <stdio.h>
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
  *
- * int main() {
- *     unsigned int N = 16;
- *     unsigned int alignment = volk_get_alignment();
+ * short* target = (short*)volk_malloc(sizeof(short) * N, alignment);
+ * short* src0 = (short*)volk_malloc(sizeof(short) * N, alignment);
+ * short* src1 = (short*)volk_malloc(sizeof(short) * N, alignment);
+ * short* src2 = (short*)volk_malloc(sizeof(short) * N, alignment);
+ * short* src3 = (short*)volk_malloc(sizeof(short) * N, alignment);
  *
- *     short* src0 = (short*)volk_malloc(N * sizeof(short), alignment);
- *     short* src1 = (short*)volk_malloc(N * sizeof(short), alignment);
- *     short* src2 = (short*)volk_malloc(N * sizeof(short), alignment);
- *     short* src3 = (short*)volk_malloc(N * sizeof(short), alignment);
- *     short* target = (short*)volk_malloc(N * sizeof(short), alignment);
- *
- *     // Initialize with sample trellis metric values
- *     for (unsigned int i = 0; i < N; i++) {
- *         src0[i] = (short)(100 - 10 * (int)i);
- *         src1[i] = (short)(5 * (int)i - 30);
- *         src2[i] = (short)(50 + 3 * (int)i);
- *         src3[i] = (short)(80 - 7 * (int)i);
- *     }
- *
- *     volk_16i_x4_quad_max_star_16i(target, src0, src1, src2, src3, N);
- *
- *     for (unsigned int i = 0; i < N; i++) {
- *         printf("target[%u] = %d\n", i, target[i]);
- *     }
- *
- *     volk_free(src0);
- *     volk_free(src1);
- *     volk_free(src2);
- *     volk_free(src3);
- *     volk_free(target);
- *     return 0;
+ * for (unsigned int i = 0; i < N; ++i) {
+ *     src0[i] = 1;
+ *     src1[i] = 3;
+ *     src2[i] = 2;
+ *     src3[i] = 4;
  * }
+ *
+ * // Expected: max(max(1, 3), max(2, 4)) = max(3, 4) = 4 for each element
+ * short expected = 4;
+ *
+ * volk_16i_x4_quad_max_star_16i(target, src0, src1, src2, src3, N);
+ *
+ * printf("Expected: %d\n", expected);
+ * printf("Result:   %d\n", target[0]);
+ *
+ * volk_free(target);
+ * volk_free(src0);
+ * volk_free(src1);
+ * volk_free(src2);
+ * volk_free(src3);
  * \endcode
  */
 

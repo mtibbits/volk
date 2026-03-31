@@ -12,9 +12,15 @@
  *
  * \b Overview
  *
- * Computes the population count (popcnt), or Hamming weight of a
- * binary string. This kernel takes in a single unsigned 64-bit value
- * and returns the count of 1's that the value contains.
+ * Computes the population count (popcnt) of a 64-bit unsigned integer,
+ * returning the number of bits set to 1. This is equivalent to the
+ * Hamming weight of the binary representation.
+ *
+ * Population count is fundamental in digital communications for computing
+ * Hamming distances between codewords, which is central to error detection
+ * and correction in channel coding schemes such as block codes and LDPC
+ * decoders. It is also used in bit-level operations for spread-spectrum
+ * systems and scrambler state analysis.
  *
  * <b>Dispatcher Prototype</b>
  * \code
@@ -22,26 +28,27 @@
  * \endcode
  *
  * \b Inputs
- * \li value: The input value.
+ * \li value: The 64-bit input value (uint64_t) whose set bits are counted.
  *
  * \b Outputs
- * \li ret: The return value containing the popcnt.
+ * \li ret: Pointer to the result (uint64_t) containing the population count.
  *
  * \b Example
+ * Count the number of set bits in a known bit pattern.
  * \code
- *   int N = 10;
+ * unsigned int alignment = volk_get_alignment();
+ * uint64_t* ret = (uint64_t*)volk_malloc(sizeof(uint64_t), alignment);
  *
- *   uint64_t bitstring[] = {0x0, 0x1, 0xf, 0xffffffffffffffff,
- *       0x5555555555555555, 0xaaaaaaaaaaaaaaaa, 0x2a2a2a2a2a2a2a2a,
- *       0xffffffff, 0x32, 0x64};
- *   uint64_t* hamming_weight = (uint64_t*)volk_malloc(sizeof(uint64_t), volk_get_alignment());
+ * // 0xFFFFFFFF has 32 bits set in the lower half
+ * uint64_t value = 0xFFFFFFFF;
+ * uint64_t expected = 32;
  *
- *   for(unsigned int ii=0; ii<N; ++ii){
- *       volk_64u_popcnt(hamming_weight, bitstring[ii]);
- *       printf("hamming weight of %" PRIx64 " = %" PRIu64 "\n", bitstring[ii], *hamming_weight);
- *   }
+ * volk_64u_popcnt(ret, value);
  *
- *   volk_free(hamming_weight);
+ * printf("Expected: %lu\n", expected);
+ * printf("Result:   %lu\n", *ret);
+ *
+ * volk_free(ret);
  * \endcode
  */
 

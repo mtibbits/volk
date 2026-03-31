@@ -12,43 +12,50 @@
  *
  * \b Overview
  *
- * Takes the conjugate of a complex vector.
+ * Computes the complex conjugate of each element in a vector, i.e.
+ * cVector[i] = conj(aVector[i]). The real part is unchanged and the
+ * imaginary part is negated.
+ *
+ * Complex conjugation is a fundamental building block in many DSP operations.
+ * It appears in cross-correlation, matched filtering, and computing
+ * cross-spectral density, where one signal must be conjugated before
+ * multiplication. It is also used when reversing the sense of a frequency
+ * shift or reflecting a spectrum.
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_32fc_conjugate_32fc(lv_32fc_t* cVector, const lv_32fc_t* aVector, unsigned
- * int num_points) \endcode
+ * void volk_32fc_conjugate_32fc(lv_32fc_t* cVector, const lv_32fc_t* aVector, unsigned int num_points)
+ * \endcode
  *
  * \b Inputs
- * \li aVector: The input vector of complex floats.
- * \li num_points: The number of data points.
+ * \li aVector: The input vector of complex samples (lv_32fc_t).
+ * \li num_points: The number of complex samples.
  *
  * \b Outputs
- * \li cVector: The output vector of complex floats.
+ * \li cVector: The conjugated output vector of complex samples (lv_32fc_t).
  *
  * \b Example
- * Generate points around the top half of the unit circle and conjugate them
- * to give bottom half of the unit circle.
+ * Conjugate a constant vector and verify the imaginary part is negated.
  * \code
- *   int N = 10;
- *   unsigned int alignment = volk_get_alignment();
- *   lv_32fc_t* in  = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t)*N, alignment);
- *   lv_32fc_t* out = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t)*N, alignment);
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
+ * lv_32fc_t* in  = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t) * N, alignment);
+ * lv_32fc_t* out = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t) * N, alignment);
  *
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       float real = 2.f * ((float)ii / (float)N) - 1.f;
- *       float imag = std::sqrt(1.f - real * real);
- *       in[ii] = lv_cmake(real, imag);
- *   }
+ * for (unsigned int i = 0; i < N; ++i) {
+ *     in[i] = lv_cmake(3.0f, 4.0f);
+ * }
  *
- *   volk_32fc_conjugate_32fc(out, in, N);
+ * // Expected: conj(3 + 4j) = 3 - 4j
+ * lv_32fc_t expected = lv_cmake(3.0f, -4.0f);
  *
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       printf("out(%i) = %.1f + %.1fi\n", ii, lv_creal(out[ii]), lv_cimag(out[ii]));
- *   }
+ * volk_32fc_conjugate_32fc(out, in, N);
  *
- *   volk_free(in);
- *   volk_free(out);
+ * printf("Expected: %+.1f %+.1fj\n", lv_creal(expected), lv_cimag(expected));
+ * printf("Result:   %+.1f %+.1fj\n", lv_creal(out[0]), lv_cimag(out[0]));
+ *
+ * volk_free(in);
+ * volk_free(out);
  * \endcode
  */
 

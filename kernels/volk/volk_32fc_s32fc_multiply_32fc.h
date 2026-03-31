@@ -12,69 +12,57 @@
  *
  * \b Deprecation
  *
- * This kernel is deprecated, because passing in \p lv_32fc_t by value results in
- * undefined behavior, causing a segmentation fault on some architectures.
- * Use \ref volk_32fc_s32fc_multiply2_32fc instead.
+ * This kernel is deprecated, because passing in `lv_32fc_t` by value results in
+ * Undefined Behaviour, causing a segmentation fault on some architectures.
+ * Use `volk_32fc_s32fc_multiply2_32fc` instead.
  *
  * \b Overview
  *
- * Multiplies each element of a complex floating-point vector by a complex scalar.
- * For each element, computes cVector[i] = aVector[i] * scalar using standard complex
- * multiplication.
+ * Multiplies each element of a complex input vector by a complex scalar:
+ * cVector[i] = aVector[i] * scalar. This performs element-wise complex
+ * multiplication using standard complex arithmetic.
+ *
+ * In DSP applications, scaling a complex signal by a complex scalar is used
+ * for phase rotation, frequency shifting, and applying complex gains in
+ * operations such as AGC, beamforming, or channel equalization.
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_32fc_s32fc_multiply_32fc(lv_32fc_t* cVector, const lv_32fc_t* aVector,
- * const lv_32fc_t scalar, unsigned int num_points)
+ * void volk_32fc_s32fc_multiply_32fc(lv_32fc_t* cVector, const lv_32fc_t* aVector, const lv_32fc_t scalar, unsigned int num_points)
  * \endcode
  *
  * \b Inputs
- * \li aVector: Complex input vector of length \p num_points (lv_32fc_t).
- * \li scalar: The complex scalar multiplier (lv_32fc_t, passed by value).
- * \li num_points: The number of complex elements in \p aVector.
+ * \li aVector: The input complex signal vector (lv_32fc_t).
+ * \li scalar: The complex scalar to multiply against aVector (lv_32fc_t).
+ * \li num_points: The number of complex samples in aVector.
  *
  * \b Outputs
- * \li cVector: Complex output vector of length \p num_points (lv_32fc_t).
+ * \li cVector: The output complex vector (lv_32fc_t).
  *
  * \b Example
- * Generate points around the unit circle and shift the phase by pi/3 radians.
+ * Multiply a constant complex vector by a scalar and verify the result.
  * \code
- * #include <volk/volk.h>
- * #include <stdio.h>
- * #include <math.h>
- * #include <complex>
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
+ * lv_32fc_t* in  = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t) * N, alignment);
+ * lv_32fc_t* out = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t) * N, alignment);
  *
- * int main() {
- *     unsigned int N = 10;
- *     unsigned int alignment = volk_get_alignment();
- *     lv_32fc_t* in  = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t) * N, alignment);
- *     lv_32fc_t* out = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t) * N, alignment);
- *
- *     // Scalar rotates phase by pi/3
- *     lv_32fc_t scalar = lv_cmake((float)cos(M_PI / 3.0), (float)sin(M_PI / 3.0));
- *
- *     // Generate points around the unit circle
- *     float delta = 2.0f * (float)M_PI / (float)N;
- *     for (unsigned int i = 0; i < N / 2; ++i) {
- *         float real = cosf(delta * (float)i);
- *         float imag = sinf(delta * (float)i);
- *         in[i]         = lv_cmake(real, imag);
- *         in[i + N / 2] = lv_cmake(-real, -imag);
- *     }
- *
- *     volk_32fc_s32fc_multiply_32fc(out, in, scalar, N);
- *
- *     printf("  in mag   in phase  |  out mag  out phase\n");
- *     for (unsigned int i = 0; i < N; ++i) {
- *         printf("  %+1.2f    %+1.2f    |   %+1.2f    %+1.2f\n",
- *                std::abs(in[i]),  std::arg(in[i]),
- *                std::abs(out[i]), std::arg(out[i]));
- *     }
- *
- *     volk_free(in);
- *     volk_free(out);
- *     return 0;
+ * // Input: (3, 4) for all elements; scalar: (2, -1)
+ * for (unsigned int i = 0; i < N; ++i) {
+ *     in[i] = lv_cmake(3.0f, 4.0f);
  * }
+ * lv_32fc_t scalar = lv_cmake(2.0f, -1.0f);
+ *
+ * // Expected: (3+4j)*(2-1j) = 6-3j+8j-4j^2 = (10, 5)
+ * lv_32fc_t expected = lv_cmake(10.0f, 5.0f);
+ *
+ * volk_32fc_s32fc_multiply_32fc(out, in, scalar, N);
+ *
+ * printf("Expected: (%1.1f, %1.1f)\n", lv_creal(expected), lv_cimag(expected));
+ * printf("Result:   (%1.1f, %1.1f)\n", lv_creal(out[0]), lv_cimag(out[0]));
+ *
+ * volk_free(in);
+ * volk_free(out);
  * \endcode
  */
 

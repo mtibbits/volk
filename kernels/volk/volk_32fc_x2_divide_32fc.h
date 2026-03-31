@@ -13,46 +13,56 @@
  *
  * \b Overview
  *
- * Divide first vector of complexes element-wise by second.
+ * Divides a vector of complex floats element-wise by another vector of complex
+ * floats, computing c[i] = a[i] / b[i]. Complex division uses the identity
+ * (a + bj)/(c + dj) = (ac + bd)/(c² + d²) + (bc - ad)/(c² + d²)j.
+ *
+ * Element-wise complex division is commonly used in frequency-domain
+ * equalization, where received signal samples are divided by channel estimates
+ * to recover the transmitted symbols. It also appears in pilot-based channel
+ * estimation, spectral normalization, and transfer function computation.
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_32fc_x2_divide_32fc(lv_32fc_t* cVector, const lv_32fc_t* numeratorVector,
- * const lv_32fc_t* denumeratorVector, unsigned int num_points); \endcode
+ * void volk_32fc_x2_divide_32fc(lv_32fc_t* cVector, const lv_32fc_t* aVector,
+ * const lv_32fc_t* bVector, unsigned int num_points)
+ * \endcode
  *
  * \b Inputs
- * \li numeratorVector: The numerator complex values.
- * \li denumeratorVector: The denumerator complex values.
- * \li num_points: The number of data points.
+ * \li aVector: The numerator complex values (lv_32fc_t).
+ * \li bVector: The denominator complex values (lv_32fc_t).
+ * \li num_points: The number of complex samples.
  *
  * \b Outputs
- * \li outputVector: The output vector complex floats.
+ * \li cVector: The element-wise complex quotient (lv_32fc_t).
  *
  * \b Example
- * divide a complex vector by itself, demonstrating the result should be pretty close to
- * 1+0j.
- *
+ * Divide (3+4j) by (1+2j) for each element and verify against the known result.
  * \code
- *   int N = 10;
- *   unsigned int alignment = volk_get_alignment();
- *   lv_32fc_t* input_vector  = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t)*N, alignment);
- *   lv_32fc_t* out = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t)*N, alignment);
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
  *
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       float real_1 = std::cos(0.3f * (float)ii);
- *       float imag_1 = std::sin(0.3f * (float)ii);
- *       input_vector[ii] = lv_cmake(real_1, imag_1);
- *   }
+ * lv_32fc_t* aVector = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t) * N, alignment);
+ * lv_32fc_t* bVector = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t) * N, alignment);
+ * lv_32fc_t* cVector = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t) * N, alignment);
  *
- *   volk_32fc_x2_divide_32fc(out, input_vector, input_vector, N);
+ * for (unsigned int i = 0; i < N; ++i) {
+ *     aVector[i] = lv_cmake(3.0f, 4.0f);
+ *     bVector[i] = lv_cmake(1.0f, 2.0f);
+ * }
  *
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       printf("%1.4f%+1.4fj,", lv_creal(out[ii]), lv_cimag(out[ii]));
- *   }
- *   printf("\n");
+ * // Expected: (3+4j)/(1+2j) = (3*1+4*2)/(1+4) + (4*1-3*2)/(1+4)j = 2.2 - 0.4j
+ * float expected_re = 2.2f;
+ * float expected_im = -0.4f;
  *
- *   volk_free(input_vector);
- *   volk_free(out);
+ * volk_32fc_x2_divide_32fc(cVector, aVector, bVector, N);
+ *
+ * printf("Expected: %1.4f%+1.4fj\n", expected_re, expected_im);
+ * printf("Result:   %1.4f%+1.4fj\n", lv_creal(cVector[0]), lv_cimag(cVector[0]));
+ *
+ * volk_free(aVector);
+ * volk_free(bVector);
+ * volk_free(cVector);
  * \endcode
  *
  * \b Numerical accuracy
@@ -77,7 +87,7 @@
  * and armv7, and b) under aarch64.
  *
  * To avoid obtaining inf or nan in some architectures, care should be taken
- * that c*c + d*d is not too small. In particular, if c*c + d*d < FLT_MIN, then
+ * that c*c + d*d is not too small. In particular, if c*c + d*d < FLT_MAX, then
  * the calculation of 1.0/(c*c + d*d) will yield inf.
  *
  * For more information about numerical accuracy of complex division, see the

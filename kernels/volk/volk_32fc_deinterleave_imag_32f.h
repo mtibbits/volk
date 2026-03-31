@@ -12,45 +12,47 @@
  *
  * \b Overview
  *
- * Deinterleaves the complex floating point vector and return the imaginary
- * part (quadrature) of the samples.
+ * Deinterleaves the complex floating point vector and returns the imaginary
+ * (quadrature) component of each sample: qBuffer[i] = imag(complexVector[i]).
+ *
+ * Extracting the Q channel is a common step in IQ signal processing pipelines,
+ * such as quadrature demodulation, IQ imbalance correction, and spectral
+ * analysis where the in-phase and quadrature paths are processed separately.
  *
  * <b>Dispatcher Prototype</b>
  * \code
  * void volk_32fc_deinterleave_imag_32f(float* qBuffer, const lv_32fc_t* complexVector,
- * unsigned int num_points) \endcode
+ * unsigned int num_points)
+ * \endcode
  *
  * \b Inputs
- * \li complexVector: The complex input vector.
- * \li num_points: The number of complex data values to be deinterleaved.
+ * \li complexVector: The complex input vector of interleaved IQ samples (lv_32fc_t).
+ * \li num_points: The number of complex samples to deinterleave.
  *
  * \b Outputs
- * \li qBuffer: The Q buffer output data.
+ * \li qBuffer: The extracted imaginary (quadrature) components (float).
  *
  * \b Example
- * Generate complex numbers around the top half of the unit circle and
- * extract all of the imaginary parts to a float buffer.
+ * Fill a complex vector with a constant value and verify the extracted imaginary parts.
  * \code
- *   int N = 10;
- *   unsigned int alignment = volk_get_alignment();
- *   lv_32fc_t* in  = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t)*N, alignment);
- *   float* im = (float*)volk_malloc(sizeof(float)*N, alignment);
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
+ * lv_32fc_t* in = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t) * N, alignment);
+ * float* im = (float*)volk_malloc(sizeof(float) * N, alignment);
  *
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       float real = 2.f * ((float)ii / (float)N) - 1.f;
- *       float imag = std::sqrt(1.f - real * real);
- *       in[ii] = lv_cmake(real, imag);
- *   }
+ * for (unsigned int i = 0; i < N; ++i) {
+ *     in[i] = lv_cmake(1.0f, 3.0f);
+ * }
  *
- *   volk_32fc_deinterleave_imag_32f(im, in, N);
+ * float expected = 3.0f; // every imaginary part is 3.0
  *
- *   printf("          imaginary part\n");
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       printf("out(%i) = %+.1f\n", ii, im[ii]);
- *   }
+ * volk_32fc_deinterleave_imag_32f(im, in, N);
  *
- *   volk_free(in);
- *   volk_free(im);
+ * printf("Expected: %+.1f\n", expected);
+ * printf("Result:   %+.1f %+.1f %+.1f %+.1f\n", im[0], im[1], im[2], im[3]);
+ *
+ * volk_free(in);
+ * volk_free(im);
  * \endcode
  */
 

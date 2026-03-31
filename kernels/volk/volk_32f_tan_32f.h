@@ -12,8 +12,13 @@
  *
  * \b Overview
  *
- * Computes the tangent of the input vector and stores the results in the output
- * vector.
+ * Computes the tangent of each element in the input buffer:
+ * bVector[i] = tan(aVector[i]).
+ *
+ * The tangent function appears in digital filter design, particularly in the
+ * bilinear transform where tan(omega/2) maps analog prototype frequencies to
+ * the digital domain. It is also used in coordinate transformations and
+ * phase-related computations in signal processing pipelines.
  *
  * <b>Dispatcher Prototype</b>
  * \code
@@ -21,39 +26,37 @@
  * \endcode
  *
  * \b Inputs
- * \li aVector: The input vector of floats.
- * \li num_points: The number of data points.
+ * \li aVector: Input buffer of angles in radians (float).
+ * \li num_points: The number of values to process.
  *
  * \b Outputs
- * \li bVector: The output vector of floats.
+ * \li bVector: Output buffer for tangent values (float).
  *
  * \b Example
- * Calculate tan(theta) for common angles.
+ * Compute tan(theta) for common angles and verify against known values.
  * \code
- *   int N = 10;
- *   unsigned int alignment = volk_get_alignment();
- *   float* in = (float*)volk_malloc(sizeof(float)*N, alignment);
- *   float* out = (float*)volk_malloc(sizeof(float)*N, alignment);
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
  *
- *   in[0] = 0.000;
- *   in[1] = 0.524;
- *   in[2] = 0.785;
- *   in[3] = 1.047;
- *   in[4] = 1.571;
- *   in[5] = 1.571;
- *   in[6] = -1.047;
- *   in[7] = -0.785;
- *   in[8] = -0.524;
- *   in[9] = -0.000;
+ * float* in = (float*)volk_malloc(sizeof(float) * N, alignment);
+ * float* out = (float*)volk_malloc(sizeof(float) * N, alignment);
  *
- *   volk_32f_tan_32f(out, in, N);
+ * // tan(0)=0, tan(pi/4)=1, tan(-pi/4)=-1, tan(pi/6)=1/sqrt(3)
+ * in[0] = 0.0f;
+ * in[1] = 0.7853981f;  // pi/4
+ * in[2] = -0.7853981f; // -pi/4
+ * in[3] = 0.5235988f;  // pi/6
  *
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       printf("tan(%1.3f) = %1.3f\n", in[ii], out[ii]);
- *   }
+ * float expected3 = 0.5773503f; // tan(pi/6) = 1/sqrt(3)
  *
- *   volk_free(in);
- *   volk_free(out);
+ * volk_32f_tan_32f(out, in, N);
+ *
+ * printf("Expected: tan(0)=0, tan(pi/4)=1, tan(-pi/4)=-1, tan(pi/6)=%.7f\n", expected3);
+ * printf("Result:   tan(0)=%.7f, tan(pi/4)=%.7f, tan(-pi/4)=%.7f, tan(pi/6)=%.7f\n",
+ *        out[0], out[1], out[2], out[3]);
+ *
+ * volk_free(in);
+ * volk_free(out);
  * \endcode
  */
 

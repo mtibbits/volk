@@ -12,8 +12,14 @@
  *
  * \b Overview
  *
- * Computes exp of input vector and stores results in output
- * vector. This uses a fast exp approximation with a maximum 7% error.
+ * Computes a fast approximation of the exponential function (e^x) on each
+ * element of the input vector, storing results in the output vector. The
+ * approximation trades accuracy for speed, with a maximum error of about 7%.
+ *
+ * In DSP applications, the exponential function appears in envelope detection,
+ * log-likelihood ratio computation for soft-decision decoding, and Gaussian
+ * noise generation. This fast variant is useful when throughput matters more
+ * than precision, such as in real-time demodulation or adaptive gain control.
  *
  * <b>Dispatcher Prototype</b>
  * \code
@@ -21,31 +27,34 @@
  * \endcode
  *
  * \b Inputs
- * \li aVector: Input vector of floats.
- * \li num_points: The number of data points.
+ * \li aVector: Input vector of exponent values (float).
+ * \li num_points: The number of samples to process.
  *
  * \b Outputs
- * \li bVector: The output vector.
+ * \li bVector: Output vector of approximated exponential values (float).
  *
  * \b Example
+ * Compute the fast exponential of a constant input and compare against the known result.
  * \code
- *   int N = 10;
- *   unsigned int alignment = volk_get_alignment();
- *   float* in = (float*)volk_malloc(sizeof(float)*N, alignment);
- *   float* out = (float*)volk_malloc(sizeof(float)*N, alignment);
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
+ * float* in = (float*)volk_malloc(sizeof(float) * N, alignment);
+ * float* out = (float*)volk_malloc(sizeof(float) * N, alignment);
  *
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       in[ii] = std::log((float)ii);
- *   }
+ * for (unsigned int i = 0; i < N; ++i) {
+ *     in[i] = 1.0f;
+ * }
  *
- *   volk_32f_expfast_32f(out, in, N);
+ * // exp(1.0) = e = 2.718282 (fast approximation may differ by up to 7%)
+ * float expected = 2.718282f;
  *
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       printf("out(%i) = %f\n", ii, out[ii]);
- *   }
+ * volk_32f_expfast_32f(out, in, N);
  *
- *   volk_free(in);
- *   volk_free(out);
+ * printf("Expected: %f\n", expected);
+ * printf("Result:   %f\n", out[0]);
+ *
+ * volk_free(in);
+ * volk_free(out);
  * \endcode
  */
 

@@ -12,59 +12,56 @@
  *
  * \b Overview
  *
- * Computes the dot product between a vector of 16-bit integers and a
- * vector of complex floats. Each short input is converted to float,
- * multiplied by the corresponding complex tap, and the products are
- * summed into a single complex result.
+ * Computes the dot product (inner product) of a 16-bit integer input
+ * vector and a complex float taps vector:
+ * result = sum(input[i] * taps[i], i=0..N-1). Each short input sample
+ * is promoted to float before multiplication with the complex tap.
+ *
+ * This kernel is commonly used in FIR filtering, where \p input contains
+ * signal samples and \p taps contains the complex-valued filter
+ * coefficients. It is also applicable to matched filtering,
+ * correlation, and beamforming operations where the input signal is
+ * quantized to 16-bit integers.
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_16i_32fc_dot_prod_32fc(lv_32fc_t* result, const short* input, const
- * lv_32fc_t* taps, unsigned int num_points) \endcode
+ * void volk_16i_32fc_dot_prod_32fc(lv_32fc_t* result, const short* input, const lv_32fc_t* taps, unsigned int num_points)
+ * \endcode
  *
  * \b Inputs
- * \li input: vector of 16-bit integer samples (short).
- * \li taps: vector of complex float taps (lv_32fc_t).
- * \li num_points: number of elements in both \p input and \p taps.
+ * \li input: The input signal samples (short).
+ * \li taps: The complex filter taps (lv_32fc_t).
+ * \li num_points: The number of samples in both \p input and \p taps.
  *
  * \b Outputs
- * \li result: pointer to a complex float to store the dot product result (lv_32fc_t).
+ * \li result: The complex dot product result (lv_32fc_t).
  *
  * \b Example
- * Compute a weighted sum of short-valued samples with complex coefficients.
+ * Dot product of constant vectors so the expected result is N * input[0] * taps[0].
  * \code
- *   #include <volk/volk.h>
- *   #include <stdio.h>
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
  *
- *   int main() {
- *     unsigned int num_points = 8;
- *     unsigned int alignment = volk_get_alignment();
+ * short* input = (short*)volk_malloc(sizeof(short) * N, alignment);
+ * lv_32fc_t* taps = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t) * N, alignment);
+ * lv_32fc_t* result = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t), alignment);
  *
- *     // Allocate aligned memory
- *     short* input = (short*)volk_malloc(sizeof(short) * num_points, alignment);
- *     lv_32fc_t* taps =
- *         (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t) * num_points, alignment);
- *     lv_32fc_t result;
+ * for (unsigned int i = 0; i < N; ++i) {
+ *   input[i] = 3;
+ *   taps[i] = lv_cmake(2.0f, 1.0f);
+ * }
  *
- *     // Initialize input samples (e.g., a short ramp)
- *     for (unsigned int i = 0; i < num_points; i++) {
- *       input[i] = (short)(i * 100);
- *     }
+ * // Expected: 4 * 3 * (2 + 1j) = (24, 12)
+ * lv_32fc_t expected = lv_cmake(24.0f, 12.0f);
  *
- *     // Initialize complex taps (e.g., a simple low-pass-like filter)
- *     for (unsigned int i = 0; i < num_points; i++) {
- *       taps[i] = lv_cmake(0.125f, 0.0f);
- *     }
+ * volk_16i_32fc_dot_prod_32fc(result, input, taps, N);
  *
- *     // Compute the dot product: result = sum(input[i] * taps[i])
- *     volk_16i_32fc_dot_prod_32fc(&result, input, taps, num_points);
+ * printf("Expected: (%f, %f)\n", lv_creal(expected), lv_cimag(expected));
+ * printf("Result:   (%f, %f)\n", lv_creal(*result), lv_cimag(*result));
  *
- *     printf("Dot product = (%f, %f)\n", lv_creal(result), lv_cimag(result));
- *
- *     volk_free(input);
- *     volk_free(taps);
- *     return 0;
- *   }
+ * volk_free(input);
+ * volk_free(taps);
+ * volk_free(result);
  * \endcode
  */
 

@@ -12,52 +12,51 @@
  *
  * \b Overview
  *
- * Multiplies the input complex vector by a complex scalar and returns
- * the results.
+ * Multiplies each sample in a complex vector by a complex scalar, computing
+ * cVector[i] = aVector[i] * scalar for each element. The scalar is passed by
+ * pointer rather than by value, which distinguishes this kernel from
+ * volk_32fc_s32fc_multiply_32fc.
+ *
+ * Complex scalar multiplication is fundamental to many DSP operations including
+ * phase rotation, frequency shifting, and applying complex gains in AGC or
+ * beamforming systems. Multiplying by a unit-magnitude complex scalar rotates
+ * each sample's phase without changing its amplitude.
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_32fc_s32fc_multiply2_32fc(lv_32fc_t* cVector, const lv_32fc_t* aVector, const
- * lv_32fc_t* scalar, unsigned int num_points);
+ * void volk_32fc_s32fc_multiply2_32fc(lv_32fc_t* cVector, const lv_32fc_t* aVector, const lv_32fc_t* scalar, unsigned int num_points)
  * \endcode
  *
  * \b Inputs
- * \li aVector: The input vector to be multiplied.
- * \li scalar: The complex scalar to multiply against aVector.
- * \li num_points: The number of complex values in aVector.
+ * \li aVector: The input complex samples to be multiplied (lv_32fc_t).
+ * \li scalar: Pointer to the complex scalar to multiply against aVector (lv_32fc_t*).
+ * \li num_points: The number of complex samples in aVector.
  *
  * \b Outputs
- * \li cVector: The vector where the results will be stored.
+ * \li cVector: The output vector of complex products (lv_32fc_t).
  *
  * \b Example
- * Generate points around the unit circle and shift the phase pi/3 rad.
+ * Multiply a constant complex vector by a complex scalar and verify the result.
  * \code
- *   int N = 10;
- *   unsigned int alignment = volk_get_alignment();
- *   lv_32fc_t* in  = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t)*N, alignment);
- *   lv_32fc_t* out = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t)*N, alignment);
- *   lv_32fc_t scalar = lv_cmake((float)std::cos(M_PI/3.f), (float)std::sin(M_PI/3.f));
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
+ * lv_32fc_t* in  = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t) * N, alignment);
+ * lv_32fc_t* out = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t) * N, alignment);
  *
- *   float delta = 2.f*M_PI / (float)N;
- *   for(unsigned int ii = 0; ii < N/2; ++ii){
- *       // Generate points around the unit circle
- *       float real = std::cos(delta * (float)ii);
- *       float imag = std::sin(delta * (float)ii);
- *       in[ii] = lv_cmake(real, imag);
- *       in[ii+N/2] = lv_cmake(-real, -imag);
- *   }
+ * // Input: (3 + 4i), Scalar: (2 + 1i)
+ * // Expected: (3+4i)*(2+1i) = (6-4) + (3+8)i = 2 + 11i
+ * for (unsigned int i = 0; i < N; ++i) {
+ *     in[i] = lv_cmake(3.0f, 4.0f);
+ * }
+ * lv_32fc_t scalar = lv_cmake(2.0f, 1.0f);
  *
- *   volk_32fc_s32fc_multiply2_32fc(out, in, &scalar, N);
+ * volk_32fc_s32fc_multiply2_32fc(out, in, &scalar, N);
  *
- *   printf(" mag   phase  |   mag   phase\n");
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       printf("%+1.2f  %+1.2f  |  %+1.2f   %+1.2f\n",
- *           std::abs(in[ii]), std::arg(in[ii]),
- *           std::abs(out[ii]), std::arg(out[ii]));
- *   }
+ * printf("Expected: 2.00 + 11.00i\n");
+ * printf("Result:   %+.2f %+.2fi\n", lv_creal(out[0]), lv_cimag(out[0]));
  *
- *   volk_free(in);
- *   volk_free(out);
+ * volk_free(in);
+ * volk_free(out);
  * \endcode
  */
 

@@ -12,14 +12,17 @@
  *
  * \b Overview
  *
- * Returns Argmax_i x[i]. Finds and returns the index which contains
- * the first maximum value in the given vector.
+ * Finds and returns the index of the first maximum value in the given
+ * vector, computing Argmax_i x[i]. In signal processing this operation
+ * is commonly used for peak detection in correlation outputs (e.g.
+ * timing synchronization), identifying the strongest spectral bin after
+ * an FFT, or selecting the best candidate in maximum-likelihood
+ * decoding.
  *
  * Note that num_points is a uint32_t, but the return value is
  * uint16_t. Providing a vector larger than the max of a uint16_t
  * (65536) would miss anything outside of this boundary. The kernel
- * will check the length of num_points and cap it to this max value,
- * anyways.
+ * will check the length of num_points and cap it to this max value.
  *
  * <b>Dispatcher Prototype</b>
  * \code
@@ -27,28 +30,33 @@
  * \endcode
  *
  * \b Inputs
- * \li src0: The input vector of floats.
- * \li num_points: The number of data points.
+ * \li src0: The input vector of samples (float).
+ * \li num_points: The number of samples in the input vector.
  *
  * \b Outputs
- * \li target: The index of the first maximum value in the input buffer.
+ * \li target: The index of the first maximum value in the input vector (uint16_t).
  *
  * \b Example
+ * Find the index of the maximum in a parabola with peak at index 4.
  * \code
- *   int N = 10;
- *   uint32_t alignment = volk_get_alignment();
- *   float* in = (float*)volk_malloc(sizeof(float)*N, alignment);
+ *   unsigned int N = 10;
+ *   unsigned int alignment = volk_get_alignment();
+ *   float* in = (float*)volk_malloc(sizeof(float) * N, alignment);
  *   uint16_t* out = (uint16_t*)volk_malloc(sizeof(uint16_t), alignment);
  *
- *   for(uint32_t ii = 0; ii < N; ++ii){
- *       float x = (float)ii;
- *       // a parabola with a maximum at x=4
- *       in[ii] = -(x-4) * (x-4) + 5;
+ *   for (unsigned int i = 0; i < N; ++i) {
+ *       float x = (float)i;
+ *       // a parabola with a maximum at x=4: -(x-4)^2 + 5
+ *       in[i] = -(x - 4) * (x - 4) + 5;
  *   }
+ *
+ *   // Expected: index 4 (value 5.00)
+ *   unsigned int expected = 4;
  *
  *   volk_32f_index_max_16u(out, in, N);
  *
- *   printf("maximum is %1.2f at index %u\n", in[*out], *out);
+ *   printf("Expected: index %u\n", expected);
+ *   printf("Result:   index %u (value %1.2f)\n", *out, in[*out]);
  *
  *   volk_free(in);
  *   volk_free(out);

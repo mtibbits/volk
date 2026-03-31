@@ -12,50 +12,55 @@
  *
  * \b Overview
  *
- * Takes input vector iBuffer as the real (inphase) part and input
- * vector qBuffer as the imag (quadrature) part and combines them into
- * a complex output vector. The output is scaled by the input scalar
- * value and convert to a 16-bit short complex number.
+ * Interleaves two float input vectors — the inphase (real) part and the
+ * quadrature (imaginary) part — scales each sample by a scalar value, and
+ * converts to 16-bit complex integers:
+ * complexVector[i] = (int16_t)rintf(iBuffer[i] * scalar) + j*(int16_t)rintf(qBuffer[i] * scalar).
+ *
+ * This kernel is commonly used in transmit signal paths where baseband I/Q
+ * samples in floating-point must be quantized and packed into fixed-point
+ * complex format for a DAC or digital upconverter. The scalar controls the
+ * full-scale mapping into the 16-bit range.
  *
  * <b>Dispatcher Prototype</b>
  * \code
  * void volk_32f_x2_s32f_interleave_16ic(lv_16sc_t* complexVector, const float* iBuffer,
- * const float* qBuffer, const float scalar, unsigned int num_points) \endcode
+ * const float* qBuffer, const float scalar, unsigned int num_points)
+ * \endcode
  *
  * \b Inputs
- * \li iBuffer: Input vector of samples for the real part.
- * \li qBuffer: Input vector of samples for the imaginary part.
- * \li scalar:  The scalar value used to scale the values before converting to shorts.
- * \li num_points: The number of values in both input vectors.
+ * \li iBuffer: Input vector of float samples for the inphase (real) part.
+ * \li qBuffer: Input vector of float samples for the quadrature (imaginary) part.
+ * \li scalar: The scalar value used to scale samples before converting to 16-bit integers.
+ * \li num_points: The number of samples in each input vector.
  *
  * \b Outputs
- * \li complexVector: The output vector of complex numbers.
+ * \li complexVector: The output vector of 16-bit complex integers (lv_16sc_t).
  *
  * \b Example
- * Generate points around the unit circle and convert to complex integers.
+ * Scale constant I/Q values and verify the interleaved complex output.
  * \code
- *   int N = 10;
- *   unsigned int alignment = volk_get_alignment();
- *   float* imag = (float*)volk_malloc(sizeof(float)*N, alignment);
- *   float* real = (float*)volk_malloc(sizeof(float)*N, alignment);
- *   lv_16sc_t* out = (lv_16sc_t*)volk_malloc(sizeof(lv_16sc_t)*N, alignment);
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
+ * float* iBuffer = (float*)volk_malloc(sizeof(float) * N, alignment);
+ * float* qBuffer = (float*)volk_malloc(sizeof(float) * N, alignment);
+ * lv_16sc_t* out = (lv_16sc_t*)volk_malloc(sizeof(lv_16sc_t) * N, alignment);
  *
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       real[ii] = 2.f * ((float)ii / (float)N) - 1.f;
- *       imag[ii] = std::sqrt(1.f - real[ii] * real[ii]);
- *   }
- *   // Normalize by smallest delta (0.02 in this example)
- *   float scale = 50.f;
+ * for (unsigned int i = 0; i < N; ++i) {
+ *     iBuffer[i] = 3.0f;
+ *     qBuffer[i] = 4.0f;
+ * }
+ * float scalar = 10.0f;
  *
- *   volk_32f_x2_s32f_interleave_16ic(out, real, imag, scale, N);
+ * // Expected: real = rintf(3.0 * 10.0) = 30, imag = rintf(4.0 * 10.0) = 40
+ * volk_32f_x2_s32f_interleave_16ic(out, iBuffer, qBuffer, scalar, N);
  *
- *  for(unsigned int ii = 0; ii < N; ++ii){
- *      printf("out[%u] = %i + %ij\n", ii, std::real(out[ii]), std::imag(out[ii]));
- *  }
+ * printf("Expected: 30 + 40j\n");
+ * printf("Result:   %d + %dj\n", lv_creal(out[0]), lv_cimag(out[0]));
  *
- *   volk_free(imag);
- *   volk_free(real);
- *   volk_free(out);
+ * volk_free(iBuffer);
+ * volk_free(qBuffer);
+ * volk_free(out);
  * \endcode
  */
 

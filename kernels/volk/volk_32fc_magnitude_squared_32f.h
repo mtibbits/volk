@@ -12,8 +12,14 @@
  *
  * \b Overview
  *
- * Calculates the magnitude squared of the complexVector and stores
- * the results in the magnitudeVector.
+ * Computes the squared magnitude of each complex sample:
+ * magnitudeVector[i] = real(complexVector[i])^2 + imag(complexVector[i])^2.
+ *
+ * Squared magnitude is widely used in signal processing for power estimation,
+ * energy detection, and automatic gain control (AGC), where the true magnitude
+ * is not needed and avoiding the square-root operation saves computation. It is
+ * also commonly used in spectral analysis to compute power spectral density
+ * from FFT output.
  *
  * <b>Dispatcher Prototype</b>
  * \code
@@ -21,37 +27,36 @@
  * complexVector, unsigned int num_points) \endcode
  *
  * \b Inputs
- * \li complexVector: The complex input vector.
- * \li num_points: The number of samples.
+ * \li complexVector: The complex input vector of samples (lv_32fc_t).
+ * \li num_points: The number of complex samples.
  *
  * \b Outputs
- * \li magnitudeVector: The output value.
+ * \li magnitudeVector: The squared magnitude of each sample (float).
  *
  * \b Example
- * Calculate the magnitude squared of \f$x^2 + x\f$ for points around the unit circle.
+ * Compute the squared magnitude of a 3-4-5 Pythagorean triple: |3+4j|^2 = 25.
  * \code
- *   int N = 10;
+ *   unsigned int N = 4;
  *   unsigned int alignment = volk_get_alignment();
- *   lv_32fc_t* in  = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t)*N, alignment);
- *   float* magnitude = (float*)volk_malloc(sizeof(float)*N, alignment);
+ *   lv_32fc_t* in = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t) * N, alignment);
+ *   float* out = (float*)volk_malloc(sizeof(float) * N, alignment);
  *
- *   for(unsigned int ii = 0; ii < N/2; ++ii){
- *       float real = 2.f * ((float)ii / (float)N) - 1.f;
- *       float imag = std::sqrt(1.f - real * real);
- *       in[ii] = lv_cmake(real, imag);
- *       in[ii] = in[ii] * in[ii] + in[ii];
- *       in[N-1-ii] = lv_cmake(real, imag);
- *       in[N-1-ii] = in[N-1-ii] * in[N-1-ii] + in[N-1-ii];
+ *   for (unsigned int i = 0; i < N; ++i) {
+ *       in[i] = lv_cmake(3.0f, 4.0f);
  *   }
  *
- *   volk_32fc_magnitude_squared_32f(magnitude, in, N);
+ *   // Expected: 3^2 + 4^2 = 25 for each sample
+ *   float expected = 25.0f;
  *
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       printf("out(%i) = %+.1f\n", ii, magnitude[ii]);
+ *   volk_32fc_magnitude_squared_32f(out, in, N);
+ *
+ *   printf("Expected: %f\n", expected);
+ *   for (unsigned int i = 0; i < N; ++i) {
+ *       printf("Result[%u]: %f\n", i, out[i]);
  *   }
  *
  *   volk_free(in);
- *   volk_free(magnitude);
+ *   volk_free(out);
  * \endcode
  */
 

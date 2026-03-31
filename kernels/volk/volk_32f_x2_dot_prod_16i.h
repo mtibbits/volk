@@ -12,57 +12,56 @@
  *
  * \b Overview
  *
- * Computes the dot product (inner product) between two float vectors and
- * stores the result as a rounded 16-bit integer (int16_t). The floating-point
- * sum of element-wise products is converted to fixed-point via rintf().
+ * Computes the dot product (inner product) of two float vectors and stores
+ * the result as a 16-bit integer:
+ * result = round(sum(input[i] * taps[i])).
+ *
+ * This kernel is commonly used in FIR filtering and matched filtering, where
+ * the \p input vector contains signal samples and the \p taps vector holds
+ * the filter coefficients. The fixed-point output is useful in systems that
+ * require integer arithmetic downstream, such as hardware interfaces or
+ * fixed-point processing chains.
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_32f_x2_dot_prod_16i(int16_t* result, const float* input, const float*
- * taps, unsigned int num_points)
+ * void volk_32f_x2_dot_prod_16i(int16_t* result, const float* input, const float* taps,
+ * unsigned int num_points)
  * \endcode
  *
  * \b Inputs
- * \li input: vector of floats.
- * \li taps: vector of float taps.
- * \li num_points: number of samples in both \p input and \p taps.
+ * \li input: The input signal samples (float).
+ * \li taps: The filter tap coefficients (float).
+ * \li num_points: The number of samples in both \p input and \p taps.
  *
  * \b Outputs
- * \li result: pointer to an int16_t value to hold the dot product result.
+ * \li result: The dot product result, rounded to nearest integer (int16_t).
  *
  * \b Example
- * Compute the dot product of a short signal with a simple averaging filter.
+ * Dot product of constant vectors: 4 * (2.0 * 3.0) = 24.
  * \code
- *   #include <volk/volk.h>
- *   #include <stdio.h>
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
  *
- *   int main() {
- *     unsigned int N = 8;
- *     unsigned int alignment = volk_get_alignment();
+ * float* input = (float*)volk_malloc(sizeof(float) * N, alignment);
+ * float* taps = (float*)volk_malloc(sizeof(float) * N, alignment);
+ * int16_t* result = (int16_t*)volk_malloc(sizeof(int16_t), alignment);
  *
- *     float* input = (float*)volk_malloc(sizeof(float) * N, alignment);
- *     float* taps  = (float*)volk_malloc(sizeof(float) * N, alignment);
- *     int16_t result = 0;
+ * for (unsigned int i = 0; i < N; ++i) {
+ *   input[i] = 2.0f;
+ *   taps[i] = 3.0f;
+ * }
  *
- *     // Fill input with sample signal values
- *     input[0] = 10.0f;  input[1] = 20.0f;  input[2] = 30.0f;  input[3] = 40.0f;
- *     input[4] = 50.0f;  input[5] = 60.0f;  input[6] = 70.0f;  input[7] = 80.0f;
+ * // Expected: 4 * (2.0 * 3.0) = 24
+ * int16_t expected = 24;
  *
- *     // Fill taps with uniform weights (averaging filter)
- *     for (unsigned int i = 0; i < N; i++) {
- *       taps[i] = 0.125f;  // 1/8
- *     }
+ * volk_32f_x2_dot_prod_16i(result, input, taps, N);
  *
- *     // Compute dot product: sum(input[i] * taps[i]) rounded to int16_t
- *     volk_32f_x2_dot_prod_16i(&result, input, taps, N);
+ * printf("Expected: %d\n", expected);
+ * printf("Result:   %d\n", *result);
  *
- *     // Expected: (10+20+30+40+50+60+70+80)*0.125 = 45.0 -> 45
- *     printf("Dot product result: %d\n", result);
- *
- *     volk_free(input);
- *     volk_free(taps);
- *     return 0;
- *   }
+ * volk_free(input);
+ * volk_free(taps);
+ * volk_free(result);
  * \endcode
  */
 

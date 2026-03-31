@@ -12,102 +12,71 @@
  *
  * \b Overview
  *
- * Performs convolutional decoding for a K=7, rate 1/2 convolutional code
- * using the Viterbi algorithm (add-compare-select butterfly with
- * renormalization). The code polynomials are user-defined via the Branchtab
- * lookup table.
+ * Performs a radix-2 Viterbi butterfly update for convolutional decoding
+ * of a K=7, rate 1/2 convolutional code with user-defined polynomials.
+ * Processes framebits + excess trellis steps, computing branch metrics
+ * from received channel symbols, updating path metrics, and storing
+ * trellis decisions for later traceback.
+ *
+ * Viterbi decoding is the standard maximum-likelihood decoding technique
+ * for convolutional codes used in digital communication systems such as
+ * satellite links, deep-space telemetry, and mobile standards. The branch
+ * table (Branchtab) encodes the generator polynomials, the received
+ * symbols (syms) are soft or hard decision samples from the demodulator,
+ * and the excess parameter adds tail bits to flush the encoder back to a
+ * known state.
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_8u_x4_conv_k7_r2_8u(unsigned char* Y, unsigned char* X, unsigned char*
- * syms, unsigned char* dec, unsigned int framebits, unsigned int excess, unsigned char*
- * Branchtab) \endcode
+ * void volk_8u_x4_conv_k7_r2_8u(unsigned char* Y, unsigned char* X,
+ *   unsigned char* syms, unsigned char* dec, unsigned int framebits,
+ *   unsigned int excess, unsigned char* Branchtab)
+ * \endcode
  *
  * \b Inputs
- * \li X: Current path metrics for all 64 trellis states. Initialize state 0 to 0 and
- * all others to a large value (e.g. 63). Array of 64 unsigned chars, aligned.
- * \li syms: Soft-decision input symbols. Two symbols per bit (rate 1/2), so the length
- * is 2 * (framebits + excess). Values range from 0 to 255.
- * \li dec: Decision buffer for storing trellis traceback decisions. Must be at least
- * 8 * (framebits + excess) bytes and cleared to zero before calling. Aligned.
- * \li framebits: Size of the frame to decode in bits.
- * \li excess: Number of additional tail bits beyond the frame, typically K-1 = 6.
- * \li Branchtab: Branch metric lookup table encoding the convolutional code polynomials.
- * Array of 64 unsigned chars (RATE * NUMSTATES/2 = 2 * 32), aligned. Each entry is 0 or
- * 255 representing the expected parity output for each half-state.
+ * \li X: Current path metric state buffer (unsigned char), 64 elements.
+ * \li syms: Received channel symbols (unsigned char), 2 per trellis step.
+ * \li dec: Decision buffer (unsigned char) for storing trellis decisions.
+ * \li framebits: Number of data bits in the frame to decode.
+ * \li excess: Number of extra tail bits to process beyond framebits.
+ * \li Branchtab: Branch metric lookup table (unsigned char), 64 entries encoding the generator polynomials.
  *
  * \b Outputs
- * \li Y: Alternate path metrics buffer used as workspace. After the call, final path
- * metrics reside in Y or X depending on the parity of (framebits + excess). Array of 64
- * unsigned chars, aligned.
+ * \li Y: Updated path metric state buffer (unsigned char), 64 elements.
  *
  * \b Example
- * Set up and run the Viterbi ACS butterfly for a short frame using CCSDS-standard
- * polynomials.
+ * Decode one trellis step starting from the all-zero state.
  * \code
- *   #include <volk/volk.h>
- *   #include <stdio.h>
- *   #include <string.h>
+ * unsigned int framebits = 1;
+ * unsigned int excess = 0;
+ * unsigned int alignment = volk_get_alignment();
  *
- *   int main(){
- *     unsigned int framebits = 16;
- *     unsigned int excess = 6;       // Tail bits (K-1) to flush the encoder
- *     unsigned int numstates = 64;   // 2^(K-1) for K=7
- *     unsigned int total_bits = framebits + excess;
- *     unsigned int alignment = volk_get_alignment();
+ * unsigned char* Y = (unsigned char*)volk_malloc(sizeof(unsigned char) * 64, alignment);
+ * unsigned char* X = (unsigned char*)volk_malloc(sizeof(unsigned char) * 64, alignment);
+ * unsigned char* syms = (unsigned char*)volk_malloc(sizeof(unsigned char) * 2, alignment);
+ * unsigned char* dec = (unsigned char*)volk_malloc(sizeof(unsigned char) * 8, alignment);
+ * unsigned char* Branchtab = (unsigned char*)volk_malloc(sizeof(unsigned char) * 64, alignment);
  *
- *     // Path metric buffers: NUMSTATES bytes each
- *     unsigned char* Y = (unsigned char*)volk_malloc(numstates, alignment);
- *     unsigned char* X = (unsigned char*)volk_malloc(numstates, alignment);
+ * // Initialize: state 0 has metric 0, all others are high
+ * memset(X, 127, 64);
+ * X[0] = 0;
+ * memset(Y, 0, 64);
+ * memset(dec, 0, 8);
+ * // All-zero symbols and branch table
+ * memset(syms, 0, 2);
+ * memset(Branchtab, 0, 64);
  *
- *     // Soft-decision symbols: 2 per bit (rate 1/2)
- *     unsigned char* syms = (unsigned char*)volk_malloc(2 * total_bits, alignment);
+ * volk_8u_x4_conv_k7_r2_8u(Y, X, syms, dec, framebits, excess, Branchtab);
  *
- *     // Decision buffer: 8 bytes per trellis step
- *     unsigned char* dec = (unsigned char*)volk_malloc(8 * total_bits, alignment);
+ * // After one step from all-zero init, state 0 should retain the best metric (0)
+ * printf("Expected state 0 metric: 0\n");
+ * printf("Result   state 0 metric: %d\n", Y[0]);
  *
- *     // Branch metric table: RATE * NUMSTATES/2 = 64 bytes
- *     unsigned char* Branchtab = (unsigned char*)volk_malloc(numstates, alignment);
- *
- *     // Initialize path metrics: state 0 starts at 0, all others at max cost
- *     memset(X, 63, numstates);
- *     X[0] = 0;
- *     memset(Y, 0, numstates);
- *
- *     // Build branch table for CCSDS polynomials (171o = 0x79, 133o = 0x5B)
- *     unsigned char polys[2] = {0x79, 0x5B};
- *     unsigned int p, s;
- *     for (p = 0; p < 2; p++) {
- *       for (s = 0; s < numstates / 2; s++) {
- *         unsigned int bits = s & (polys[p] >> 1);
- *         unsigned char parity = 0;
- *         while (bits) { parity ^= bits & 1; bits >>= 1; }
- *         Branchtab[s + p * (numstates / 2)] = parity ? 255 : 0;
- *       }
- *     }
- *
- *     // Simulated received soft-decision symbols (noisy channel output)
- *     unsigned int i;
- *     for (i = 0; i < 2 * total_bits; i++) {
- *       syms[i] = (i % 5 < 2) ? 200 : 55;
- *     }
- *
- *     // Clear decision buffer
- *     memset(dec, 0, 8 * total_bits);
- *
- *     // Run Viterbi ACS butterfly and renormalization for all trellis steps
- *     volk_8u_x4_conv_k7_r2_8u(Y, X, syms, dec, framebits, excess, Branchtab);
- *
- *     // The dec buffer now contains traceback decisions for the decoded path
- *     printf("Viterbi decoding complete for %u-bit frame.\n", framebits);
- *
- *     volk_free(Y);
- *     volk_free(X);
- *     volk_free(syms);
- *     volk_free(dec);
- *     volk_free(Branchtab);
- *     return 0;
- *   }
+ * volk_free(Y);
+ * volk_free(X);
+ * volk_free(syms);
+ * volk_free(dec);
+ * volk_free(Branchtab);
  * \endcode
  */
 

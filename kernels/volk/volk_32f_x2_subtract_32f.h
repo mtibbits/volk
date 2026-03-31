@@ -12,46 +12,53 @@
  *
  * \b Overview
  *
- * Subtracts values in bVector from values in aVector.
+ * Computes the element-wise difference of two floating-point vectors.
  *
  * c[i] = a[i] - b[i]
+ *
+ * Vector subtraction is a fundamental operation in many DSP workflows,
+ * including error signal computation (subtracting a reference from a measured
+ * signal), noise cancellation, adaptive filter update steps, and computing
+ * differential measurements between signal paths.
  *
  * <b>Dispatcher Prototype</b>
  * \code
  * void volk_32f_x2_subtract_32f(float* cVector, const float* aVector, const float*
- * bVector, unsigned int num_points) \endcode
+ * bVector, unsigned int num_points)
+ * \endcode
  *
  * \b Inputs
- * \li aVector: The initial vector.
- * \li bVector: The vector to be subtracted.
- * \li num_points: The number of values in both input vectors.
+ * \li aVector: The minuend vector (float).
+ * \li bVector: The subtrahend vector (float).
+ * \li num_points: The number of samples in both input vectors.
  *
  * \b Outputs
- * \li cVector: The output vector.
+ * \li cVector: The difference vector (float).
  *
  * \b Example
- * Subtract a decreasing vector from an increasing vector.
+ * Subtract a constant vector from another constant vector and verify the result.
  * \code
- *   int N = 10;
- *   unsigned int alignment = volk_get_alignment();
- *   float* increasing = (float*)volk_malloc(sizeof(float)*N, alignment);
- *   float* decreasing = (float*)volk_malloc(sizeof(float)*N, alignment);
- *   float* out = (float*)volk_malloc(sizeof(float)*N, alignment);
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
+ * float* aVector = (float*)volk_malloc(sizeof(float) * N, alignment);
+ * float* bVector = (float*)volk_malloc(sizeof(float) * N, alignment);
+ * float* cVector = (float*)volk_malloc(sizeof(float) * N, alignment);
  *
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       increasing[ii] = (float)ii;
- *       decreasing[ii] = 10.f - (float)ii;
- *   }
+ * for (unsigned int i = 0; i < N; ++i) {
+ *     aVector[i] = 5.0f;
+ *     bVector[i] = 2.0f;
+ * }
  *
- *   volk_32f_x2_subtract_32f(out, increasing, decreasing, N);
+ * float expected = 5.0f - 2.0f; // 3.0 for each element
  *
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       printf("out[%u] = %1.2f\n", ii, out[ii]);
- *   }
+ * volk_32f_x2_subtract_32f(cVector, aVector, bVector, N);
  *
- *   volk_free(increasing);
- *   volk_free(decreasing);
- *   volk_free(out);
+ * printf("Expected: %1.2f\n", expected);
+ * printf("Result:   %1.2f\n", cVector[0]);
+ *
+ * volk_free(aVector);
+ * volk_free(bVector);
+ * volk_free(cVector);
  * \endcode
  */
 

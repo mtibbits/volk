@@ -12,9 +12,12 @@
  *
  * \b Overview
  *
- * Copies 32-bit floating-point values from the input vector to the output
- * vector. This is a null (pass-through) kernel useful as a baseline for
- * benchmarking memory bandwidth.
+ * Copies floating-point samples from the input vector to the output vector,
+ * performing the identity operation: out[i] = in[i]. This is a null kernel
+ * that applies no transformation to the signal data. It is primarily useful
+ * for benchmarking VOLK dispatcher and memory-access overhead independently
+ * of any arithmetic, allowing engineers to isolate the baseline cost of
+ * vectorized data movement in a signal processing pipeline.
  *
  * <b>Dispatcher Prototype</b>
  * \code
@@ -22,45 +25,33 @@
  * \endcode
  *
  * \b Inputs
- * \li aVector: The input vector of floats.
- * \li num_points: The number of float values to copy.
+ * \li aVector: The input vector of samples (float).
+ * \li num_points: The number of float samples to copy.
  *
  * \b Outputs
- * \li bVector: The output vector where values are copied to.
+ * \li bVector: The output vector (float).
  *
  * \b Example
- * Copy a small vector of floats through the null kernel.
+ * Copy a small vector and verify the output matches the input.
  * \code
- *   #include <volk/volk.h>
- *   #include <stdio.h>
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
  *
- *   int main() {
- *     unsigned int N = 5;
- *     unsigned int alignment = volk_get_alignment();
+ * float* input = (float*)volk_malloc(sizeof(float) * N, alignment);
+ * float* output = (float*)volk_malloc(sizeof(float) * N, alignment);
  *
- *     // Allocate aligned input and output buffers
- *     float* input = (float*)volk_malloc(N * sizeof(float), alignment);
- *     float* output = (float*)volk_malloc(N * sizeof(float), alignment);
+ * for (unsigned int i = 0; i < N; ++i) {
+ *     input[i] = (float)(i + 1);
+ * }
  *
- *     // Fill input with sample values
- *     input[0] = 1.5f;
- *     input[1] = -3.14f;
- *     input[2] = 0.0f;
- *     input[3] = 42.0f;
- *     input[4] = 7.77f;
+ * volk_32f_null_32f(output, input, N);
  *
- *     // Copy input to output
- *     volk_32f_null_32f(output, input, N);
+ * for (unsigned int i = 0; i < N; ++i) {
+ *     printf("Expected: %1.1f  Result: %1.1f\n", input[i], output[i]);
+ * }
  *
- *     // Verify the copy
- *     for (unsigned int i = 0; i < N; i++) {
- *       printf("output[%u] = %f\n", i, output[i]);
- *     }
- *
- *     volk_free(input);
- *     volk_free(output);
- *     return 0;
- *   }
+ * volk_free(input);
+ * volk_free(output);
  * \endcode
  */
 

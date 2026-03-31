@@ -12,7 +12,15 @@
  *
  * \b Overview
  *
- * encode given data for POLAR code
+ * Encodes a frame using a polar code. Frozen and information bits are
+ * interleaved according to a frozen-bit mask, then the Arikan butterfly
+ * transform is applied to produce the encoded frame.
+ *
+ * Polar codes are capacity-achieving channel codes used in 5G NR control
+ * channels and other modern communication systems. The frozen-bit mask
+ * identifies which bit positions carry channel-reliability-based frozen
+ * values versus user information bits, enabling successive cancellation
+ * decoding at the receiver.
  *
  * <b>Dispatcher Prototype</b>
  * \code
@@ -22,56 +30,55 @@
  * \endcode
  *
  * \b Inputs
- * \li frozen_bit_mask: bytes with 0xFF for frozen bit positions or 0x00 otherwise.
- * \li frozen_bits: values of frozen bits, 1 bit per byte
- * \li info_bits: info bit values, 1 bit per byte
- * \li frame_size: power of 2 value for frame size.
+ * \li frozen_bit_mask: 0xFF for frozen-bit positions, 0x00 for info-bit positions
+ * (unsigned char).
+ * \li frozen_bits: frozen bit values, one bit per byte (unsigned char).
+ * \li info_bits: information bit values, one bit per byte (unsigned char).
+ * \li frame_size: number of bits in the frame, must be a power of 2.
  *
  * \b Outputs
- * \li frame: polar encoded frame.
- * \li temp: temporary buffer used during encoding.
+ * \li frame: polar-encoded frame, one bit per byte (unsigned char).
+ * \li temp: scratch buffer, same size as frame (unsigned char).
  *
  * \b Example
+ * Encode a 4-bit frame with 2 frozen bits (all zero) and 2 info bits.
  * \code
- * int frame_exp = 10;
- * int frame_size = 0x01 << frame_exp;
- * int num_frozen_bits = frame_size / 2;
- * int num_info_bits = frame_size - num_frozen_bits;
+ * unsigned int N = 4;
+ * unsigned int num_frozen = 2;
+ * unsigned int num_info = 2;
  * unsigned int alignment = volk_get_alignment();
  *
- * // 0xFF for frozen bit positions, 0x00 for info bit positions
- * unsigned char* frozen_bit_mask =
- *     (unsigned char*)volk_malloc(sizeof(unsigned char) * frame_size, alignment);
- * for (int i = 0; i < frame_size; ++i) {
- *     frozen_bit_mask[i] = (i < num_frozen_bits) ? 0xFF : 0x00;
- * }
- *
- * // set frozen bit values, typically all zero
- * unsigned char* frozen_bits =
- *     (unsigned char*)volk_malloc(sizeof(unsigned char) * num_frozen_bits, alignment);
- * for (int i = 0; i < num_frozen_bits; ++i) {
- *     frozen_bits[i] = 0;
- * }
- *
- * unsigned char* info_bits =
- *     (unsigned char*)volk_malloc(sizeof(unsigned char) * num_info_bits, alignment);
- * for (int i = 0; i < num_info_bits; ++i) {
- *     info_bits[i] = i % 2;
- * }
- *
  * unsigned char* frame =
- *     (unsigned char*)volk_malloc(sizeof(unsigned char) * frame_size, alignment);
+ *     (unsigned char*)volk_malloc(sizeof(unsigned char) * N, alignment);
  * unsigned char* temp =
- *     (unsigned char*)volk_malloc(sizeof(unsigned char) * frame_size, alignment);
+ *     (unsigned char*)volk_malloc(sizeof(unsigned char) * N, alignment);
+ * unsigned char* frozen_bit_mask =
+ *     (unsigned char*)volk_malloc(sizeof(unsigned char) * N, alignment);
+ * unsigned char* frozen_bits =
+ *     (unsigned char*)volk_malloc(sizeof(unsigned char) * num_frozen, alignment);
+ * unsigned char* info_bits =
+ *     (unsigned char*)volk_malloc(sizeof(unsigned char) * num_info, alignment);
+ *
+ * // Positions 0,1 are frozen; positions 2,3 carry info
+ * frozen_bit_mask[0] = 0xFF; frozen_bit_mask[1] = 0xFF;
+ * frozen_bit_mask[2] = 0x00; frozen_bit_mask[3] = 0x00;
+ * frozen_bits[0] = 0; frozen_bits[1] = 0;
+ * info_bits[0] = 1; info_bits[1] = 0;
+ *
+ * // After interleave: {0, 0, 1, 0}
+ * // After polar transform: {1, 1, 0, 0}
  *
  * volk_8u_x3_encodepolar_8u_x2(
- *     frame, temp, frozen_bit_mask, frozen_bits, info_bits, frame_size);
+ *     frame, temp, frozen_bit_mask, frozen_bits, info_bits, N);
  *
+ * printf("Expected: {1, 1, 0, 0}\n");
+ * printf("Result:   {%d, %d, %d, %d}\n", frame[0], frame[1], frame[2], frame[3]);
+ *
+ * volk_free(frame);
+ * volk_free(temp);
  * volk_free(frozen_bit_mask);
  * volk_free(frozen_bits);
  * volk_free(info_bits);
- * volk_free(frame);
- * volk_free(temp);
  * \endcode
  */
 

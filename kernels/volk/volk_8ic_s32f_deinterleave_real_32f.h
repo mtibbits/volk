@@ -13,8 +13,14 @@
  * \b Overview
  *
  * Deinterleaves the complex 8-bit char vector into just the real (I)
- * vector, converts the samples to floats, and divides the results by
- * the scalar factor.
+ * component, converts the samples to 32-bit floats, and divides the
+ * results by the scalar factor: iBuffer[i] = real(complexVector[i]) / scalar.
+ *
+ * This kernel is useful in receiver front-ends where an ADC produces
+ * interleaved 8-bit I/Q samples and only the in-phase (I) channel is
+ * needed for further processing such as AM demodulation or power
+ * estimation. The scalar division provides convenient gain normalization
+ * in one step.
  *
  * <b>Dispatcher Prototype</b>
  * \code
@@ -22,49 +28,37 @@
  * complexVector, const float scalar, unsigned int num_points) \endcode
  *
  * \b Inputs
- * \li complexVector: The complex input vector.
- * \li scalar: The scalar value used to divide the floating point results.
- * \li num_points: The number of complex data values to be deinterleaved.
+ * \li complexVector: The complex input vector of interleaved I/Q samples (lv_8sc_t).
+ * \li scalar: The scalar divisor applied to each real sample (float).
+ * \li num_points: The number of complex samples to be deinterleaved.
  *
  * \b Outputs
- * \li iBuffer: The I buffer output data.
+ * \li iBuffer: The deinterleaved and scaled real (I) output samples (float).
  *
  * \b Example
- * Extract and scale the real (I) component from 8-bit complex samples.
+ * Deinterleave and scale 4 complex 8-bit samples, then verify the first output.
  * \code
- *   #include <volk/volk.h>
- *   #include <stdio.h>
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
+ * float scalar = 2.0f;
  *
- *   int main(){
- *     unsigned int N = 8;
- *     float scalar = 127.0f; // normalize to [-1.0, 1.0] range
- *     unsigned int alignment = volk_get_alignment();
+ * lv_8sc_t* complexVector = (lv_8sc_t*)volk_malloc(sizeof(lv_8sc_t) * N, alignment);
+ * float* iBuffer = (float*)volk_malloc(sizeof(float) * N, alignment);
  *
- *     // Allocate aligned memory
- *     lv_8sc_t* complexVector = (lv_8sc_t*)volk_malloc(sizeof(lv_8sc_t) * N, alignment);
- *     float* iBuffer = (float*)volk_malloc(sizeof(float) * N, alignment);
+ * for (unsigned int i = 0; i < N; ++i) {
+ *   complexVector[i] = lv_cmake((int8_t)(10 * (i + 1)), (int8_t)0);
+ * }
  *
- *     // Fill with sample complex data (I, Q pairs)
- *     complexVector[0] = lv_cmake((int8_t)127,  (int8_t)0);
- *     complexVector[1] = lv_cmake((int8_t)90,   (int8_t)90);
- *     complexVector[2] = lv_cmake((int8_t)0,    (int8_t)127);
- *     complexVector[3] = lv_cmake((int8_t)-90,  (int8_t)90);
- *     complexVector[4] = lv_cmake((int8_t)-127, (int8_t)0);
- *     complexVector[5] = lv_cmake((int8_t)-90,  (int8_t)-90);
- *     complexVector[6] = lv_cmake((int8_t)0,    (int8_t)-127);
- *     complexVector[7] = lv_cmake((int8_t)90,   (int8_t)-90);
+ * // Expected: real parts divided by scalar: 10/2=5, 20/2=10, 30/2=15, 40/2=20
+ * float expected = 10.0f / scalar;
  *
- *     // Deinterleave real part and divide by scalar
- *     volk_8ic_s32f_deinterleave_real_32f(iBuffer, complexVector, scalar, N);
+ * volk_8ic_s32f_deinterleave_real_32f(iBuffer, complexVector, scalar, N);
  *
- *     for(unsigned int i = 0; i < N; i++){
- *       printf("I[%u] = %1.4f\n", i, iBuffer[i]);
- *     }
+ * printf("Expected: %f\n", expected);
+ * printf("Result:   %f\n", iBuffer[0]);
  *
- *     volk_free(complexVector);
- *     volk_free(iBuffer);
- *     return 0;
- *   }
+ * volk_free(complexVector);
+ * volk_free(iBuffer);
  * \endcode
  */
 

@@ -38,7 +38,14 @@
  *
  * \b Overview
  *
- * Computes exponential of input vector and stores results in output vector.
+ * Computes the element-wise natural exponential of a float vector:
+ * bVector[i] = exp(aVector[i]).
+ *
+ * The exponential function is fundamental in signal processing for converting
+ * log-domain representations back to linear scale, such as recovering signal
+ * power from log-likelihood ratios in communications decoders. It is also used
+ * in computing signal envelopes, exponential decay models, and Gaussian window
+ * functions for spectral analysis.
  *
  * <b>Dispatcher Prototype</b>
  * \code
@@ -46,36 +53,33 @@
  * \endcode
  *
  * \b Inputs
- * \li aVector: The input vector of floats.
- * \li num_points: The number of data points.
+ * \li aVector: Input vector of exponent values (float).
+ * \li num_points: The number of samples to process.
  *
  * \b Outputs
- * \li bVector: The vector where results will be stored.
+ * \li bVector: Output vector of exponential results (float).
  *
  * \b Example
+ * Compute exp(1) for each element and compare against the known value of e.
  * \code
- *   int N = 10;
- *   unsigned int alignment = volk_get_alignment();
- *   float* in = (float*)volk_malloc(sizeof(float)*N, alignment);
- *   float* out = (float*)volk_malloc(sizeof(float)*N, alignment);
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
+ * float* in = (float*)volk_malloc(sizeof(float) * N, alignment);
+ * float* out = (float*)volk_malloc(sizeof(float) * N, alignment);
  *
- *   in[0] = 0;
- *   in[1] = 0.5;
- *   in[2] = std::sqrt(2.f)/2.f;
- *   in[3] = std::sqrt(3.f)/2.f;
- *   in[4] = in[5] = 1;
- *   for(unsigned int ii = 6; ii < N; ++ii){
- *       in[ii] = - in[N-ii-1];
- *   }
+ * for (unsigned int i = 0; i < N; ++i) {
+ *     in[i] = 1.0f;
+ * }
  *
- *   volk_32f_exp_32f(out, in, N);
+ * float expected = 2.7182818f; // exp(1) = e
  *
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       printf("exp(%1.3f) = %1.3f\n", in[ii], out[ii]);
- *   }
+ * volk_32f_exp_32f(out, in, N);
  *
- *   volk_free(in);
- *   volk_free(out);
+ * printf("Expected: %1.7f\n", expected);
+ * printf("Result:   %1.7f\n", out[0]);
+ *
+ * volk_free(in);
+ * volk_free(out);
  * \endcode
  */
 
