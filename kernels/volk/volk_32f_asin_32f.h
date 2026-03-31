@@ -13,7 +13,14 @@
  *
  * \b Overview
  *
- * Computes arcsine of input vector and stores results in output vector.
+ * Computes the element-wise arcsine (inverse sine) of a float vector:
+ * out[i] = asin(in[i]), where each input sample must lie in [-1, 1] and the
+ * result is in radians on [-pi/2, pi/2].
+ *
+ * In signal processing, the arcsine operation is used in phase recovery,
+ * angle-of-arrival estimation, and coordinate transforms between Cartesian and
+ * polar representations. It is also useful for linearizing sinusoidal sensor
+ * readings and for demodulation of arcsine-encoded signals.
  *
  * <b>Dispatcher Prototype</b>
  * \code
@@ -21,37 +28,33 @@
  * \endcode
  *
  * \b Inputs
- * \li aVector: The input vector of floats.
- * \li num_points: The number of data points.
+ * \li aVector: Input vector of samples (float) in the range [-1, 1].
+ * \li num_points: The number of samples to process.
  *
  * \b Outputs
- * \li bVector: The vector where results will be stored.
+ * \li bVector: Output vector of arcsine values in radians (float).
  *
  * \b Example
+ * Compute arcsine of well-known values and verify against expected results.
  * \code
- * Calculate common angles around the top half of the unit circle.
- *   int N = 10;
- *   unsigned int alignment = volk_get_alignment();
- *   float* in = (float*)volk_malloc(sizeof(float)*N, alignment);
- *   float* out = (float*)volk_malloc(sizeof(float)*N, alignment);
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
+ * float* in = (float*)volk_malloc(sizeof(float) * N, alignment);
+ * float* out = (float*)volk_malloc(sizeof(float) * N, alignment);
  *
- *   in[0] = 0;
- *   in[1] = 0.5;
- *   in[2] = std::sqrt(2.f)/2.f;
- *   in[3] = std::sqrt(3.f)/2.f;
- *   in[4] = in[5] = 1;
- *   for(unsigned int ii = 6; ii < N; ++ii){
- *       in[ii] = - in[N-ii-1];
- *   }
+ * in[0] = 0.0f;
+ * in[1] = 0.5f;
+ * in[2] = -0.5f;
+ * in[3] = 1.0f;
  *
- *   volk_32f_asin_32f(out, in, N);
+ * volk_32f_asin_32f(out, in, N);
  *
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       printf("asin(%1.3f) = %1.3f\n", in[ii], out[ii]);
- *   }
+ * // asin(0) = 0, asin(0.5) = pi/6, asin(-0.5) = -pi/6, asin(1) = pi/2
+ * printf("Expected: 0.000000, 0.523599, -0.523599, 1.570796\n");
+ * printf("Result:   %f, %f, %f, %f\n", out[0], out[1], out[2], out[3]);
  *
- *   volk_free(in);
- *   volk_free(out);
+ * volk_free(in);
+ * volk_free(out);
  * \endcode
  */
 

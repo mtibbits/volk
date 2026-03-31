@@ -12,9 +12,15 @@
  *
  * \b Overview
  *
- * Adds two vectors together element by element:
+ * Adds a real (float) vector to the real part of a complex vector element by element.
+ * The imaginary parts are passed through unchanged:
  *
  * c[i] = a[i] + b[i]
+ *
+ * This operation is commonly used in DC offset correction, where a real-valued bias
+ * is added to or removed from complex baseband samples. It also arises in signal
+ * conditioning stages such as AGC or level adjustment where only the real component
+ * requires modification.
  *
  * <b>Dispatcher Prototype</b>
  * \code
@@ -22,39 +28,38 @@
  * bVector, unsigned int num_points) \endcode
  *
  * \b Inputs
- * \li aVector: First vector of input points.
- * \li bVector: Second vector of input points.
- * \li num_points: The number of values in both input vector.
+ * \li aVector: The complex input samples (lv_32fc_t).
+ * \li bVector: The real input values to add (float).
+ * \li num_points: The number of complex samples to process.
  *
  * \b Outputs
- * \li cVector: The output vector.
+ * \li cVector: The complex output samples (lv_32fc_t).
  *
  * \b Example
- *
- * The follow example adds the increasing and decreasing vectors such that the result of
- * every summation pair is 10
- *
+ * Add a constant real vector of 2.0 to a constant complex vector of (3.0 + 4.0j),
+ * so each output element should be (5.0 + 4.0j).
  * \code
- *   int N = 10;
- *   unsigned int alignment = volk_get_alignment();
- *   lv_32fc_t* increasing = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t)*N, alignment);
- *   float* decreasing = (float*)volk_malloc(sizeof(float)*N, alignment);
- *   lv_32fc_t* out = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t)*N, alignment);
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
+ * lv_32fc_t* aVector = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t) * N, alignment);
+ * float* bVector = (float*)volk_malloc(sizeof(float) * N, alignment);
+ * lv_32fc_t* cVector = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t) * N, alignment);
  *
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       increasing[ii] = (lv_32fc_t)ii;
- *       decreasing[ii] = 10.f - (float)ii;
- *   }
+ * for (unsigned int i = 0; i < N; ++i) {
+ *     aVector[i] = lv_cmake(3.0f, 4.0f);
+ *     bVector[i] = 2.0f;
+ * }
  *
- *   volk_32fc_32f_add_32fc(out, increasing, decreasing, N);
+ * lv_32fc_t expected = lv_cmake(3.0f + 2.0f, 4.0f);
  *
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       printf("out[%u] = %1.2f\n", ii, out[ii]);
- *   }
+ * volk_32fc_32f_add_32fc(cVector, aVector, bVector, N);
  *
- *   volk_free(increasing);
- *   volk_free(decreasing);
- *   volk_free(out);
+ * printf("Expected: (%1.1f, %1.1f)\n", lv_creal(expected), lv_cimag(expected));
+ * printf("Result:   (%1.1f, %1.1f)\n", lv_creal(cVector[0]), lv_cimag(cVector[0]));
+ *
+ * volk_free(aVector);
+ * volk_free(bVector);
+ * volk_free(cVector);
  * \endcode
  */
 

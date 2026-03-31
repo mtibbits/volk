@@ -12,8 +12,16 @@
  *
  * \b Overview
  *
- * Computes the magnitude of the complexVector and stores the results
- * in the magnitudeVector as a scaled floating point number.
+ * Computes the magnitude of each complex 16-bit integer sample and divides
+ * by a scalar, storing the results as 32-bit floats:
+ * magnitudeVector[i] = sqrt(real[i]^2 + imag[i]^2) / scalar.
+ *
+ * This kernel is useful in signal processing pipelines where received
+ * complex samples are represented as fixed-point 16-bit I/Q pairs and
+ * need to be converted to a floating-point envelope (magnitude) estimate.
+ * The scalar divisor allows normalization — for example, removing ADC
+ * full-scale gain so that downstream stages (AGC, power measurement,
+ * spectral analysis) operate on calibrated amplitude values.
  *
  * <b>Dispatcher Prototype</b>
  * \code
@@ -21,21 +29,37 @@
  * complexVector, const float scalar, unsigned int num_points) \endcode
  *
  * \b Inputs
- * \li complexVector: The complex input vector of complex 16-bit shorts.
- * \li scalar: The value to be divided against each sample of the input complex vector.
- * \li num_points: The number of samples.
+ * \li complexVector: The complex input vector of 16-bit I/Q samples (lv_16sc_t).
+ * \li scalar: The value to divide each magnitude by (e.g. ADC full-scale).
+ * \li num_points: The number of complex samples.
  *
  * \b Outputs
- * \li magnitudeVector: The magnitude of the complex values.
+ * \li magnitudeVector: The scaled magnitude of each complex sample (float).
  *
  * \b Example
+ * Compute scaled magnitude of four complex samples using a 3-4-5 triangle.
  * \code
- * int N = 10000;
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
  *
- * volk_16ic_s32f_magnitude_32f();
+ * lv_16sc_t* complexVector =
+ *     (lv_16sc_t*)volk_malloc(sizeof(lv_16sc_t) * N, alignment);
+ * float* magnitudeVector = (float*)volk_malloc(sizeof(float) * N, alignment);
  *
- * volk_free(x);
- * volk_free(t);
+ * for (unsigned int i = 0; i < N; ++i) {
+ *     complexVector[i] = lv_cmake((int16_t)3, (int16_t)4);
+ * }
+ * float scalar = 5.0f;
+ *
+ * // Expected: sqrt(3^2 + 4^2) / 5 = 5 / 5 = 1.0 for each element
+ *
+ * volk_16ic_s32f_magnitude_32f(magnitudeVector, complexVector, scalar, N);
+ *
+ * printf("Expected: 1.000000\n");
+ * printf("Result:   %f\n", magnitudeVector[0]);
+ *
+ * volk_free(complexVector);
+ * volk_free(magnitudeVector);
  * \endcode
  */
 

@@ -12,48 +12,55 @@
  *
  * \b Overview
  *
- * Computes the standard deviation and mean of the input buffer by means of
- * Youngs and Cramer's Algorithm
+ * Computes the standard deviation and mean of a buffer of float samples using
+ * Youngs and Cramer's numerically stable algorithm.
+ *
+ * These first-order statistics are fundamental to many signal processing tasks
+ * including noise floor estimation, signal-to-noise ratio (SNR) measurement,
+ * automatic gain control (AGC), and anomaly detection. Computing both in a
+ * single pass reduces memory bandwidth compared to separate mean and variance
+ * kernels.
  *
  * <b>Dispatcher Prototype</b>
  * \code
  * void volk_32f_stddev_and_mean_32f_x2(float* stddev, float* mean, const float*
- * inputBuffer, unsigned int num_points) \endcode
+ * inputBuffer, unsigned int num_points)
+ * \endcode
  *
  * \b Inputs
- * \li inputBuffer: The buffer of points.
- * \li num_points The number of values in input buffer.
+ * \li inputBuffer: The input buffer of float samples (float).
+ * \li num_points: The number of samples in the input buffer.
  *
  * \b Outputs
- * \li stddev: The calculated standard deviation.
- * \li mean: The mean of the input buffer.
+ * \li stddev: The computed standard deviation (float).
+ * \li mean: The computed mean of the input samples (float).
  *
  * \b Example
- * Generate random numbers with c++11's normal distribution and estimate the mean and
- * standard deviation
+ * Compute the standard deviation and mean of four values and verify the result.
  * \code
- *   int N = 1000;
- *   unsigned int alignment = volk_get_alignment();
- *   float* rand_numbers = (float*) volk_malloc(sizeof(float)*N, alignment);
- *   float* mean = (float*) volk_malloc(sizeof(float), alignment);
- *   float* stddev = (float*) volk_malloc(sizeof(float), alignment);
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
+ * float* input = (float*)volk_malloc(sizeof(float) * N, alignment);
+ * float* mean = (float*)volk_malloc(sizeof(float), alignment);
+ * float* stddev = (float*)volk_malloc(sizeof(float), alignment);
  *
- *   // Use a normal generator with 0 mean, stddev 1000
- *   std::default_random_engine generator;
- *   std::normal_distribution<float> distribution(0, 1000);
+ * // {-1, 1, -1, 1}: mean = 0, each deviation squared = 1, stddev = 1.0
+ * input[0] = -1.0f;
+ * input[1] =  1.0f;
+ * input[2] = -1.0f;
+ * input[3] =  1.0f;
  *
- *   for(unsigned int ii = 0; ii < N; ++ii) {
- *       rand_numbers[ii] =  distribution(generator);
- *   }
+ * float expected_mean = 0.0f;
+ * float expected_stddev = 1.0f;
  *
- *   volk_32f_stddev_and_mean_32f_x2(stddev, mean, rand_numbers, N);
+ * volk_32f_stddev_and_mean_32f_x2(stddev, mean, input, N);
  *
- *   printf("std. dev. = %f\n", *stddev);
- *   printf("mean = %f\n", *mean);
+ * printf("Expected: mean = %f, stddev = %f\n", expected_mean, expected_stddev);
+ * printf("Result:   mean = %f, stddev = %f\n", *mean, *stddev);
  *
- *   volk_free(rand_numbers);
- *   volk_free(mean);
- *   volk_free(stddev);
+ * volk_free(input);
+ * volk_free(mean);
+ * volk_free(stddev);
  * \endcode
  */
 

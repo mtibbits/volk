@@ -16,34 +16,79 @@
  *
  * \b Overview
  *
- * <FIXME>
+ * Gathers elements from a source vector according to a permutation index
+ * array, then adds masked scalar values controlled by four control vectors.
+ * For each output element: target[i] = src0[permute_indexes[i]] +
+ * (cntl0[i] & scalars[0]) + (cntl1[i] & scalars[1]) +
+ * (cntl2[i] & scalars[2]) + (cntl3[i] & scalars[3]).
+ *
+ * This pattern of indexed gather with conditional scalar accumulation is
+ * characteristic of trellis-based decoding, where survivor path states are
+ * reordered (permuted) and branch metrics (scalars) are selectively added
+ * according to transition masks. It can also serve other DSP operations
+ * that combine sample reordering with masked offset correction.
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_16i_permute_and_scalar_add(short* target,  short* src0, short*
+ * void volk_16i_permute_and_scalar_add(short* target, short* src0, short*
  * permute_indexes, short* cntl0, short* cntl1, short* cntl2, short* cntl3, short*
- * scalars, unsigned int num_points) \endcode
+ * scalars, unsigned int num_points)
+ * \endcode
  *
  * \b Inputs
- * \li src0: The input vector.
- * \li permute_indexes: <FIXME>
- * \li cntl0: <FIXME>
- * \li cntl1: <FIXME>
- * \li cntl2: <FIXME>
- * \li cntl3: <FIXME>
- * \li scalars: <FIXME>
- * \li num_points: The number of complex data points.
+ * \li src0: The source vector of 16-bit integers (short).
+ * \li permute_indexes: Index array specifying which element of src0 to gather for each output position (short).
+ * \li cntl0: Control mask vector for scalars[0] (short).
+ * \li cntl1: Control mask vector for scalars[1] (short).
+ * \li cntl2: Control mask vector for scalars[2] (short).
+ * \li cntl3: Control mask vector for scalars[3] (short).
+ * \li scalars: Array of four 16-bit scalar values (short).
+ * \li num_points: The number of 16-bit elements to process.
  *
  * \b Outputs
- * \li target: The output value.
+ * \li target: The output vector of 16-bit integers (short).
  *
  * \b Example
+ * Reverse a 4-element vector and add a constant offset via all-ones control masks.
  * \code
- * int N = 10000;
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
  *
- * volk_16i_permute_and_scalar_add();
+ * short* target = (short*)volk_malloc(sizeof(short) * N, alignment);
+ * short* src0 = (short*)volk_malloc(sizeof(short) * N, alignment);
+ * short* permute_indexes = (short*)volk_malloc(sizeof(short) * N, alignment);
+ * short* cntl0 = (short*)volk_malloc(sizeof(short) * N, alignment);
+ * short* cntl1 = (short*)volk_malloc(sizeof(short) * N, alignment);
+ * short* cntl2 = (short*)volk_malloc(sizeof(short) * N, alignment);
+ * short* cntl3 = (short*)volk_malloc(sizeof(short) * N, alignment);
+ * short* scalars = (short*)volk_malloc(sizeof(short) * 4, alignment);
  *
- * volk_free(x);
+ * src0[0] = 10; src0[1] = 20; src0[2] = 30; src0[3] = 40;
+ * permute_indexes[0] = 3; permute_indexes[1] = 2;
+ * permute_indexes[2] = 1; permute_indexes[3] = 0;
+ *
+ * for (unsigned int i = 0; i < N; ++i) {
+ *     cntl0[i] = -1; cntl1[i] = -1; cntl2[i] = -1; cntl3[i] = -1;
+ * }
+ * scalars[0] = 1; scalars[1] = 2; scalars[2] = 3; scalars[3] = 4;
+ *
+ * // Expected: target[i] = src0[reverse[i]] + (1 + 2 + 3 + 4) = src0[reverse[i]] + 10
+ * // target = {50, 40, 30, 20}
+ *
+ * volk_16i_permute_and_scalar_add(target, src0, permute_indexes,
+ *     cntl0, cntl1, cntl2, cntl3, scalars, N);
+ *
+ * printf("Expected: %d %d %d %d\n", 50, 40, 30, 20);
+ * printf("Result:   %d %d %d %d\n", target[0], target[1], target[2], target[3]);
+ *
+ * volk_free(target);
+ * volk_free(src0);
+ * volk_free(permute_indexes);
+ * volk_free(cntl0);
+ * volk_free(cntl1);
+ * volk_free(cntl2);
+ * volk_free(cntl3);
+ * volk_free(scalars);
  * \endcode
  */
 

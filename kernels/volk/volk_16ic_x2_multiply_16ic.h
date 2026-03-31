@@ -12,23 +12,54 @@
  *
  * \b Overview
  *
- * Multiplies two input complex vectors, point-by-point, storing the result in the third
- * vector. WARNING: Saturation is not checked.
+ * Multiplies two input complex vectors element-wise, producing a complex product
+ * for each sample pair: result[i] = in_a[i] * in_b[i]. Saturation is not checked,
+ * so care must be taken to avoid overflow in 16-bit arithmetic.
+ *
+ * Element-wise complex multiplication is a fundamental building block in signal
+ * processing. It is used in frequency-domain filtering (multiplying spectra),
+ * mixing and frequency translation, phase rotation, and correlation of complex
+ * baseband signals.
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_16ic_x2_multiply_16ic(lv_16sc_t* result, const lv_16sc_t* in_a, const
- * lv_16sc_t* in_b, unsigned int num_points); \endcode
+ * void volk_16ic_x2_multiply_16ic(lv_16sc_t* result, const lv_16sc_t* in_a, const lv_16sc_t* in_b, unsigned int num_points);
+ * \endcode
  *
  * \b Inputs
- * \li in_a: One of the vectors to be multiplied.
- * \li in_b: The other vector to be multiplied.
- * \li num_points: The number of complex data points to be multiplied from both input
- * vectors.
+ * \li in_a: First input vector of complex samples (lv_16sc_t).
+ * \li in_b: Second input vector of complex samples (lv_16sc_t).
+ * \li num_points: The number of complex samples to multiply.
  *
  * \b Outputs
- * \li result: The vector where the results will be stored.
+ * \li result: Output vector of complex products (lv_16sc_t).
  *
+ * \b Example
+ * Multiply two constant complex vectors and verify the result.
+ * \code
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
+ *
+ * lv_16sc_t* in_a = (lv_16sc_t*)volk_malloc(sizeof(lv_16sc_t) * N, alignment);
+ * lv_16sc_t* in_b = (lv_16sc_t*)volk_malloc(sizeof(lv_16sc_t) * N, alignment);
+ * lv_16sc_t* result = (lv_16sc_t*)volk_malloc(sizeof(lv_16sc_t) * N, alignment);
+ *
+ * // in_a = (3 + 2j), in_b = (1 + 4j)
+ * // Expected: (3*1 - 2*4) + (3*4 + 2*1)j = -5 + 14j
+ * for (unsigned int i = 0; i < N; ++i) {
+ *     in_a[i] = lv_cmake((int16_t)3, (int16_t)2);
+ *     in_b[i] = lv_cmake((int16_t)1, (int16_t)4);
+ * }
+ *
+ * volk_16ic_x2_multiply_16ic(result, in_a, in_b, N);
+ *
+ * printf("Expected: (-5, 14)\n");
+ * printf("Result:   (%d, %d)\n", lv_creal(result[0]), lv_cimag(result[0]));
+ *
+ * volk_free(in_a);
+ * volk_free(in_b);
+ * volk_free(result);
+ * \endcode
  */
 
 #ifndef INCLUDED_volk_16ic_x2_multiply_16ic_H

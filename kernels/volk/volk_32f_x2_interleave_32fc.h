@@ -12,48 +12,60 @@
  *
  * \b Overview
  *
- * Takes input vector iBuffer as the real (inphase) part and input
- * vector qBuffer as the imag (quadrature) part and combines them into
- * a complex output vector.
+ * Interleaves two real-valued sample vectors into a complex output vector,
+ * treating iBuffer as the in-phase (real) component and qBuffer as the
+ * quadrature (imaginary) component:
  *
- * c[i] = complex(a[i], b[i])
+ * complexVector[i] = complex(iBuffer[i], qBuffer[i])
+ *
+ * This is a fundamental operation in SDR and DSP pipelines where I and Q
+ * sample streams arrive as separate real-valued buffers and must be combined
+ * into complex baseband representation for downstream processing such as
+ * filtering, demodulation, or spectral analysis.
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_32f_x2_interleave_32fc(lv_32fc_t* complexVector, const float* iBuffer, const
- * float* qBuffer, unsigned int num_points) \endcode
+ * void volk_32f_x2_interleave_32fc(lv_32fc_t* complexVector, const float* iBuffer,
+ * const float* qBuffer, unsigned int num_points)
+ * \endcode
  *
  * \b Inputs
- * \li iBuffer: Input vector of samples for the real part.
- * \li qBuffer: Input vector of samples for the imaginary part.
- * \li num_points: The number of values in both input vectors.
+ * \li iBuffer: Input vector of in-phase (real) samples (float).
+ * \li qBuffer: Input vector of quadrature (imaginary) samples (float).
+ * \li num_points: The number of samples in each input vector.
  *
  * \b Outputs
- * \li complexVector: The output vector of complex numbers.
+ * \li complexVector: The interleaved complex output vector (lv_32fc_t).
  *
  * \b Example
- * Generate the top half of the unit circle with real points equally spaced.
+ * Interleave constant I and Q sample vectors into complex output.
  * \code
- *   int N = 10;
- *   unsigned int alignment = volk_get_alignment();
- *   float* imag = (float*)volk_malloc(sizeof(float)*N, alignment);
- *   float* real = (float*)volk_malloc(sizeof(float)*N, alignment);
- *   lv_32fc_t* out = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t)*N, alignment);
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
  *
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       real[ii] = 2.f * ((float)ii / (float)N) - 1.f;
- *       imag[ii] = std::sqrt(1.f - real[ii] * real[ii]);
- *   }
+ * float* iBuffer = (float*)volk_malloc(sizeof(float) * N, alignment);
+ * float* qBuffer = (float*)volk_malloc(sizeof(float) * N, alignment);
+ * lv_32fc_t* out = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t) * N, alignment);
  *
- *   volk_32f_x2_interleave_32fc(out, imag, real, N);
+ * for (unsigned int i = 0; i < N; ++i) {
+ *     iBuffer[i] = (float)(i + 1);  // {1, 2, 3, 4}
+ *     qBuffer[i] = (float)(i + 5);  // {5, 6, 7, 8}
+ * }
  *
- *  for(unsigned int ii = 0; ii < N; ++ii){
- *      printf("out[%u] = %1.2f + %1.2fj\n", ii, std::real(out[ii]), std::imag(out[ii]));
- *  }
+ * // Expected: out[i] = iBuffer[i] + j*qBuffer[i]
+ * // out = {1+5j, 2+6j, 3+7j, 4+8j}
  *
- *   volk_free(imag);
- *   volk_free(real);
- *   volk_free(out);
+ * volk_32f_x2_interleave_32fc(out, iBuffer, qBuffer, N);
+ *
+ * for (unsigned int i = 0; i < N; ++i) {
+ *     printf("Expected: %1.0f + %1.0fj  Result: %1.0f + %1.0fj\n",
+ *            iBuffer[i], qBuffer[i],
+ *            lv_creal(out[i]), lv_cimag(out[i]));
+ * }
+ *
+ * volk_free(iBuffer);
+ * volk_free(qBuffer);
+ * volk_free(out);
  * \endcode
  */
 

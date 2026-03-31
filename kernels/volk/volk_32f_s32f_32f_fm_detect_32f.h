@@ -12,32 +12,70 @@
  *
  * \b Overview
  *
- * Performs FM-detect differentiation on the input vector and stores
- * the results in the output vector.
+ * Performs FM-detect differentiation on the input phase samples by computing
+ * sample-to-sample phase differences with modular wrapping to the interval
+ * (-bound, bound]. Phase jumps that exceed the wrapping boundary are corrected
+ * by adding or subtracting 2*bound.
+ *
+ * This kernel implements the core discriminator operation used in FM
+ * demodulation. In a typical FM receiver chain, the input represents
+ * instantaneous phase samples from the output of an FM discriminator or
+ * arctangent block, and the output represents the instantaneous frequency
+ * deviation. The saveValue parameter carries phase state across successive
+ * blocks to maintain continuity.
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_32f_s32f_32f_fm_detect_32f(float* outputVector, const float* inputVector,
- * const float bound, float* saveValue, unsigned int num_points) \endcode
+ * void volk_32f_s32f_32f_fm_detect_32f(float* outputVector, const float*
+ * inputVector, const float bound, float* saveValue, unsigned int num_points)
+ * \endcode
  *
  * \b Inputs
- * \li inputVector: The input vector containing phase data (must be on the interval
- * (-bound, bound]). \li bound: The interval that the input phase data is in, which is
- * used to modulo the differentiation. \li saveValue: A pointer to a float which contains
- * the phase value of the sample before the first input sample. \li num_points The number
- * of data points.
+ * \li inputVector: The input vector of phase samples (float), must be on the
+ * interval (-bound, bound].
+ * \li bound: The wrapping boundary for the phase differentiation; output
+ * differences are kept in (-bound, bound].
+ * \li saveValue: Pointer to a float holding the phase value of the sample
+ * before the first input sample. Updated to inputVector[num_points-1] on
+ * return.
+ * \li num_points: The number of input phase samples.
  *
  * \b Outputs
- * \li outputVector: The vector where the results will be stored.
+ * \li outputVector: The wrapped phase differences (float).
  *
  * \b Example
+ * Detect phase differences with bound = 4, demonstrating both positive and
+ * negative wrap correction.
  * \code
- * int N = 10000;
+ * unsigned int N = 5;
+ * unsigned int alignment = volk_get_alignment();
  *
- * <FIXME>
+ * float* input = (float*)volk_malloc(sizeof(float) * N, alignment);
+ * float* output = (float*)volk_malloc(sizeof(float) * N, alignment);
  *
- * volk_32f_s32f_32f_fm_detect_32f();
+ * float saveValue = 3.0f;
+ * float bound = 4.0f;
+ * input[0] = 3.5f;
+ * input[1] = -3.5f;
+ * input[2] = -3.0f;
+ * input[3] = 3.5f;
+ * input[4] = 3.0f;
  *
+ * // Expected: diff then wrap to (-4, 4]
+ * // output[0] = 3.5 - 3.0  =  0.5           (no wrap)
+ * // output[1] = -3.5 - 3.5 = -7.0 + 8 = 1.0 (wrapped)
+ * // output[2] = -3.0 -(-3.5)=  0.5           (no wrap)
+ * // output[3] = 3.5 -(-3.0) =  6.5 - 8 =-1.5 (wrapped)
+ * // output[4] = 3.0 - 3.5  = -0.5            (no wrap)
+ *
+ * volk_32f_s32f_32f_fm_detect_32f(output, input, bound, &saveValue, N);
+ *
+ * printf("Expected: 0.5  1.0  0.5 -1.5 -0.5\n");
+ * printf("Result:   %.1f  %.1f  %.1f %.1f %.1f\n",
+ *        output[0], output[1], output[2], output[3], output[4]);
+ *
+ * volk_free(input);
+ * volk_free(output);
  * \endcode
  */
 

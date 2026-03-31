@@ -12,33 +12,71 @@
  *
  * \b Overview
  *
- * Performs convolutional decoding for a K=7, rate 1/2 convolutional
- * code. The polynomials user defined.
+ * Performs a radix-2 Viterbi butterfly update for convolutional decoding
+ * of a K=7, rate 1/2 convolutional code with user-defined polynomials.
+ * Processes framebits + excess trellis steps, computing branch metrics
+ * from received channel symbols, updating path metrics, and storing
+ * trellis decisions for later traceback.
+ *
+ * Viterbi decoding is the standard maximum-likelihood decoding technique
+ * for convolutional codes used in digital communication systems such as
+ * satellite links, deep-space telemetry, and mobile standards. The branch
+ * table (Branchtab) encodes the generator polynomials, the received
+ * symbols (syms) are soft or hard decision samples from the demodulator,
+ * and the excess parameter adds tail bits to flush the encoder back to a
+ * known state.
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_8u_x4_conv_k7_r2_8u(unsigned char* Y, unsigned char* X, unsigned char* syms,
- * unsigned char* dec, unsigned int framebits, unsigned int excess, unsigned char*
- * Branchtab) \endcode
+ * void volk_8u_x4_conv_k7_r2_8u(unsigned char* Y, unsigned char* X,
+ *   unsigned char* syms, unsigned char* dec, unsigned int framebits,
+ *   unsigned int excess, unsigned char* Branchtab)
+ * \endcode
  *
  * \b Inputs
- * \li X: <FIXME>
- * \li syms: <FIXME>
- * \li dec: <FIXME>
- * \li framebits: size of the frame to decode in bits.
- * \li excess: <FIXME>
- * \li Branchtab: <FIXME>
+ * \li X: Current path metric state buffer (unsigned char), 64 elements.
+ * \li syms: Received channel symbols (unsigned char), 2 per trellis step.
+ * \li dec: Decision buffer (unsigned char) for storing trellis decisions.
+ * \li framebits: Number of data bits in the frame to decode.
+ * \li excess: Number of extra tail bits to process beyond framebits.
+ * \li Branchtab: Branch metric lookup table (unsigned char), 64 entries encoding the generator polynomials.
  *
  * \b Outputs
- * \li Y: The decoded output bits.
+ * \li Y: Updated path metric state buffer (unsigned char), 64 elements.
  *
  * \b Example
+ * Decode one trellis step starting from the all-zero state.
  * \code
- * int N = 10000;
+ * unsigned int framebits = 1;
+ * unsigned int excess = 0;
+ * unsigned int alignment = volk_get_alignment();
  *
- * volk_8u_x4_conv_k7_r2_8u();
+ * unsigned char* Y = (unsigned char*)volk_malloc(sizeof(unsigned char) * 64, alignment);
+ * unsigned char* X = (unsigned char*)volk_malloc(sizeof(unsigned char) * 64, alignment);
+ * unsigned char* syms = (unsigned char*)volk_malloc(sizeof(unsigned char) * 2, alignment);
+ * unsigned char* dec = (unsigned char*)volk_malloc(sizeof(unsigned char) * 8, alignment);
+ * unsigned char* Branchtab = (unsigned char*)volk_malloc(sizeof(unsigned char) * 64, alignment);
  *
- * volk_free(x);
+ * // Initialize: state 0 has metric 0, all others are high
+ * memset(X, 127, 64);
+ * X[0] = 0;
+ * memset(Y, 0, 64);
+ * memset(dec, 0, 8);
+ * // All-zero symbols and branch table
+ * memset(syms, 0, 2);
+ * memset(Branchtab, 0, 64);
+ *
+ * volk_8u_x4_conv_k7_r2_8u(Y, X, syms, dec, framebits, excess, Branchtab);
+ *
+ * // After one step from all-zero init, state 0 should retain the best metric (0)
+ * printf("Expected state 0 metric: 0\n");
+ * printf("Result   state 0 metric: %d\n", Y[0]);
+ *
+ * volk_free(Y);
+ * volk_free(X);
+ * volk_free(syms);
+ * volk_free(dec);
+ * volk_free(Branchtab);
  * \endcode
  */
 

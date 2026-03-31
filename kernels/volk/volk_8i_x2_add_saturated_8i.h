@@ -12,40 +12,50 @@
  *
  * \b Overview
  *
- * Adds two int8_t vectors element-wise with saturation. Results are clamped
- * to the range [-128, 127] to prevent overflow wraparound.
+ * Adds two signed 8-bit integer vectors element-wise with saturation,
+ * clamping results to the range [-128, 127] to prevent overflow wraparound.
+ * Mathematically: out[i] = clamp(inA[i] + inB[i], -128, 127).
+ *
+ * Saturated addition is essential in fixed-point DSP pipelines where
+ * wraparound artifacts would corrupt signal integrity. Common uses include
+ * combining baseband sample streams, accumulating signal energy in 8-bit
+ * receivers, and mixing audio channels in low-bitwidth processing chains.
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_8i_x2_add_saturated_8i(int8_t* outVector, const int8_t* inVectorA, const
- * int8_t* inVectorB, unsigned int num_points) \endcode
+ * void volk_8i_x2_add_saturated_8i(int8_t* outVector, const int8_t* inVectorA, const int8_t* inVectorB, unsigned int num_points)
+ * \endcode
  *
  * \b Inputs
- * \li inVectorA: First input vector.
- * \li inVectorB: Second input vector.
- * \li num_points: Vector length.
+ * \li inVectorA: First input sample vector (int8_t).
+ * \li inVectorB: Second input sample vector (int8_t).
+ * \li num_points: The number of samples to process.
  *
  * \b Outputs
- * \li outVector: Saturated sum output.
+ * \li outVector: The saturated element-wise sum (int8_t).
  *
  * \b Example
+ * Demonstrate saturation for positive overflow, negative overflow, and normal addition.
  * \code
- *   unsigned int N = 8;
- *   unsigned int align = volk_get_alignment();
- *   int8_t* a = (int8_t*)volk_malloc(N, align);
- *   int8_t* b = (int8_t*)volk_malloc(N, align);
- *   int8_t* result = (int8_t*)volk_malloc(N, align);
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
+ * int8_t* a = (int8_t*)volk_malloc(sizeof(int8_t) * N, alignment);
+ * int8_t* b = (int8_t*)volk_malloc(sizeof(int8_t) * N, alignment);
+ * int8_t* result = (int8_t*)volk_malloc(sizeof(int8_t) * N, alignment);
  *
- *   // Values that will cause saturation
- *   a[0] = 100; b[0] = 50;   // 150 -> saturates to 127
- *   a[1] = -100; b[1] = -50; // -150 -> saturates to -128
+ * a[0] = 100;  b[0] = 50;    // 150 saturates to 127
+ * a[1] = -100; b[1] = -50;   // -150 saturates to -128
+ * a[2] = 30;   b[2] = 20;    // 50 no saturation
+ * a[3] = -10;  b[3] = 5;     // -5 no saturation
  *
- *   volk_8i_x2_add_saturated_8i(result, a, b, N);
- *   // result[0] == 127, result[1] == -128
+ * volk_8i_x2_add_saturated_8i(result, a, b, N);
  *
- *   volk_free(a);
- *   volk_free(b);
- *   volk_free(result);
+ * printf("Expected: 127, -128, 50, -5\n");
+ * printf("Result:   %d, %d, %d, %d\n", result[0], result[1], result[2], result[3]);
+ *
+ * volk_free(a);
+ * volk_free(b);
+ * volk_free(result);
  * \endcode
  */
 

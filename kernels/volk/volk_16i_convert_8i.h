@@ -12,28 +12,48 @@
  *
  * \b Overview
  *
- * Converts 16-bit shorts to 8-bit chars.
+ * Converts 16-bit signed samples to 8-bit signed samples by arithmetic
+ * right-shifting each input value by 8 bits, i.e. out[i] = in[i] >> 8.
+ * This effectively extracts the high byte of each 16-bit sample.
+ *
+ * This kernel is useful in digital receiver chains where sample bit-depth
+ * reduction is needed after a gain or quantization stage, for example when
+ * narrowing ADC output to a smaller word size for downstream processing or
+ * storage bandwidth reduction.
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_16i_convert_8i(int8_t* outputVector, const int16_t* inputVector, unsigned int
- * num_points) \endcode
+ * void volk_16i_convert_8i(int8_t* outputVector, const int16_t* inputVector, unsigned int num_points)
+ * \endcode
  *
  * \b Inputs
- * \li inputVector: The input vector of 16-bit shorts.
- * \li num_points: The number of complex data points.
+ * \li inputVector: The input vector of 16-bit signed samples (int16_t).
+ * \li num_points: The number of data points.
  *
  * \b Outputs
- * \li outputVector: The output vector of 8-bit chars.
+ * \li outputVector: The output vector of 8-bit signed samples (int8_t).
  *
  * \b Example
+ * Convert four 16-bit values to 8-bit by shifting right by 8.
  * \code
- * int N = 10000;
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
  *
- * volk_16i_convert_8i();
+ * int16_t* input = (int16_t*)volk_malloc(sizeof(int16_t) * N, alignment);
+ * int8_t* output = (int8_t*)volk_malloc(sizeof(int8_t) * N, alignment);
  *
- * volk_free(x);
- * volk_free(t);
+ * input[0] = 256;   // 256 >> 8 = 1
+ * input[1] = 512;   // 512 >> 8 = 2
+ * input[2] = -256;  // -256 >> 8 = -1
+ * input[3] = 768;   // 768 >> 8 = 3
+ *
+ * volk_16i_convert_8i(output, input, N);
+ *
+ * printf("Expected: 1, 2, -1, 3\n");
+ * printf("Result:   %d, %d, %d, %d\n", output[0], output[1], output[2], output[3]);
+ *
+ * volk_free(input);
+ * volk_free(output);
  * \endcode
  */
 

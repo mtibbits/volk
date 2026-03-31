@@ -12,32 +12,59 @@
  *
  * \b Overview
  *
- * Multiplys the one complex vector with the complex conjugate of the
- * second complex vector and stores their results in the third vector
+ * Multiplies each sample in one 8-bit complex vector by the complex conjugate of the
+ * corresponding sample in a second 8-bit complex vector, scales each result by
+ * 1/scalar, and stores the output as 32-bit floating-point complex values:
+ * cVector[i] = (aVector[i] * conj(bVector[i])) / scalar.
+ *
+ * Conjugate multiplication is a fundamental operation in cross-correlation,
+ * carrier frequency offset estimation, and phase detection. The scalar divisor
+ * normalizes the fixed-point 8-bit input range into calibrated floating-point
+ * output, which is common when processing quantized I/Q samples from low-bit ADCs.
  *
  * <b>Dispatcher Prototype</b>
  * \code
  * void volk_8ic_x2_s32f_multiply_conjugate_32fc(lv_32fc_t* cVector, const lv_8sc_t*
- * aVector, const lv_8sc_t* bVector, const float scalar, unsigned int num_points) \endcode
+ * aVector, const lv_8sc_t* bVector, const float scalar, unsigned int num_points)
+ * \endcode
  *
  * \b Inputs
- * \li aVector: One of the complex vectors to be multiplied.
- * \li bVector: The complex vector which will be converted to complex conjugate and
- * multiplied. \li scalar: each output value is scaled by 1/scalar. \li num_points: The
- * number of complex values in aVector and bVector to be multiplied together and stored
- * into cVector.
+ * \li aVector: The first complex input vector of samples (lv_8sc_t).
+ * \li bVector: The second complex input vector whose conjugate is used (lv_8sc_t).
+ * \li scalar: Each output value is scaled by 1/scalar.
+ * \li num_points: The number of complex samples in aVector and bVector.
  *
  * \b Outputs
- * \li cVector: The complex vector where the results will be stored.
+ * \li cVector: The complex output vector of conjugate products (lv_32fc_t).
  *
  * \b Example
+ * Conjugate-multiply two constant 8-bit complex vectors and scale by 1/2.
  * \code
- * int N = 10000;
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
  *
- * <FIXME>
+ * lv_8sc_t* aVector = (lv_8sc_t*)volk_malloc(sizeof(lv_8sc_t) * N, alignment);
+ * lv_8sc_t* bVector = (lv_8sc_t*)volk_malloc(sizeof(lv_8sc_t) * N, alignment);
+ * lv_32fc_t* cVector = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t) * N, alignment);
  *
- * volk_8ic_x2_s32f_multiply_conjugate_32fc();
+ * // a = 1+1j, b = 1+1j for all elements
+ * for (unsigned int i = 0; i < N; ++i) {
+ *     aVector[i] = lv_cmake((int8_t)1, (int8_t)1);
+ *     bVector[i] = lv_cmake((int8_t)1, (int8_t)1);
+ * }
+ * float scalar = 2.0f;
  *
+ * // Expected: (1+1j)*(1-1j)/2 = (1+1+0j)/2 = 1.0+0.0j per element
+ * lv_32fc_t expected = lv_cmake(1.0f, 0.0f);
+ *
+ * volk_8ic_x2_s32f_multiply_conjugate_32fc(cVector, aVector, bVector, scalar, N);
+ *
+ * printf("Expected: %1.1f+%1.1fj\n", lv_creal(expected), lv_cimag(expected));
+ * printf("Result:   %1.1f+%1.1fj\n", lv_creal(cVector[0]), lv_cimag(cVector[0]));
+ *
+ * volk_free(aVector);
+ * volk_free(bVector);
+ * volk_free(cVector);
  * \endcode
  */
 

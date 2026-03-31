@@ -12,45 +12,49 @@
  *
  * \b Overview
  *
- * Returns Argmax_i mag(x[i]). Finds and returns the index which contains the
- * maximum magnitude for complex points in the given vector.
+ * Computes Argmax_i |x[i]|. Finds and returns the index of the complex sample
+ * with the maximum magnitude in the given vector.
+ *
+ * This operation is commonly used in signal detection and synchronization tasks
+ * where the strongest signal component must be identified, such as peak
+ * detection in correlation outputs, carrier frequency estimation, or finding the
+ * dominant bin after an FFT for spectral analysis.
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_32fc_index_max_32u(uint32_t* target, const lv_32fc_t* src0, uint32_t
- * num_points) \endcode
+ * void volk_32fc_index_max_32u(uint32_t* target, const lv_32fc_t* src0, uint32_t num_points)
+ * \endcode
  *
  * \b Inputs
- * \li src0: The complex input vector.
- * \li num_points: The number of samples.
+ * \li src0: The complex input vector (lv_32fc_t).
+ * \li num_points: The number of complex samples.
  *
  * \b Outputs
- * \li target: The index of the point with maximum magnitude.
+ * \li target: The index of the sample with maximum magnitude (uint32_t).
  *
  * \b Example
- * Calculate the index of the maximum value of \f$x^2 + x\f$ for points around
- * the unit circle.
+ * Find the index of the complex sample with the largest magnitude.
  * \code
- *   int N = 10;
- *   uint32_t alignment = volk_get_alignment();
- *   lv_32fc_t* in  = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t)*N, alignment);
- *   uint32_t* max = (uint32_t*)volk_malloc(sizeof(uint32_t), alignment);
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
+ * lv_32fc_t* in = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t) * N, alignment);
+ * uint32_t* idx = (uint32_t*)volk_malloc(sizeof(uint32_t), alignment);
  *
- *   for(uint32_t ii = 0; ii < N/2; ++ii){
- *       float real = 2.f * ((float)ii / (float)N) - 1.f;
- *       float imag = std::sqrt(1.f - real * real);
- *       in[ii] = lv_cmake(real, imag);
- *       in[ii] = in[ii] * in[ii] + in[ii];
- *       in[N-ii] = lv_cmake(real, imag);
- *       in[N-ii] = in[N-ii] * in[N-ii] + in[N-ii];
- *   }
+ * in[0] = lv_cmake(1.0f, 0.0f);  // mag^2 = 1
+ * in[1] = lv_cmake(3.0f, 4.0f);  // mag^2 = 25
+ * in[2] = lv_cmake(2.0f, 1.0f);  // mag^2 = 5
+ * in[3] = lv_cmake(0.0f, 3.0f);  // mag^2 = 9
  *
- *   volk_32fc_index_max_32u(max, in, N);
+ * // Expected: index 1 (magnitude squared 25 is the largest)
+ * uint32_t expected = 1;
  *
- *   printf("index of max value = %u\n",  *max);
+ * volk_32fc_index_max_32u(idx, in, N);
  *
- *   volk_free(in);
- *   volk_free(max);
+ * printf("Expected: %u\n", expected);
+ * printf("Result:   %u\n", *idx);
+ *
+ * volk_free(in);
+ * volk_free(idx);
  * \endcode
  */
 

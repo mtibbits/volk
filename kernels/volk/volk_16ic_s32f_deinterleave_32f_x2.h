@@ -12,31 +12,55 @@
  *
  * \b Overview
  *
- * Deinterleaves the complex 16 bit vector into I & Q vector data and
- * returns the result as two vectors of floats that have been scaled.
+ * Deinterleaves a complex 16-bit integer vector into separate in-phase (I) and
+ * quadrature (Q) float vectors, dividing each sample by a scalar value. For each
+ * complex sample, the real part is placed into iBuffer and the imaginary part into
+ * qBuffer, both scaled by 1/scalar.
+ *
+ * This kernel is commonly used in receiver front-ends where baseband I/Q samples
+ * arrive as interleaved 16-bit integers from an ADC. The scalar division converts
+ * fixed-point samples to floating-point with simultaneous normalization, preparing
+ * data for downstream processing such as demodulation, filtering, or spectral
+ * analysis.
  *
  * <b>Dispatcher Prototype</b>
  * \code
- *  void volk_16ic_s32f_deinterleave_32f_x2(float* iBuffer, float* qBuffer, const
- * lv_16sc_t* complexVector, const float scalar, unsigned int num_points){ \endcode
+ * void volk_16ic_s32f_deinterleave_32f_x2(float* iBuffer, float* qBuffer, const
+ * lv_16sc_t* complexVector, const float scalar, unsigned int num_points) \endcode
  *
  * \b Inputs
- * \li complexVector: The complex input vector of 16-bit shorts.
- * \li scalar: The value to be divided against each sample of the input complex vector.
- * \li num_points: The number of complex data values to be deinterleaved.
+ * \li complexVector: The complex input vector of interleaved I/Q samples (lv_16sc_t).
+ * \li scalar: The value each sample is divided by (float).
+ * \li num_points: The number of complex samples to deinterleave.
  *
  * \b Outputs
- * \li iBuffer: The floating point I buffer output data.
- * \li qBuffer: The floating point Q buffer output data.
+ * \li iBuffer: The deinterleaved in-phase output data (float).
+ * \li qBuffer: The deinterleaved quadrature output data (float).
  *
  * \b Example
+ * Deinterleave 4 complex samples with a scalar divisor of 2.
  * \code
- * int N = 10000;
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
+ * lv_16sc_t* complexVector = (lv_16sc_t*)volk_malloc(sizeof(lv_16sc_t) * N, alignment);
+ * float* iBuffer = (float*)volk_malloc(sizeof(float) * N, alignment);
+ * float* qBuffer = (float*)volk_malloc(sizeof(float) * N, alignment);
  *
- * volk_16ic_s32f_deinterleave_32f_x2();
+ * for (unsigned int i = 0; i < N; ++i) {
+ *   complexVector[i] = (lv_16sc_t){ 100, -200 };
+ * }
+ * float scalar = 2.0f;
  *
- * volk_free(x);
- * volk_free(t);
+ * // Expected: iBuffer[i] = 100 / 2 = 50.0, qBuffer[i] = -200 / 2 = -100.0
+ *
+ * volk_16ic_s32f_deinterleave_32f_x2(iBuffer, qBuffer, complexVector, scalar, N);
+ *
+ * printf("Expected I: 50.0, Q: -100.0\n");
+ * printf("Result   I: %f, Q: %f\n", iBuffer[0], qBuffer[0]);
+ *
+ * volk_free(complexVector);
+ * volk_free(iBuffer);
+ * volk_free(qBuffer);
  * \endcode
  */
 

@@ -12,43 +12,50 @@
  *
  * \b Overview
  *
- * Adds a floating point scalar to a floating point vector.
+ * Adds a scalar floating-point value to each element of a float vector:
+ * <tt>cVector[i] = aVector[i] + scalar</tt>.
+ *
+ * This operation is commonly used in signal processing for DC offset correction,
+ * level shifting, or bias adjustment. For example, adding a constant to baseband
+ * samples compensates for DC bias introduced by an ADC or mixer stage.
  *
  * <b>Dispatcher Prototype</b>
  * \code
  * void volk_32f_s32f_add_32f(float* cVector, const float* aVector, const float scalar,
- * unsigned int num_points) \endcode
+ * unsigned int num_points)
+ * \endcode
  *
  * \b Inputs
- * \li aVector: The input vector of floats.
- * \li scalar: the scalar value to add against \p aVector.
- * \li num_points: The number of data points.
+ * \li aVector: The input vector of samples (float).
+ * \li scalar: The scalar offset to add to each element (float).
+ * \li num_points: The number of samples to process.
  *
  * \b Outputs
- * \li cVector: The output vector of floats.
+ * \li cVector: The output vector of shifted samples (float).
  *
  * \b Example
+ * Add a DC offset of 10.0 to a vector of constant-valued samples.
  * \code
- *  int N = 10;
- *   unsigned int alignment = volk_get_alignment();
- *   float* increasing = (float*)volk_malloc(sizeof(float)*N, alignment);
- *   float* out = (float*)volk_malloc(sizeof(float)*N, alignment);
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
+ * float* aVector = (float*)volk_malloc(sizeof(float) * N, alignment);
+ * float* cVector = (float*)volk_malloc(sizeof(float) * N, alignment);
  *
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       increasing[ii] = 2.f * ((float)ii / (float)N) - 1.f;
- *   }
+ * for (unsigned int i = 0; i < N; ++i) {
+ *     aVector[i] = 3.0f;
+ * }
+ * float scalar = 10.0f;
  *
- *   // Add addshift to each entry.
- *   float addshift = 5.0f;
+ * // Expected: 3.0 + 10.0 = 13.0 for each element
+ * float expected = 13.0f;
  *
- *   volk_32f_s32f_add_32f(out, increasing, addshift, N);
+ * volk_32f_s32f_add_32f(cVector, aVector, scalar, N);
  *
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       printf("out[%u] = %f\n", ii, out[ii]);
- *   }
+ * printf("Expected: %f\n", expected);
+ * printf("Result:   %f\n", cVector[0]);
  *
- *   volk_free(increasing);
- *   volk_free(out);
+ * volk_free(aVector);
+ * volk_free(cVector);
  * \endcode
  */
 

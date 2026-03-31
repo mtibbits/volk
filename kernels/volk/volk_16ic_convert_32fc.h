@@ -12,29 +12,48 @@
  *
  * \b Overview
  *
- * Converts a complex vector of 16-bits integer each component
- * into a complex vector of 32-bits float each component.
+ * Converts a complex vector of 16-bit integers into a complex vector of
+ * 32-bit floats. Each real and imaginary component is independently widened
+ * from int16 to float, preserving the sample values exactly.
+ *
+ * This type conversion is common at the boundary between fixed-point ADC
+ * hardware and floating-point DSP pipelines. Many SDR receivers deliver
+ * complex samples as interleaved 16-bit I/Q pairs; converting them to
+ * 32-bit float allows subsequent operations such as filtering, spectral
+ * analysis, and demodulation to use full floating-point precision.
  *
  * <b>Dispatcher Prototype</b>
  * \code
  * void volk_16ic_convert_32fc(lv_32fc_t* outputVector, const lv_16sc_t* inputVector,
- * unsigned int num_points) \endcode
+ * unsigned int num_points)
+ * \endcode
  *
  * \b Inputs
- * \li inputVector:  The complex 16-bit integer input data buffer.
- * \li num_points:   The number of data values to be converted.
+ * \li inputVector: The complex 16-bit integer input data buffer (lv_16sc_t).
+ * \li num_points: The number of complex samples to convert.
  *
  * \b Outputs
- * \li outputVector: pointer to a vector holding the converted vector.
+ * \li outputVector: The converted complex 32-bit float output buffer (lv_32fc_t).
  *
  * \b Example
+ * Convert a short vector of known complex samples and verify the result.
  * \code
- * int N = 10000;
- *
+ * unsigned int N = 4;
  * unsigned int alignment = volk_get_alignment();
- * lv_16sc_t* input  = (lv_16sc_t*)volk_malloc(sizeof(lv_16sc_t)*N, alignment);
- * lv_32fc_t* output  = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t)*N, alignment);
- * volk_16ic_convert_32f(output, input, N);
+ *
+ * lv_16sc_t* input = (lv_16sc_t*)volk_malloc(sizeof(lv_16sc_t) * N, alignment);
+ * lv_32fc_t* output = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t) * N, alignment);
+ *
+ * for (unsigned int i = 0; i < N; ++i) {
+ *     input[i] = lv_cmake((int16_t)(i + 1), (int16_t)(-(i + 1)));
+ * }
+ *
+ * // Expected: output[0] = (1, -1), output[1] = (2, -2), ...
+ *
+ * volk_16ic_convert_32fc(output, input, N);
+ *
+ * printf("Expected: (%f, %f)\n", 1.0f, -1.0f);
+ * printf("Result:   (%f, %f)\n", lv_creal(output[0]), lv_cimag(output[0]));
  *
  * volk_free(input);
  * volk_free(output);

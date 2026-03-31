@@ -12,7 +12,14 @@
  *
  * \b Overview
  *
- * Byteswaps (in-place) an aligned vector of int16_t's.
+ * Byteswaps (in-place) a vector of uint16_t values, reversing the byte order
+ * of each 16-bit element. For a value with bytes [A, B], the result is [B, A].
+ *
+ * Byte-order conversion is essential when ingesting sample data from SDR
+ * hardware or network interfaces whose endianness differs from the host.
+ * This kernel efficiently converts an entire buffer of 16-bit samples so
+ * that downstream DSP blocks (demodulation, filtering, spectral analysis)
+ * receive correctly ordered data.
  *
  * <b>Dispatcher Prototype</b>
  * \code
@@ -20,20 +27,34 @@
  * \endcode
  *
  * \b Inputs
- * \li intsToSwap: The vector of data to byte swap.
+ * \li intsToSwap: The vector of 16-bit unsigned samples to byte swap (uint16_t).
  * \li num_points: The number of data points.
  *
  * \b Outputs
- * \li intsToSwap: returns as an in-place calculation.
+ * \li intsToSwap: The byte-swapped values, returned in-place (uint16_t).
  *
  * \b Example
+ * Byteswap 4 uint16_t values and verify one result by hand.
  * \code
- * int N = 10000;
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
  *
- * <FIXME>
+ * uint16_t* x = (uint16_t*)volk_malloc(sizeof(uint16_t) * N, alignment);
+ *
+ * // 0x0102 -> after swap -> 0x0201
+ * for (unsigned int i = 0; i < N; ++i) {
+ *   x[i] = 0x0102;
+ * }
+ *
+ * // Expected: swapping bytes of 0x0102 gives 0x0201 = 513
+ * uint16_t expected = 0x0201;
  *
  * volk_16u_byteswap(x, N);
  *
+ * printf("Expected: %u\n", expected);
+ * printf("Result:   %u\n", x[0]);
+ *
+ * volk_free(x);
  * \endcode
  */
 
