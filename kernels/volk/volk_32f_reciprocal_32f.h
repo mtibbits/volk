@@ -12,9 +12,11 @@
  *
  * \b Overview
  *
- * Computes the reciprocal of the input vector and stores the results
- * in the output vector. For the AVX512F implementation the relative
- * error is < 2**(-14) = 6.1e-05
+ * Computes the element-wise reciprocal of the input vector and stores the
+ * results in the output vector: out[i] = 1.0 / in[i]. This kernel is useful
+ * in signal processing chains where division by a sample vector is needed,
+ * such as normalization, automatic gain control (AGC), or converting
+ * multiplicative weights to their inverse form for efficient scaling.
  *
  * <b>Dispatcher Prototype</b>
  * \code
@@ -22,31 +24,33 @@
  * \endcode
  *
  * \b Inputs
- * \li in: A pointer to the input vector of floats.
- * \li num_points: The number of data points.
+ * \li in: A pointer to the input vector (float).
+ * \li num_points: The number of samples to process.
  *
  * \b Outputs
- * \li out: A pointer to the output vector of floats.
+ * \li out: A pointer to the output vector (float).
  *
  * \b Example
+ * Compute the reciprocal of a constant vector and verify against the known result.
  * \code
-    int N = 10;
-    unsigned int alignment = volk_get_alignment();
-    float* in = (float*)volk_malloc(sizeof(float)*N, alignment);
-    float* out = (float*)volk_malloc(sizeof(float)*N, alignment);
-
-    for(unsigned int ii = 0; ii < N; ++ii){
-        in[ii] = (float)(ii + 1);
-    }
-
-    volk_32f_reciprocal_32f(out, in, N);
-
-    for(unsigned int ii = 0; ii < N; ++ii){
-        printf("out(%i) = %f\n", ii, out[ii]);
-    }
-
-    volk_free(in);
-    volk_free(out);
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
+ * float* in = (float*)volk_malloc(sizeof(float) * N, alignment);
+ * float* out = (float*)volk_malloc(sizeof(float) * N, alignment);
+ *
+ * for (unsigned int i = 0; i < N; ++i) {
+ *     in[i] = 4.0f;
+ * }
+ *
+ * float expected = 1.0f / 4.0f;  // 0.25
+ *
+ * volk_32f_reciprocal_32f(out, in, N);
+ *
+ * printf("Expected: %f\n", expected);
+ * printf("Result:   %f\n", out[0]);
+ *
+ * volk_free(in);
+ * volk_free(out);
  * \endcode
  */
 

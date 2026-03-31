@@ -12,54 +12,52 @@
  *
  * \b Overview
  *
- * Raises each complex input value to the specified real-valued power and stores
- * the results in the output vector. The computation is performed in polar form.
+ * Raises each element of a complex vector to a real-valued power:
+ * cVector[i] = aVector[i] ^ power. The exponentiation is performed in polar
+ * form by scaling the magnitude and multiplying the phase angle.
+ *
+ * Complex exponentiation is used in signal processing for operations such as
+ * carrier recovery, M-th power nonlinearity-based frequency estimation, and
+ * higher-order moment computation. For example, squaring a BPSK signal
+ * removes data modulation and reveals the carrier frequency.
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_32fc_s32f_power_32fc(lv_32fc_t* cVector, const lv_32fc_t* aVector, const
- * float power, unsigned int num_points) \endcode
+ * void volk_32fc_s32f_power_32fc(lv_32fc_t* cVector, const lv_32fc_t* aVector, const float power, unsigned int num_points)
+ * \endcode
  *
  * \b Inputs
- * \li aVector: The complex float input vector.
- * \li power: The real-valued exponent applied to each element.
- * \li num_points: The number of complex values to process.
+ * \li aVector: The complex input vector of samples (lv_32fc_t).
+ * \li power: The real-valued exponent applied to each complex sample.
+ * \li num_points: The number of complex samples.
  *
  * \b Outputs
- * \li cVector: The complex float output vector.
+ * \li cVector: The complex output vector (lv_32fc_t).
  *
  * \b Example
- * Raise a vector of complex values to the power of 2.
+ * Raise a vector of complex values to the power of 2 (squaring).
  * \code
- *   #include <volk/volk.h>
- *   #include <stdio.h>
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
  *
- *   int main(){
- *     unsigned int N = 4;
- *     unsigned int alignment = volk_get_alignment();
- *     float power = 2.0f;
+ * lv_32fc_t* input = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t) * N, alignment);
+ * lv_32fc_t* output = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t) * N, alignment);
  *
- *     lv_32fc_t* input  = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t) * N, alignment);
- *     lv_32fc_t* output = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t) * N, alignment);
+ * float power = 2.0f;
+ * for (unsigned int i = 0; i < N; ++i) {
+ *     input[i] = lv_cmake(3.0f, 4.0f); // magnitude = 5
+ * }
  *
- *     // Initialize with some complex values
- *     input[0] = lv_cmake(1.0f, 0.0f);
- *     input[1] = lv_cmake(0.0f, 1.0f);
- *     input[2] = lv_cmake(1.0f, 1.0f);
- *     input[3] = lv_cmake(2.0f, -1.0f);
+ * // Expected: (3+4j)^2 = 9 + 24j - 16 = -7 + 24j
+ * lv_32fc_t expected = lv_cmake(-7.0f, 24.0f);
  *
- *     volk_32fc_s32f_power_32fc(output, input, power, N);
+ * volk_32fc_s32f_power_32fc(output, input, power, N);
  *
- *     for (unsigned int i = 0; i < N; i++) {
- *       printf("(%1.2f, %1.2f)^%1.1f = (%1.4f, %1.4f)\n",
- *              lv_creal(input[i]), lv_cimag(input[i]), power,
- *              lv_creal(output[i]), lv_cimag(output[i]));
- *     }
+ * printf("Expected: %+.1f%+.1fj\n", lv_creal(expected), lv_cimag(expected));
+ * printf("Result:   %+.1f%+.1fj\n", lv_creal(output[0]), lv_cimag(output[0]));
  *
- *     volk_free(input);
- *     volk_free(output);
- *     return 0;
- *   }
+ * volk_free(input);
+ * volk_free(output);
  * \endcode
  */
 

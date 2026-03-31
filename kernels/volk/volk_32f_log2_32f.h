@@ -13,35 +13,16 @@
  *
  * \b Overview
  *
- * Computes base 2 log of input vector and stores results in output vector.
+ * Computes the base-2 logarithm of each element in the input vector:
+ * bVector[i] = log2(aVector[i]). Note that this implementation does not
+ * conform to the IEEE floating-point standard: +-Inf outputs are mapped to
+ * +-127.0f and +-NaN inputs are not supported.
  *
- * Note that this implementation is not conforming to the IEEE FP standard, i.e.,
- * +-Inf outputs are mapped to +-127.0f and +-NaN input values are not supported.
- *
- * This kernel was adapted from Jose Fonseca's Fast SSE2 log implementation
- * https://jrfonseca.blogspot.com/2008/09/fast-sse2-pow-tables-or-polynomials.html
- *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the
- * "Software"), to deal in the Software without restriction, including
- * without limitation the rights to use, copy, modify, merge, publish,
- * distribute, sub license, and/or sell copies of the Software, and to
- * permit persons to whom the Software is furnished to do so, subject to
- * the following conditions:
- *
- * The above copyright notice and this permission notice (including the
- * next paragraph) shall be included in all copies or substantial portions
- * of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
- * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
- * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
- * IN NO EVENT SHALL TUNGSTEN GRAPHICS AND/OR ITS SUPPLIERS BE LIABLE FOR
- * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
- * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
- * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- *
- * This is the MIT License (MIT)
+ * Base-2 logarithms are fundamental in signal processing for converting
+ * power measurements to a decibel-like scale, computing power spectral
+ * density, and evaluating entropy or information-theoretic metrics. This
+ * kernel is useful wherever log-scale representations of signal magnitudes
+ * or power levels are needed, such as in spectral analysis or AGC loops.
  *
  * <b>Dispatcher Prototype</b>
  * \code
@@ -49,31 +30,35 @@
  * \endcode
  *
  * \b Inputs
- * \li aVector: The input vector of floats.
+ * \li aVector: The input vector of signal samples or power values (float).
  * \li num_points: The number of data points.
  *
  * \b Outputs
- * \li bVector: The output vector.
+ * \li bVector: The output vector of base-2 logarithms (float).
  *
  * \b Example
+ * Compute log2 of powers of 2, where the expected result equals the exponent.
  * \code
- *   int N = 10;
- *   unsigned int alignment = volk_get_alignment();
- *   float* in = (float*)volk_malloc(sizeof(float)*N, alignment);
- *   float* out = (float*)volk_malloc(sizeof(float)*N, alignment);
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
+ * float* in = (float*)volk_malloc(sizeof(float) * N, alignment);
+ * float* out = (float*)volk_malloc(sizeof(float) * N, alignment);
  *
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       in[ii] = std::pow(2.f,((float)ii));
- *   }
+ * // Input: 1, 2, 4, 8 (i.e. 2^0, 2^1, 2^2, 2^3)
+ * in[0] = 1.0f;
+ * in[1] = 2.0f;
+ * in[2] = 4.0f;
+ * in[3] = 8.0f;
  *
- *   volk_32f_log2_32f(out, in, N);
+ * volk_32f_log2_32f(out, in, N);
  *
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       printf("out(%i) = %f\n", ii, out[ii]);
- *   }
+ * // Expected: log2(2^i) = i -> 0, 1, 2, 3
+ * for (unsigned int i = 0; i < N; ++i) {
+ *     printf("Expected: %f  Result: %f\n", (float)i, out[i]);
+ * }
  *
- *   volk_free(in);
- *   volk_free(out);
+ * volk_free(in);
+ * volk_free(out);
  * \endcode
  */
 

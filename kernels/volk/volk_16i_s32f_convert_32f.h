@@ -12,58 +12,52 @@
  *
  * \b Overview
  *
- * Converts 16-bit integers to 32-bit floats, dividing each value by a scalar.
- * The output is: outputVector[i] = (float)inputVector[i] / scalar.
+ * Converts 16-bit integer samples to scaled 32-bit floating point values by
+ * dividing each sample by a scalar: out[i] = (float)in[i] / scalar.
+ *
+ * This kernel is commonly used when ingesting fixed-point ADC samples into a
+ * floating-point signal processing pipeline. The scalar divisor normalizes the
+ * integer sample range to a desired floating-point amplitude, which is essential
+ * for correct operation of downstream blocks such as filters, demodulators, and
+ * spectral analysis routines.
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_16i_s32f_convert_32f(float* outputVector, const int16_t* inputVector, const
- * float scalar, unsigned int num_points) \endcode
+ * void volk_16i_s32f_convert_32f(float* outputVector, const int16_t* inputVector, const float scalar, unsigned int num_points)
+ * \endcode
  *
  * \b Inputs
- * \li inputVector: The input vector of 16-bit integers (int16_t).
- * \li scalar: The divisor applied to each converted value.
- * \li num_points: The number of data points to convert.
+ * \li inputVector: The input vector of 16-bit integer samples (int16_t).
+ * \li scalar: The divisor applied to each converted sample (float).
+ * \li num_points: The number of samples to convert.
  *
  * \b Outputs
- * \li outputVector: The output vector of 32-bit floats.
+ * \li outputVector: The output vector of scaled 32-bit floating point values (float).
  *
  * \b Example
- * Convert 16-bit ADC samples to normalized floating point values.
+ * Convert four int16 samples with a scalar divisor of 2 and verify the result.
  * \code
- *   #include <volk/volk.h>
- *   #include <stdio.h>
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
  *
- *   int main() {
- *     unsigned int N = 8;
- *     unsigned int alignment = volk_get_alignment();
+ * int16_t* input = (int16_t*)volk_malloc(sizeof(int16_t) * N, alignment);
+ * float* output = (float*)volk_malloc(sizeof(float) * N, alignment);
  *
- *     // Simulate 16-bit ADC samples with a full-scale range of +/- 32767
- *     int16_t* input = (int16_t*)volk_malloc(N * sizeof(int16_t), alignment);
- *     float* output = (float*)volk_malloc(N * sizeof(float), alignment);
+ * for (unsigned int i = 0; i < N; ++i) {
+ *   input[i] = (int16_t)((i + 1) * 100);  // 100, 200, 300, 400
+ * }
+ * float scalar = 2.0f;
  *
- *     // Fill with sample values spanning the int16 range
- *     input[0] = 32767;   // max positive
- *     input[1] = 16384;   // half scale
- *     input[2] = 8192;
- *     input[3] = 0;
- *     input[4] = -8192;
- *     input[5] = -16384;
- *     input[6] = -32767;  // max negative
- *     input[7] = 1000;
+ * // Expected: 100/2=50, 200/2=100, 300/2=150, 400/2=200
  *
- *     // Divide by 32768.0 to normalize to approximately [-1.0, 1.0]
- *     float scalar = 32768.0f;
- *     volk_16i_s32f_convert_32f(output, input, scalar, N);
+ * volk_16i_s32f_convert_32f(output, input, scalar, N);
  *
- *     for (unsigned int i = 0; i < N; i++) {
- *       printf("input[%u] = %6d  ->  output[%u] = %9.6f\n", i, input[i], i, output[i]);
- *     }
+ * printf("Expected: 50, 100, 150, 200\n");
+ * printf("Result:   %1.0f, %1.0f, %1.0f, %1.0f\n",
+ *        output[0], output[1], output[2], output[3]);
  *
- *     volk_free(input);
- *     volk_free(output);
- *     return 0;
- *   }
+ * volk_free(input);
+ * volk_free(output);
  * \endcode
  */
 

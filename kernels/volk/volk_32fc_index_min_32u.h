@@ -12,45 +12,50 @@
  *
  * \b Overview
  *
- * Returns Argmin_i mag(x[i]). Finds and returns the index which contains the
- * minimum magnitude for complex points in the given vector.
+ * Returns Argmin_i mag(x[i]). Finds and returns the index of the complex
+ * sample with the minimum magnitude in the input vector. Comparison is
+ * performed by squared magnitude (re*re + im*im) to avoid the cost of a
+ * square root.
+ *
+ * This kernel is useful in signal processing tasks such as finding the
+ * closest constellation point in a demodulator, identifying the weakest
+ * signal component in a channelized receiver, or locating the minimum-energy
+ * bin after spectral analysis.
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_32fc_index_min_32u(uint32_t* target, const lv_32fc_t* source, uint32_t
- * num_points) \endcode
+ * void volk_32fc_index_min_32u(uint32_t* target, const lv_32fc_t* source, uint32_t num_points)
+ * \endcode
  *
  * \b Inputs
- * \li source: The complex input vector.
- * \li num_points: The number of samples.
+ * \li source: The complex input vector (lv_32fc_t).
+ * \li num_points: The number of complex samples.
  *
  * \b Outputs
- * \li target: The index of the point with minimum magnitude.
+ * \li target: The index of the sample with minimum magnitude (uint32_t).
  *
  * \b Example
- * Calculate the index of the minimum value of \f$x^2 + x\f$ for points around
- * the unit circle.
+ * Find the index of the smallest-magnitude sample among four complex values.
  * \code
- *   int N = 10;
- *   uint32_t alignment = volk_get_alignment();
- *   lv_32fc_t* in  = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t)*N, alignment);
- *   uint32_t* min = (uint32_t*)volk_malloc(sizeof(uint32_t), alignment);
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
+ * lv_32fc_t* in = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t) * N, alignment);
+ * uint32_t* idx = (uint32_t*)volk_malloc(sizeof(uint32_t), alignment);
  *
- *   for(uint32_t ii = 0; ii < N/2; ++ii){
- *       float real = 2.f * ((float)ii / (float)N) - 1.f;
- *       float imag = std::sqrt(1.f - real * real);
- *       in[ii] = lv_cmake(real, imag);
- *       in[ii] = in[ii] * in[ii] + in[ii];
- *       in[N-1-ii] = lv_cmake(real, imag);
- *       in[N-1-ii] = in[N-1-ii] * in[N-1-ii] + in[N-1-ii];
- *   }
+ * in[0] = lv_cmake(3.0f, 4.0f);  // mag^2 = 25
+ * in[1] = lv_cmake(1.0f, 0.0f);  // mag^2 = 1  <-- min
+ * in[2] = lv_cmake(2.0f, 2.0f);  // mag^2 = 8
+ * in[3] = lv_cmake(0.0f, 5.0f);  // mag^2 = 25
  *
- *   volk_32fc_index_min_32u(min, in, N);
+ * unsigned int expected = 1; // index of (1+0j), smallest magnitude
  *
- *   printf("index of min value = %u\n",  *min);
+ * volk_32fc_index_min_32u(idx, in, N);
  *
- *   volk_free(in);
- *   volk_free(min);
+ * printf("Expected: %u\n", expected);
+ * printf("Result:   %u\n", *idx);
+ *
+ * volk_free(in);
+ * volk_free(idx);
  * \endcode
  */
 

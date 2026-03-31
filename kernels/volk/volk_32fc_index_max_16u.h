@@ -12,14 +12,15 @@
  *
  * \b Overview
  *
- * Returns Argmax_i mag(x[i]). Finds and returns the index which contains the
- * maximum magnitude for complex points in the given vector.
+ * Returns Argmax_i |x[i]|^2. Finds and returns the index of the complex
+ * sample with the maximum magnitude in the given vector.
  *
- * Note that num_points is a uint32_t, but the return value is
- * uint16_t. Providing a vector larger than the max of a uint16_t
- * (65536) would miss anything outside of this boundary. The kernel
- * will check the length of num_points and cap it to this max value,
- * anyways.
+ * This kernel is commonly used in peak detection tasks such as identifying
+ * the strongest correlation peak during timing synchronization, finding the
+ * dominant spectral bin after an FFT, or locating the largest-magnitude
+ * sample for AGC reference. Note that num_points is a uint32_t, but the
+ * return value is uint16_t. The kernel caps num_points to USHRT_MAX (65535)
+ * internally.
  *
  * <b>Dispatcher Prototype</b>
  * \code
@@ -27,36 +28,34 @@
  * num_points) \endcode
  *
  * \b Inputs
- * \li src0: The complex input vector.
- * \li num_points: The number of samples.
+ * \li src0: The complex input vector (lv_32fc_t).
+ * \li num_points: The number of complex samples.
  *
  * \b Outputs
- * \li target: The index of the point with maximum magnitude.
+ * \li target: The index of the sample with maximum magnitude (uint16_t).
  *
  * \b Example
- * Calculate the index of the maximum value of \f$x^2 + x\f$ for points around
- * the unit circle.
+ * Place a known largest-magnitude sample at index 2 and verify the kernel finds it.
  * \code
- *   int N = 10;
- *   uint32_t alignment = volk_get_alignment();
- *   lv_32fc_t* in  = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t)*N, alignment);
- *   uint16_t* max = (uint16_t*)volk_malloc(sizeof(uint16_t), alignment);
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
+ * lv_32fc_t* in = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t) * N, alignment);
+ * uint16_t* target = (uint16_t*)volk_malloc(sizeof(uint16_t), alignment);
  *
- *   for(uint32_t ii = 0; ii < N/2; ++ii){
- *       float real = 2.f * ((float)ii / (float)N) - 1.f;
- *       float imag = std::sqrt(1.f - real * real);
- *       in[ii] = lv_cmake(real, imag);
- *       in[ii] = in[ii] * in[ii] + in[ii];
- *       in[N-1-ii] = lv_cmake(real, imag);
- *       in[N-1-ii] = in[N-1-ii] * in[N-1-ii] + in[N-1-ii];
- *   }
+ * in[0] = lv_cmake(1.0f, 0.0f);  // mag^2 = 1
+ * in[1] = lv_cmake(0.0f, 2.0f);  // mag^2 = 4
+ * in[2] = lv_cmake(3.0f, 4.0f);  // mag^2 = 25  <-- max
+ * in[3] = lv_cmake(1.0f, 1.0f);  // mag^2 = 2
  *
- *   volk_32fc_index_max_16u(max, in, N);
+ * uint16_t expected = 2;
  *
- *   printf("index of max value = %u\n",  *max);
+ * volk_32fc_index_max_16u(target, in, N);
  *
- *   volk_free(in);
- *   volk_free(max);
+ * printf("Expected: %u\n", expected);
+ * printf("Result:   %u\n", *target);
+ *
+ * volk_free(in);
+ * volk_free(target);
  * \endcode
  */
 

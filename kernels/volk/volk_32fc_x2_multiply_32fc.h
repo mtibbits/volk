@@ -12,45 +12,55 @@
  *
  * \b Overview
  *
- * Multiplies two complex vectors and returns the complex result.
+ * Multiplies two complex vectors element-by-element and stores the results
+ * in the output vector: c[i] = a[i] * b[i]. Each multiplication follows the
+ * standard complex product (a_re*b_re - a_im*b_im) + j*(a_re*b_im + a_im*b_re).
+ *
+ * Element-wise complex multiplication is a fundamental building block in signal
+ * processing. It is used for frequency mixing (multiplying a signal by a complex
+ * sinusoid to shift its spectrum), applying complex gains in AGC or beamforming,
+ * and computing the product of a signal with complex filter taps in the frequency
+ * domain.
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_32fc_x2_multiply_32fc(lv_32fc_t* cVector, const lv_32fc_t* aVector, const
- * lv_32fc_t* bVector, unsigned int num_points); \endcode
+ * void volk_32fc_x2_multiply_32fc(lv_32fc_t* cVector, const lv_32fc_t* aVector,
+ *   const lv_32fc_t* bVector, unsigned int num_points);
+ * \endcode
  *
  * \b Inputs
- * \li aVector: The first input vector of complex floats.
- * \li bVector: The second input vector of complex floats.
- * \li num_points: The number of data points.
+ * \li aVector: The first input vector of complex samples (lv_32fc_t).
+ * \li bVector: The second input vector of complex samples (lv_32fc_t).
+ * \li num_points: The number of complex samples to multiply.
  *
  * \b Outputs
- * \li cVector: The output vector complex floats.
+ * \li cVector: The output vector of complex products (lv_32fc_t).
  *
  * \b Example
- * Mix two signals at f=0.3 and 0.1.
+ * Multiply two constant complex vectors and verify the result.
  * \code
- *   int N = 10;
- *   unsigned int alignment = volk_get_alignment();
- *   lv_32fc_t* sig_1  = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t)*N, alignment);
- *   lv_32fc_t* sig_2  = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t)*N, alignment);
- *   lv_32fc_t* out = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t)*N, alignment);
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
+ * lv_32fc_t* a   = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t) * N, alignment);
+ * lv_32fc_t* b   = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t) * N, alignment);
+ * lv_32fc_t* out = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t) * N, alignment);
  *
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       // Generate two tones
- *       float real_1 = std::cos(0.3f * (float)ii);
- *       float imag_1 = std::sin(0.3f * (float)ii);
- *       sig_1[ii] = lv_cmake(real_1, imag_1);
- *       float real_2 = std::cos(0.1f * (float)ii);
- *       float imag_2 = std::sin(0.1f * (float)ii);
- *       sig_2[ii] = lv_cmake(real_2, imag_2);
- *   }
+ * for (unsigned int i = 0; i < N; ++i) {
+ *     a[i] = lv_cmake(3.0f, 4.0f);
+ *     b[i] = lv_cmake(1.0f, 2.0f);
+ * }
  *
- *   volk_32fc_x2_multiply_32fc(out, sig_1, sig_2, N);
+ * // Expected: (3+4j)*(1+2j) = (3-8) + (6+4)j = -5+10j
+ * lv_32fc_t expected = lv_cmake(-5.0f, 10.0f);
  *
- *   volk_free(sig_1);
- *   volk_free(sig_2);
- *   volk_free(out);
+ * volk_32fc_x2_multiply_32fc(out, a, b, N);
+ *
+ * printf("Expected: %+.1f%+.1fj\n", lv_creal(expected), lv_cimag(expected));
+ * printf("Result:   %+.1f%+.1fj\n", lv_creal(out[0]), lv_cimag(out[0]));
+ *
+ * volk_free(a);
+ * volk_free(b);
+ * volk_free(out);
  * \endcode
  */
 

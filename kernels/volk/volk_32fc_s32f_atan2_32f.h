@@ -13,48 +13,54 @@
  *
  * \b Overview
  *
- * Computes the arctan for each value in a complex vector and applies
- * a normalization factor.
+ * Computes the phase angle (arctangent) of each complex sample's quadrature (Q)
+ * and in-phase (I) components, divided by a normalization factor:
+ * output[i] = atan2(Q[i], I[i]) / normalizeFactor.
+ *
+ * This kernel is commonly used in demodulation and phase-tracking applications
+ * where the instantaneous phase of a complex baseband signal must be extracted.
+ * Setting normalizeFactor to pi normalizes the output to the range [-1, 1],
+ * which is useful for FM demodulation or phase-difference computations.
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_32fc_s32f_atan2_32f(float* outputVector, const lv_32fc_t* complexVector,
- * const float normalizeFactor, unsigned int num_points) \endcode
+ * void volk_32fc_s32f_atan2_32f(float* outputVector, const lv_32fc_t*
+ * inputVector, const float normalizeFactor, unsigned int num_points)
+ * \endcode
  *
  * \b Inputs
- * \li complexVector: The byte-aligned input vector containing interleaved IQ data (I = cos,
- * Q = sin). \li normalizeFactor: The atan results are divided by this normalization
- * factor. \li num_points: The number of complex values in \p complexVector.
+ * \li inputVector: The input vector of complex samples containing interleaved
+ * IQ data (lv_32fc_t).
+ * \li normalizeFactor: The atan2 results are divided by this normalization
+ * factor (float).
+ * \li num_points: The number of complex samples in \p inputVector.
  *
  * \b Outputs
- * \li outputVector: The vector where the results will be stored.
+ * \li outputVector: The output vector of normalized phase values (float).
  *
  * \b Example
- * Calculate the arctangent of points around the unit circle.
+ * Compute the normalized phase of a constant complex vector.
  * \code
- *   int N = 10;
- *   unsigned int alignment = volk_get_alignment();
- *   lv_32fc_t* in  = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t)*N, alignment);
- *   float* out = (float*)volk_malloc(sizeof(float)*N, alignment);
- *   float scale = 1.f; // we want unit circle
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
+ * lv_32fc_t* in = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t) * N, alignment);
+ * float* out = (float*)volk_malloc(sizeof(float) * N, alignment);
  *
- *   for(unsigned int ii = 0; ii < N/2; ++ii){
- *       // Generate points around the unit circle
- *       float real = -4.f * ((float)ii / (float)N) + 1.f;
- *       float imag = std::sqrt(1.f - real * real);
- *       in[ii] = lv_cmake(real, imag);
- *       in[ii+N/2] = lv_cmake(-real, -imag);
- *   }
+ * for (unsigned int i = 0; i < N; ++i) {
+ *     in[i] = lv_cmake(1.0f, 1.0f);
+ * }
+ * float normalizeFactor = 1.0f;
  *
- *   volk_32fc_s32f_atan2_32f(out, in, scale, N);
+ * // Expected: atan2(1, 1) / 1.0 = pi/4 ~ 0.7854 for each element
+ * float expected = 0.7853981f;
  *
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       printf("atan2(%1.2f, %1.2f) = %1.2f\n",
- *           lv_cimag(in[ii]), lv_creal(in[ii]), out[ii]);
- *   }
+ * volk_32fc_s32f_atan2_32f(out, in, normalizeFactor, N);
  *
- *   volk_free(in);
- *   volk_free(out);
+ * printf("Expected: %1.7f\n", expected);
+ * printf("Result:   %1.7f\n", out[0]);
+ *
+ * volk_free(in);
+ * volk_free(out);
  * \endcode
  */
 

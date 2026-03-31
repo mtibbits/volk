@@ -12,49 +12,55 @@
  *
  * \b Overview
  *
- * This block computes the conjugate dot product (or inner product)
- * between two vectors, the \p input and \p taps vectors. Given a set
- * of \p num_points taps, the result is the sum of products between
- * the input vector and the conjugate of the taps. The result is a
- * single value stored in the \p result address and is returned as a
- * complex float.
+ * Computes the conjugate dot product (inner product) of two complex vectors:
+ * result = sum(input[i] * conj(taps[i])), for i = 0 to num_points - 1.
+ * The output is a single complex float accumulator value.
+ *
+ * The conjugate dot product is fundamental to FIR filtering, where \p input
+ * contains signal samples and \p taps holds the filter coefficients. It also
+ * appears in matched filtering, cross-correlation, and beamforming operations
+ * where one of the two operands must be conjugated before accumulation.
  *
  * <b>Dispatcher Prototype</b>
  * \code
  * void volk_32fc_x2_conjugate_dot_prod_32fc(lv_32fc_t* result, const lv_32fc_t* input,
- * const lv_32fc_t* taps, unsigned int num_points) \endcode
+ * const lv_32fc_t* taps, unsigned int num_points)
+ * \endcode
  *
  * \b Inputs
- * \li input: vector of complex floats.
- * \li taps:  complex float taps.
- * \li num_points: number of samples in both \p input and \p taps.
+ * \li input: Vector of complex float samples (lv_32fc_t).
+ * \li taps: Vector of complex float filter coefficients (lv_32fc_t).
+ * \li num_points: The number of complex samples in both \p input and \p taps.
  *
  * \b Outputs
- * \li result: pointer to a complex float value to hold the dot product result.
+ * \li result: Pointer to a complex float (lv_32fc_t) to hold the conjugate dot product.
  *
  * \b Example
+ * Conjugate dot product of two constant-valued complex vectors of length 4.
  * \code
- * unsigned int N = 1000;
+ * unsigned int N = 4;
  * unsigned int alignment = volk_get_alignment();
  *
- * lv_32fc_t* a = (lv_32fc_t*) volk_malloc(sizeof(lv_32fc_t) * N, alignment);
- * lv_32fc_t* b = (lv_32fc_t*) volk_malloc(sizeof(lv_32fc_t) * N, alignment);
+ * lv_32fc_t* input = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t) * N, alignment);
+ * lv_32fc_t* taps = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t) * N, alignment);
  *
- * for (int i = 0; i < N; ++i) {
- *   a[i] = lv_cmake(.50f, .50f);
- *   b[i] = lv_cmake(.50f, .75f);
+ * for (unsigned int i = 0; i < N; ++i) {
+ *     input[i] = lv_cmake(0.5f, 0.5f);
+ *     taps[i] = lv_cmake(0.5f, 0.75f);
  * }
  *
- * lv_32fc_t e = (float) N * a[0] * lv_conj(b[0]); // When a and b constant
- * lv_32fc_t res;
+ * // Each term: (0.5+0.5j) * conj(0.5+0.75j) = (0.5+0.5j)(0.5-0.75j) = 0.625-0.125j
+ * // Sum of 4 terms: 2.5 - 0.5j
+ * lv_32fc_t expected = lv_cmake(2.5f, -0.5f);
+ * lv_32fc_t result;
  *
- * volk_32fc_x2_conjugate_dot_prod_32fc(&res, a, b, N);
+ * volk_32fc_x2_conjugate_dot_prod_32fc(&result, input, taps, N);
  *
- * printf("Expected: %8.2f%+8.2fi\n", lv_creal(e), lv_cimag(e));
- * printf("Result:   %8.2f%+8.2fi\n", lv_creal(res), lv_cimag(res));
+ * printf("Expected: %1.1f%+1.1fj\n", lv_creal(expected), lv_cimag(expected));
+ * printf("Result:   %1.1f%+1.1fj\n", lv_creal(result), lv_cimag(result));
  *
- * volk_free(a);
- * volk_free(b);
+ * volk_free(input);
+ * volk_free(taps);
  * \endcode
  */
 

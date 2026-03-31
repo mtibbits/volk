@@ -12,56 +12,56 @@
  *
  * \b Overview
  *
- * Deinterleaves the complex 8-bit char vector into separate I and Q
- * float vectors, dividing each component by the scalar factor.
+ * Deinterleaves a complex 8-bit integer vector into separate in-phase (I) and
+ * quadrature (Q) floating-point vectors, dividing each component by a scalar factor:
+ * iBuffer[i] = real(complexVector[i]) / scalar,
+ * qBuffer[i] = imag(complexVector[i]) / scalar.
+ *
+ * This kernel is commonly used in SDR receiver front-ends where an ADC produces
+ * interleaved 8-bit I/Q samples that must be separated and scaled to normalized
+ * floating-point representation before further baseband processing such as
+ * demodulation, filtering, or spectral analysis.
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_8ic_s32f_deinterleave_32f_x2(float* iBuffer, float* qBuffer, const
- * lv_8sc_t* complexVector, const float scalar, unsigned int num_points) \endcode
+ * void volk_8ic_s32f_deinterleave_32f_x2(float* iBuffer, float* qBuffer, const lv_8sc_t* complexVector, const float scalar, unsigned int num_points)
+ * \endcode
  *
  * \b Inputs
- * \li complexVector: The complex input vector of interleaved 8-bit I/Q pairs (lv_8sc_t).
- * \li scalar: The scalar divisor applied to each output value.
- * \li num_points: The number of complex data values to be deinterleaved.
+ * \li complexVector: The interleaved complex input samples (lv_8sc_t).
+ * \li scalar: The divisor applied to each deinterleaved sample (float).
+ * \li num_points: The number of complex samples to deinterleave.
  *
  * \b Outputs
- * \li iBuffer: The in-phase (I) output vector of floats.
- * \li qBuffer: The quadrature (Q) output vector of floats.
+ * \li iBuffer: The in-phase (I) output samples (float).
+ * \li qBuffer: The quadrature (Q) output samples (float).
  *
  * \b Example
- * Deinterleave complex 8-bit samples and scale to normalized floats.
+ * Deinterleave 4 complex 8-bit samples and divide by 2.
  * \code
- * #include <volk/volk.h>
- * #include <stdio.h>
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
  *
- * int main() {
- *     unsigned int N = 4;
- *     unsigned int alignment = volk_get_alignment();
+ * lv_8sc_t* complexVector = (lv_8sc_t*)volk_malloc(sizeof(lv_8sc_t) * N, alignment);
+ * float* iBuffer = (float*)volk_malloc(sizeof(float) * N, alignment);
+ * float* qBuffer = (float*)volk_malloc(sizeof(float) * N, alignment);
  *
- *     lv_8sc_t* complexVector =
- *         (lv_8sc_t*)volk_malloc(sizeof(lv_8sc_t) * N, alignment);
- *     float* iBuffer = (float*)volk_malloc(sizeof(float) * N, alignment);
- *     float* qBuffer = (float*)volk_malloc(sizeof(float) * N, alignment);
- *
- *     // Simulate complex 8-bit samples: (I, Q) pairs
- *     complexVector[0] = lv_cmake((int8_t)127, (int8_t)-128);
- *     complexVector[1] = lv_cmake((int8_t)50, (int8_t)-50);
- *     complexVector[2] = lv_cmake((int8_t)0, (int8_t)100);
- *     complexVector[3] = lv_cmake((int8_t)-30, (int8_t)30);
- *
- *     // Divide by 128 to normalize to approximately [-1.0, 1.0]
- *     float scalar = 128.0f;
- *     volk_8ic_s32f_deinterleave_32f_x2(iBuffer, qBuffer, complexVector, scalar, N);
- *
- *     for (unsigned int i = 0; i < N; i++) {
- *         printf("Sample %u: I = %+.4f  Q = %+.4f\n", i, iBuffer[i], qBuffer[i]);
- *     }
- *
- *     volk_free(complexVector);
- *     volk_free(iBuffer);
- *     volk_free(qBuffer);
+ * for (unsigned int i = 0; i < N; ++i) {
+ *   complexVector[i] = lv_cmake((int8_t)(2 * i), (int8_t)(2 * i + 1));
  * }
+ * float scalar = 2.0f;
+ *
+ * // Expected: iBuffer[0] = 0/2 = 0.0, qBuffer[0] = 1/2 = 0.5
+ * //           iBuffer[1] = 2/2 = 1.0, qBuffer[1] = 3/2 = 1.5
+ *
+ * volk_8ic_s32f_deinterleave_32f_x2(iBuffer, qBuffer, complexVector, scalar, N);
+ *
+ * printf("iBuffer[1] Expected: 1.0  Result: %f\n", iBuffer[1]);
+ * printf("qBuffer[1] Expected: 1.5  Result: %f\n", qBuffer[1]);
+ *
+ * volk_free(complexVector);
+ * volk_free(iBuffer);
+ * volk_free(qBuffer);
  * \endcode
  */
 

@@ -12,8 +12,13 @@
  *
  * \b Overview
  *
- * Computes the square root of the input vector and stores the results
- * in the output vector.
+ * Computes the element-wise square root of the input vector and stores
+ * the results in the output vector: cVector[i] = sqrt(aVector[i]).
+ *
+ * In signal processing, the square root operation is commonly used to
+ * convert magnitude-squared values to magnitude, for example when
+ * computing RMS levels, envelope detection, or deriving amplitude from
+ * power spectral density estimates.
  *
  * <b>Dispatcher Prototype</b>
  * \code
@@ -21,31 +26,34 @@
  * \endcode
  *
  * \b Inputs
- * \li aVector: The input vector of floats.
+ * \li aVector: The input vector of samples (float).
  * \li num_points: The number of data points.
  *
  * \b Outputs
- * \li cVector: The output vector.
+ * \li cVector: The output vector of square roots (float).
  *
  * \b Example
+ * Compute the square root of perfect squares to verify correctness.
  * \code
-    int N = 10;
-    unsigned int alignment = volk_get_alignment();
-    float* in = (float*)volk_malloc(sizeof(float)*N, alignment);
-    float* out = (float*)volk_malloc(sizeof(float)*N, alignment);
-
-    for(unsigned int ii = 0; ii < N; ++ii){
-        in[ii] = (float)(ii*ii);
-    }
-
-    volk_32f_sqrt_32f(out, in, N);
-
-    for(unsigned int ii = 0; ii < N; ++ii){
-        printf("out(%i) = %f\n", ii, out[ii]);
-    }
-
-    volk_free(in);
-    volk_free(out);
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
+ * float* in = (float*)volk_malloc(sizeof(float) * N, alignment);
+ * float* out = (float*)volk_malloc(sizeof(float) * N, alignment);
+ *
+ * for (unsigned int i = 0; i < N; ++i) {
+ *     in[i] = (float)((i + 1) * (i + 1)); // 1, 4, 9, 16
+ * }
+ *
+ * // Expected: sqrt(1)=1, sqrt(4)=2, sqrt(9)=3, sqrt(16)=4
+ *
+ * volk_32f_sqrt_32f(out, in, N);
+ *
+ * for (unsigned int i = 0; i < N; ++i) {
+ *     printf("Expected %u, Result %f\n", i + 1, out[i]);
+ * }
+ *
+ * volk_free(in);
+ * volk_free(out);
  * \endcode
  */
 

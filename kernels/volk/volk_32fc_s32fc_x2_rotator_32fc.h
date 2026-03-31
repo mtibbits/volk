@@ -12,17 +12,21 @@
  *
  * \b Deprecation
  *
- * This kernel is deprecated, because passing in \p lv_32fc_t by value results in
- * undefined behavior, causing a segmentation fault on some architectures.
- * Use \ref volk_32fc_s32fc_x2_rotator2_32fc instead.
+ * This kernel is deprecated, because passing in `lv_32fc_t` by value results in
+ * Undefined Behaviour, causing a segmentation fault on some architectures.
+ * Use `volk_32fc_s32fc_x2_rotator2_32fc` instead.
  *
  * \b Overview
  *
- * Applies a complex phase rotation to each element of a complex floating-point input
- * vector. The rotation advances by a fixed phase increment per sample, starting from
- * a caller-supplied initial phase. On return, the phase accumulator is updated to
- * reflect the final phase, allowing back-to-back calls for continuous rotation across
- * blocks.
+ * Applies a complex phase rotation to each sample of the input vector at a
+ * fixed rate per sample, starting from an initial phase offset. Each output
+ * sample is computed as out[n] = in[n] * phase, where phase is multiplied by
+ * the phase increment after each sample to advance the rotation angle.
+ *
+ * This kernel implements a numerically controlled oscillator (NCO) combined
+ * with a mixer, commonly used for frequency translation in digital receivers,
+ * fine frequency correction in carrier synchronization loops, and signal
+ * generation when applied to a DC input.
  *
  * <b>Dispatcher Prototype</b>
  * \code
@@ -31,54 +35,44 @@
  * \endcode
  *
  * \b Inputs
- * \li inVector: Complex input vector of length \p num_points (lv_32fc_t).
- * \li phase_inc: Per-sample phase increment as a unit-magnitude complex number
- *     (lv_32fc_t, passed by value).
- * \li phase: Pointer to the complex phase accumulator; provides the initial phase and
- *     is updated on return (lv_32fc_t*).
- * \li num_points: The number of complex elements to process.
+ * \li inVector: Input complex samples to be frequency-shifted (lv_32fc_t).
+ * \li phase_inc: Complex phase increment per sample, representing the
+ * rotational velocity as a unit-magnitude phasor (lv_32fc_t).
+ * \li phase: Pointer to the current phase accumulator, updated in-place
+ * across calls to maintain phase continuity (lv_32fc_t).
+ * \li num_points: The number of complex samples to process.
  *
  * \b Outputs
- * \li outVector: Complex output vector of length \p num_points (lv_32fc_t).
- * \li phase: Updated to the phase value after the last sample.
+ * \li outVector: The frequency-shifted output samples (lv_32fc_t).
  *
  * \b Example
- * Generate a tone at normalized frequency f = 0.3 and use the rotator with
- * f = 0.1 to shift the tone to f = 0.4.
+ * Rotate a DC signal by 90 degrees per sample. With a unit DC input and
+ * phase_inc = (0, 1), the output cycles through 1, j, -1, -j.
  * \code
- * #include <volk/volk.h>
- * #include <math.h>
- * #include <stdio.h>
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
+ * lv_32fc_t* in  = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t) * N, alignment);
+ * lv_32fc_t* out = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t) * N, alignment);
  *
- * int main() {
- *     unsigned int N = 10;
- *     unsigned int alignment = volk_get_alignment();
- *     lv_32fc_t* in  = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t) * N, alignment);
- *     lv_32fc_t* out = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t) * N, alignment);
- *
- *     // Generate a tone at f = 0.3
- *     for (unsigned int i = 0; i < N; ++i) {
- *         float angle = 0.3f * (float)i;
- *         in[i] = lv_cmake(cosf(angle), sinf(angle));
- *     }
- *
- *     // Phase increment corresponding to f = 0.1
- *     float freq = 0.1f;
- *     lv_32fc_t phase_inc = lv_cmake(cosf(freq), sinf(freq));
- *     lv_32fc_t phase     = lv_cmake(1.0f, 0.0f); // start at 0 rad
- *
- *     // Rotate so the output is a tone at f = 0.4
- *     volk_32fc_s32fc_x2_rotator_32fc(out, in, phase_inc, &phase, N);
- *
- *     for (unsigned int i = 0; i < N; ++i) {
- *         printf("out[%u] = %+1.4f %+1.4fj\n",
- *                i, lv_creal(out[i]), lv_cimag(out[i]));
- *     }
- *
- *     volk_free(in);
- *     volk_free(out);
- *     return 0;
+ * for (unsigned int i = 0; i < N; ++i) {
+ *     in[i] = lv_cmake(1.0f, 0.0f); // DC input
  * }
+ *
+ * // Rotate 90 degrees per sample: phase_inc = (0, 1)
+ * lv_32fc_t phase_inc = lv_cmake(0.0f, 1.0f);
+ * lv_32fc_t phase = lv_cmake(1.0f, 0.0f); // start at 0 radians
+ *
+ * volk_32fc_s32fc_x2_rotator_32fc(out, in, phase_inc, &phase, N);
+ *
+ * // Expected: out[0]=(1,0), out[1]=(0,1), out[2]=(-1,0), out[3]=(0,-1)
+ * printf("Expected: (1,0), (0,1), (-1,0), (0,-1)\n");
+ * for (unsigned int i = 0; i < N; ++i) {
+ *     printf("out[%u] = (%+1.2f, %+1.2f)\n",
+ *         i, lv_creal(out[i]), lv_cimag(out[i]));
+ * }
+ *
+ * volk_free(in);
+ * volk_free(out);
  * \endcode
  */
 

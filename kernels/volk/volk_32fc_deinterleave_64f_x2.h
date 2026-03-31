@@ -12,48 +12,53 @@
  *
  * \b Overview
  *
- * Deinterleaves the complex floating point vector into I & Q vector
- * data. The output vectors are converted to doubles.
+ * Deinterleaves a complex floating-point vector into separate I (in-phase)
+ * and Q (quadrature) double-precision output vectors. Each interleaved
+ * sample pair (re, im) in the input is split so that re goes to iBuffer
+ * and im goes to qBuffer, with both values promoted from float to double.
+ *
+ * This kernel is useful in signal processing pipelines where complex
+ * baseband samples need to be separated into real and imaginary components
+ * for independent processing at higher precision, such as in spectral
+ * analysis, demodulation, or accumulation stages where single-precision
+ * rounding error is unacceptable.
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_32fc_deinterleave_64f_x2(double* iBuffer, double* qBuffer, const
- * lv_32fc_t* complexVector, unsigned int num_points) \endcode
+ * void volk_32fc_deinterleave_64f_x2(double* iBuffer, double* qBuffer, const lv_32fc_t* complexVector, unsigned int num_points)
+ * \endcode
  *
  * \b Inputs
- * \li complexVector: The complex input vector.
- * \li num_points: The number of complex data values to be deinterleaved.
+ * \li complexVector: The complex input vector of interleaved I/Q samples (lv_32fc_t).
+ * \li num_points: The number of complex samples to deinterleave.
  *
  * \b Outputs
- * \li iBuffer: The I buffer output data.
- * \li qBuffer: The Q buffer output data.
+ * \li iBuffer: The in-phase (real) output buffer (double).
+ * \li qBuffer: The quadrature (imaginary) output buffer (double).
  *
  * \b Example
- * Generate complex numbers around the top half of the unit circle and
- * deinterleave into real and imaginary double buffers.
+ * Deinterleave a constant complex vector and verify the I and Q outputs.
  * \code
- *   int N = 10;
- *   unsigned int alignment = volk_get_alignment();
- *   lv_32fc_t* in  = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t)*N, alignment);
- *   double* re = (double*)volk_malloc(sizeof(double)*N, alignment);
- *   double* im = (double*)volk_malloc(sizeof(double)*N, alignment);
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
+ * lv_32fc_t* in = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t) * N, alignment);
+ * double* re = (double*)volk_malloc(sizeof(double) * N, alignment);
+ * double* im = (double*)volk_malloc(sizeof(double) * N, alignment);
  *
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       float real = 2.f * ((float)ii / (float)N) - 1.f;
- *       float imag = std::sqrt(1.f - real * real);
- *       in[ii] = lv_cmake(real, imag);
- *   }
+ * for (unsigned int i = 0; i < N; ++i) {
+ *     in[i] = lv_cmake(3.0f, -4.0f);
+ * }
  *
- *   volk_32fc_deinterleave_64f_x2(re, im, in, N);
+ * // Expected: re[i] = 3.0, im[i] = -4.0 for all i
  *
- *   printf("          re  | im\n");
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       printf("out(%i) = %+.1g | %+.1g\n", ii, re[ii], im[ii]);
- *   }
+ * volk_32fc_deinterleave_64f_x2(re, im, in, N);
  *
- *   volk_free(in);
- *   volk_free(re);
- *   volk_free(im);
+ * printf("Expected: re = 3.0, im = -4.0\n");
+ * printf("Result:   re = %f, im = %f\n", re[0], im[0]);
+ *
+ * volk_free(in);
+ * volk_free(re);
+ * volk_free(im);
  * \endcode
  */
 

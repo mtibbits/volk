@@ -12,8 +12,15 @@
  *
  * \b Overview
  *
- * Converts 8-bit signed integers to 32-bit floats, dividing each value by
- * the scalar factor. This is useful for normalizing quantized samples.
+ * Converts a vector of 8-bit integer samples to 32-bit floats, dividing each
+ * result by a scalar factor: out[i] = (float)in[i] / scalar. This combines
+ * type conversion and scaling in a single operation.
+ *
+ * This kernel is commonly used in SDR receiver front-ends where an ADC produces
+ * 8-bit quantized samples that must be converted to floating-point and normalized
+ * before downstream DSP operations such as filtering, demodulation, or spectral
+ * analysis. The scalar divisor typically represents the full-scale range of the
+ * ADC, mapping raw digitizer output into a normalized amplitude range.
  *
  * <b>Dispatcher Prototype</b>
  * \code
@@ -21,48 +28,34 @@
  * float scalar, unsigned int num_points) \endcode
  *
  * \b Inputs
- * \li inputVector: The input vector of 8-bit signed chars (int8_t).
- * \li scalar: The scaling factor used to divide the results of the conversion.
- * \li num_points: The number of values to convert.
+ * \li inputVector: The input vector of 8-bit integer samples (int8_t).
+ * \li scalar: The divisor applied to each converted sample (float).
+ * \li num_points: The number of samples to convert.
  *
  * \b Outputs
- * \li outputVector: The output vector of 32-bit floats (float).
+ * \li outputVector: The output vector of scaled floating-point samples (float).
  *
  * \b Example
- * Convert 8-bit ADC samples to normalized floats in the range [-1.0, 1.0].
+ * Convert four 8-bit integer samples with a scalar divisor of 2.
  * \code
- * #include <volk/volk.h>
- * #include <stdio.h>
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
+ * int8_t* input = (int8_t*)volk_malloc(sizeof(int8_t) * N, alignment);
+ * float* output = (float*)volk_malloc(sizeof(float) * N, alignment);
  *
- * int main() {
- *     unsigned int N = 8;
- *     unsigned int alignment = volk_get_alignment();
+ * input[0] = 10; input[1] = -20; input[2] = 40; input[3] = -80;
+ * float scalar = 2.0f;
  *
- *     int8_t* input = (int8_t*)volk_malloc(sizeof(int8_t) * N, alignment);
- *     float* output = (float*)volk_malloc(sizeof(float) * N, alignment);
+ * // Expected: 10/2=5.0, -20/2=-10.0, 40/2=20.0, -80/2=-40.0
  *
- *     // Simulate 8-bit ADC samples
- *     input[0] = 127;   // max positive
- *     input[1] = -128;  // max negative
- *     input[2] = 64;
- *     input[3] = -64;
- *     input[4] = 0;
- *     input[5] = 32;
- *     input[6] = -32;
- *     input[7] = 1;
+ * volk_8i_s32f_convert_32f(output, input, scalar, N);
  *
- *     // Divide by 128 to normalize to approximately [-1.0, 1.0]
- *     float scalar = 128.0f;
- *     volk_8i_s32f_convert_32f(output, input, scalar, N);
+ * printf("Expected: 5.0, -10.0, 20.0, -40.0\n");
+ * printf("Result:   %1.1f, %1.1f, %1.1f, %1.1f\n",
+ *        output[0], output[1], output[2], output[3]);
  *
- *     for (unsigned int i = 0; i < N; i++) {
- *         printf("input[%u] = %4d  ->  output[%u] = %+.4f\n", i, input[i], i, output[i]);
- *     }
- *
- *     volk_free(input);
- *     volk_free(output);
- *     return 0;
- * }
+ * volk_free(input);
+ * volk_free(output);
  * \endcode
  */
 

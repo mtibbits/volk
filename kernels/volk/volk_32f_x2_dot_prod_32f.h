@@ -12,49 +12,57 @@
  *
  * \b Overview
  *
- * This block computes the dot product (or inner product) between two
- * vectors, the \p input and \p taps vectors. Given a set of \p
- * num_points taps, the result is the sum of products between the two
- * vectors. The result is a single value stored in the \p result
- * address and is returned as a float.
+ * Computes the dot product (inner product) of two float vectors:
+ * result = sum(input[i] * taps[i], i = 0..num_points-1).
+ * Given \p num_points samples, the kernel multiplies corresponding elements
+ * of the \p input and \p taps vectors and accumulates the sum into a single
+ * scalar result.
+ *
+ * The dot product is the core operation in FIR filtering, where \p input
+ * represents signal samples and \p taps represents the filter coefficients.
+ * It is also used in matched filtering, correlation-based synchronization,
+ * and beamforming weight application.
  *
  * <b>Dispatcher Prototype</b>
  * \code
  * void volk_32f_x2_dot_prod_32f(float* result, const float* input, const float* taps,
- * unsigned int num_points) \endcode
+ * unsigned int num_points)
+ * \endcode
  *
  * \b Inputs
- * \li input: vector of floats.
- * \li taps:  float taps.
- * \li num_points: number of samples in both \p input and \p taps.
+ * \li input: Input signal samples (float).
+ * \li taps: Filter coefficients or weight vector (float).
+ * \li num_points: The number of samples in both \p input and \p taps.
  *
  * \b Outputs
- * \li result: pointer to a float value to hold the dot product result.
+ * \li result: The dot product result (float).
  *
  * \b Example
- *
- * Take the dot product of an increasing vector and a vector of ones. The result is the
- * sum of integers (0,9).
- *
+ * Dot product of a constant-3 input vector with constant-2 taps of length 5.
  * \code
- *   int N = 10;
- *   unsigned int alignment = volk_get_alignment();
- *   float* increasing = (float*)volk_malloc(sizeof(float)*N, alignment);
- *   float* ones = (float*)volk_malloc(sizeof(float)*N, alignment);
- *   float* out = (float*)volk_malloc(sizeof(float)*1, alignment);
+ * unsigned int N = 5;
+ * unsigned int alignment = volk_get_alignment();
  *
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       increasing[ii] = (float)ii;
- *       ones[ii] = 1.f;
- *   }
+ * float* input = (float*)volk_malloc(sizeof(float) * N, alignment);
+ * float* taps = (float*)volk_malloc(sizeof(float) * N, alignment);
+ * float* result = (float*)volk_malloc(sizeof(float) * 1, alignment);
  *
- *   volk_32f_x2_dot_prod_32f(out, increasing, ones, N);
+ * for (unsigned int i = 0; i < N; ++i) {
+ *     input[i] = 3.0f;
+ *     taps[i] = 2.0f;
+ * }
  *
- *   printf("out = %1.2f\n", *out);
+ * // Expected: 5 * (3.0 * 2.0) = 30.0
+ * float expected = 30.0f;
  *
- *   volk_free(increasing);
- *   volk_free(ones);
- *   volk_free(out);
+ * volk_32f_x2_dot_prod_32f(result, input, taps, N);
+ *
+ * printf("Expected: %1.1f\n", expected);
+ * printf("Result:   %1.1f\n", *result);
+ *
+ * volk_free(input);
+ * volk_free(taps);
+ * volk_free(result);
  * \endcode
  */
 

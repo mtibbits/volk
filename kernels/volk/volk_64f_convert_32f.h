@@ -12,40 +12,49 @@
  *
  * \b Overview
  *
- * Converts doubles into floats.
+ * Converts a vector of double-precision floating-point samples to
+ * single-precision: out[i] = (float) in[i]. This is a narrowing
+ * conversion that trades the extra mantissa and exponent bits of 64-bit
+ * IEEE 754 for reduced memory bandwidth and faster SIMD throughput.
+ *
+ * Precision reduction is common in mixed-precision DSP pipelines where
+ * an algorithm (e.g. accumulation, spectral analysis, or matrix
+ * inversion) is computed in double precision for numerical stability,
+ * but downstream stages such as modulation, filtering, or D/A
+ * conversion operate on 32-bit floats.
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_64f_convert_32f(float* outputVector, const double* inputVector, unsigned int
- * num_points)
+ * void volk_64f_convert_32f(float* outputVector, const double* inputVector, unsigned int num_points)
  * \endcode
  *
  * \b Inputs
- * \li inputVector: The vector of doubles to convert to floats.
- * \li num_points: The number of data points.
+ * \li inputVector: The input vector of samples (double).
+ * \li num_points: The number of samples to convert.
  *
  * \b Outputs
- * \li outputVector: returns the converted floats.
+ * \li outputVector: The output vector of converted samples (float).
  *
  * \b Example
+ * Convert a short vector of doubles to floats and verify the result.
  * \code
- *   int N = 10;
- *   unsigned int alignment = volk_get_alignment();
- *   double* increasing = (double*)volk_malloc(sizeof(double)*N, alignment);
- *   float* out = (float*)volk_malloc(sizeof(float)*N, alignment);
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
+ * double* in = (double*)volk_malloc(sizeof(double) * N, alignment);
+ * float* out = (float*)volk_malloc(sizeof(float) * N, alignment);
  *
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       increasing[ii] = (double)ii;
- *   }
+ * for (unsigned int i = 0; i < N; ++i) {
+ *     in[i] = 1.5 * (i + 1); // {1.5, 3.0, 4.5, 6.0}
+ * }
  *
- *   volk_64f_convert_32f(out, increasing, N);
+ * volk_64f_convert_32f(out, in, N);
  *
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       printf("out[%u] = %1.2f\n", ii, out[ii]);
- *   }
+ * for (unsigned int i = 0; i < N; ++i) {
+ *     printf("Expected: %1.1f  Result: %1.1f\n", (float)in[i], out[i]);
+ * }
  *
- *   volk_free(increasing);
- *   volk_free(out);
+ * volk_free(in);
+ * volk_free(out);
  * \endcode
  */
 

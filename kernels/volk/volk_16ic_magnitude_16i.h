@@ -12,55 +12,52 @@
  *
  * \b Overview
  *
- * Computes the magnitude of each complex 16-bit integer sample and stores
- * the results as 16-bit integers. Values are internally normalized by
- * SHRT_MAX before computing sqrt(I^2 + Q^2), then scaled back.
+ * Computes the magnitude of each complex sample in the input vector:
+ * magnitude = sqrt(I^2 + Q^2), where I and Q are the real and imaginary
+ * components of each 16-bit complex value. Internally the samples are
+ * normalized to floating-point, the magnitude is computed, and the result
+ * is scaled back to the 16-bit integer range.
+ *
+ * This kernel is commonly used in envelope detection, received signal
+ * strength indication (RSSI), and AGC loops where the instantaneous
+ * magnitude of a complex baseband signal is needed in fixed-point
+ * pipelines.
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_16ic_magnitude_16i(int16_t* magnitudeVector, const lv_16sc_t* complexVector,
- * unsigned int num_points) \endcode
+ * void volk_16ic_magnitude_16i(int16_t* magnitudeVector, const lv_16sc_t* complexVector, unsigned int num_points)
+ * \endcode
  *
  * \b Inputs
- * \li complexVector: The complex input vector (lv_16sc_t).
- * \li num_points: The number of complex samples.
+ * \li complexVector: The complex input samples (lv_16sc_t).
+ * \li num_points: The number of complex samples to process.
  *
  * \b Outputs
- * \li magnitudeVector: The magnitude of each complex value (int16_t).
+ * \li magnitudeVector: The per-sample magnitude values (int16_t).
  *
  * \b Example
- * Compute the magnitude of several complex samples with known I/Q values.
+ * Compute the magnitude of complex samples using a 3000+4000j Pythagorean triple.
  * \code
- *   #include <volk/volk.h>
- *   #include <stdio.h>
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
  *
- *   int main() {
- *     unsigned int N = 4;
- *     unsigned int alignment = volk_get_alignment();
+ * lv_16sc_t* complexVector = (lv_16sc_t*)volk_malloc(sizeof(lv_16sc_t) * N, alignment);
+ * int16_t* magnitudeVector = (int16_t*)volk_malloc(sizeof(int16_t) * N, alignment);
  *
- *     // Allocate input and output vectors
- *     lv_16sc_t* complexVector =
- *         (lv_16sc_t*)volk_malloc(N * sizeof(lv_16sc_t), alignment);
- *     int16_t* magnitudeVector =
- *         (int16_t*)volk_malloc(N * sizeof(int16_t), alignment);
+ * for (unsigned int i = 0; i < N; ++i) {
+ *     complexVector[i] = lv_cmake((int16_t)3000, (int16_t)4000);
+ * }
  *
- *     // Fill with complex samples whose magnitudes are easy to verify
- *     complexVector[0] = lv_cmake((int16_t)3000, (int16_t)4000);   // mag ~ 5000
- *     complexVector[1] = lv_cmake((int16_t)0, (int16_t)10000);     // mag ~ 10000
- *     complexVector[2] = lv_cmake((int16_t)-7000, (int16_t)0);     // mag ~ 7000
- *     complexVector[3] = lv_cmake((int16_t)20000, (int16_t)20000); // mag ~ 28284
+ * // Expected: sqrt(3000^2 + 4000^2) = sqrt(25000000) = 5000
+ * int16_t expected = 5000;
  *
- *     // Compute magnitudes
- *     volk_16ic_magnitude_16i(magnitudeVector, complexVector, N);
+ * volk_16ic_magnitude_16i(magnitudeVector, complexVector, N);
  *
- *     for (unsigned int i = 0; i < N; i++) {
- *       printf("mag[%u] = %d\n", i, magnitudeVector[i]);
- *     }
+ * printf("Expected: %d\n", expected);
+ * printf("Result:   %d\n", magnitudeVector[0]);
  *
- *     volk_free(magnitudeVector);
- *     volk_free(complexVector);
- *     return 0;
- *   }
+ * volk_free(magnitudeVector);
+ * volk_free(complexVector);
  * \endcode
  */
 

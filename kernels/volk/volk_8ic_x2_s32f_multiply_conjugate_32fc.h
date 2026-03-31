@@ -12,64 +12,59 @@
  *
  * \b Overview
  *
- * Multiplies each element of one complex 8-bit integer vector by the complex
- * conjugate of the corresponding element in a second complex 8-bit integer
- * vector, producing complex 32-bit float results scaled by 1/scalar.
+ * Multiplies each sample in one 8-bit complex vector by the complex conjugate of the
+ * corresponding sample in a second 8-bit complex vector, scales each result by
+ * 1/scalar, and stores the output as 32-bit floating-point complex values:
+ * cVector[i] = (aVector[i] * conj(bVector[i])) / scalar.
+ *
+ * Conjugate multiplication is a fundamental operation in cross-correlation,
+ * carrier frequency offset estimation, and phase detection. The scalar divisor
+ * normalizes the fixed-point 8-bit input range into calibrated floating-point
+ * output, which is common when processing quantized I/Q samples from low-bit ADCs.
  *
  * <b>Dispatcher Prototype</b>
  * \code
  * void volk_8ic_x2_s32f_multiply_conjugate_32fc(lv_32fc_t* cVector, const lv_8sc_t*
- * aVector, const lv_8sc_t* bVector, const float scalar, unsigned int num_points) \endcode
+ * aVector, const lv_8sc_t* bVector, const float scalar, unsigned int num_points)
+ * \endcode
  *
  * \b Inputs
- * \li aVector: The first complex 8-bit input vector.
- * \li bVector: The second complex 8-bit input vector whose conjugate is used.
+ * \li aVector: The first complex input vector of samples (lv_8sc_t).
+ * \li bVector: The second complex input vector whose conjugate is used (lv_8sc_t).
  * \li scalar: Each output value is scaled by 1/scalar.
- * \li num_points: The number of complex values to process.
+ * \li num_points: The number of complex samples in aVector and bVector.
  *
  * \b Outputs
- * \li cVector: The complex 32-bit float output vector.
+ * \li cVector: The complex output vector of conjugate products (lv_32fc_t).
  *
  * \b Example
- * Multiply a complex signal by the conjugate of a reference and scale the result.
+ * Conjugate-multiply two constant 8-bit complex vectors and scale by 1/2.
  * \code
- *   #include <volk/volk.h>
- *   #include <stdio.h>
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
  *
- *   int main(){
- *     unsigned int N = 4;
- *     unsigned int alignment = volk_get_alignment();
- *     float scalar = 2.0f;
+ * lv_8sc_t* aVector = (lv_8sc_t*)volk_malloc(sizeof(lv_8sc_t) * N, alignment);
+ * lv_8sc_t* bVector = (lv_8sc_t*)volk_malloc(sizeof(lv_8sc_t) * N, alignment);
+ * lv_32fc_t* cVector = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t) * N, alignment);
  *
- *     // Allocate aligned memory
- *     lv_8sc_t* aVector = (lv_8sc_t*)volk_malloc(sizeof(lv_8sc_t) * N, alignment);
- *     lv_8sc_t* bVector = (lv_8sc_t*)volk_malloc(sizeof(lv_8sc_t) * N, alignment);
- *     lv_32fc_t* cVector = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t) * N, alignment);
+ * // a = 1+1j, b = 1+1j for all elements
+ * for (unsigned int i = 0; i < N; ++i) {
+ *     aVector[i] = lv_cmake((int8_t)1, (int8_t)1);
+ *     bVector[i] = lv_cmake((int8_t)1, (int8_t)1);
+ * }
+ * float scalar = 2.0f;
  *
- *     // Initialize input: signal samples as complex 8-bit integers
- *     aVector[0] = lv_cmake((int8_t)3, (int8_t)4);
- *     aVector[1] = lv_cmake((int8_t)-2, (int8_t)5);
- *     aVector[2] = lv_cmake((int8_t)7, (int8_t)-1);
- *     aVector[3] = lv_cmake((int8_t)1, (int8_t)6);
+ * // Expected: (1+1j)*(1-1j)/2 = (1+1+0j)/2 = 1.0+0.0j per element
+ * lv_32fc_t expected = lv_cmake(1.0f, 0.0f);
  *
- *     // Initialize reference: complex 8-bit integers
- *     bVector[0] = lv_cmake((int8_t)1, (int8_t)2);
- *     bVector[1] = lv_cmake((int8_t)3, (int8_t)-1);
- *     bVector[2] = lv_cmake((int8_t)2, (int8_t)4);
- *     bVector[3] = lv_cmake((int8_t)-3, (int8_t)2);
+ * volk_8ic_x2_s32f_multiply_conjugate_32fc(cVector, aVector, bVector, scalar, N);
  *
- *     // Compute: cVector[i] = aVector[i] * conj(bVector[i]) / scalar
- *     volk_8ic_x2_s32f_multiply_conjugate_32fc(cVector, aVector, bVector, scalar, N);
+ * printf("Expected: %1.1f+%1.1fj\n", lv_creal(expected), lv_cimag(expected));
+ * printf("Result:   %1.1f+%1.1fj\n", lv_creal(cVector[0]), lv_cimag(cVector[0]));
  *
- *     for (unsigned int i = 0; i < N; i++) {
- *       printf("result[%u] = (%f, %f)\n", i, lv_creal(cVector[i]), lv_cimag(cVector[i]));
- *     }
- *
- *     volk_free(aVector);
- *     volk_free(bVector);
- *     volk_free(cVector);
- *     return 0;
- *   }
+ * volk_free(aVector);
+ * volk_free(bVector);
+ * volk_free(cVector);
  * \endcode
  */
 

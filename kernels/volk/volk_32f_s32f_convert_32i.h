@@ -12,8 +12,15 @@
  *
  * \b Overview
  *
- * Converts a floating point number to a 32-bit integer after applying a
- * scaling factor.
+ * Scales each floating-point sample by a scalar factor and converts the
+ * result to a 32-bit integer:
+ * <tt>outputVector[i] = (int32_t)(inputVector[i] * scalar)</tt>.
+ * Values are clamped to the 32-bit integer range to prevent overflow.
+ *
+ * This quantization operation is common when preparing baseband samples for
+ * a DAC or when converting normalized floating-point signal data to
+ * fixed-point representation for hardware interfaces or integer-based DSP
+ * processing stages.
  *
  * <b>Dispatcher Prototype</b>
  * \code
@@ -21,36 +28,33 @@
  * \endcode
  *
  * \b Inputs
- * \li inputVector: the input vector of floats.
- * \li scalar: The value multiplied against each point in the input buffer.
- * \li num_points: The number of data points.
+ * \li inputVector: The input vector of floating-point samples (float).
+ * \li scalar: The scaling factor applied to each sample before conversion (float).
+ * \li num_points: The number of samples to convert.
  *
  * \b Outputs
- * \li outputVector: The output vector.
+ * \li outputVector: The scaled and quantized output vector (int32_t).
  *
  * \b Example
- * Convert floats from [-1,1] to integers with a scale of 5 to maintain smallest delta
+ * Scale floats by 100 and convert to 32-bit integers.
  * \code
- *   int N = 10;
- *   unsigned int alignment = volk_get_alignment();
- *   float* increasing = (float*)volk_malloc(sizeof(float)*N, alignment);
- *   int32_t* out = (int32_t*)volk_malloc(sizeof(int32_t)*N, alignment);
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
+ * float* in = (float*)volk_malloc(sizeof(float) * N, alignment);
+ * int32_t* out = (int32_t*)volk_malloc(sizeof(int32_t) * N, alignment);
  *
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       increasing[ii] = 2.f * ((float)ii / (float)N) - 1.f;
- *   }
+ * in[0] = 1.0f; in[1] = -1.0f; in[2] = 0.5f; in[3] = -0.5f;
+ * float scalar = 100.0f;
  *
- *   // Normalize by the smallest delta (0.2 in this example)
- *   float scale = 5.f;
+ * // Expected: 1.0*100=100, -1.0*100=-100, 0.5*100=50, -0.5*100=-50
  *
- *   volk_32f_s32f_convert_32i(out, increasing, scale, N);
+ * volk_32f_s32f_convert_32i(out, in, scalar, N);
  *
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       printf("out[%u] = %i\n", ii, out[ii]);
- *   }
+ * printf("Expected: 100, -100, 50, -50\n");
+ * printf("Result:   %d, %d, %d, %d\n", out[0], out[1], out[2], out[3]);
  *
- *   volk_free(increasing);
- *   volk_free(out);
+ * volk_free(in);
+ * volk_free(out);
  * \endcode
  */
 

@@ -12,60 +12,48 @@
  *
  * \b Overview
  *
- * Converts 16-bit signed integers to 8-bit signed integers by arithmetic
- * right-shifting each input value by 8 bits (keeping the high byte).
+ * Converts 16-bit signed samples to 8-bit signed samples by arithmetic
+ * right-shifting each input value by 8 bits, i.e. out[i] = in[i] >> 8.
+ * This effectively extracts the high byte of each 16-bit sample.
+ *
+ * This kernel is useful in digital receiver chains where sample bit-depth
+ * reduction is needed after a gain or quantization stage, for example when
+ * narrowing ADC output to a smaller word size for downstream processing or
+ * storage bandwidth reduction.
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_16i_convert_8i(int8_t* outputVector, const int16_t* inputVector, unsigned int
- * num_points) \endcode
+ * void volk_16i_convert_8i(int8_t* outputVector, const int16_t* inputVector, unsigned int num_points)
+ * \endcode
  *
  * \b Inputs
- * \li inputVector: The input vector of 16-bit signed integers (int16_t).
+ * \li inputVector: The input vector of 16-bit signed samples (int16_t).
  * \li num_points: The number of data points.
  *
  * \b Outputs
- * \li outputVector: The output vector of 8-bit signed integers (int8_t).
+ * \li outputVector: The output vector of 8-bit signed samples (int8_t).
  *
  * \b Example
- * Convert 16-bit samples to 8-bit by extracting the high byte.
+ * Convert four 16-bit values to 8-bit by shifting right by 8.
  * \code
- *   #include <volk/volk.h>
- *   #include <stdio.h>
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
  *
- *   int main() {
- *     unsigned int num_points = 8;
- *     unsigned int alignment = volk_get_alignment();
+ * int16_t* input = (int16_t*)volk_malloc(sizeof(int16_t) * N, alignment);
+ * int8_t* output = (int8_t*)volk_malloc(sizeof(int8_t) * N, alignment);
  *
- *     // Allocate aligned memory
- *     int16_t* input =
- *         (int16_t*)volk_malloc(sizeof(int16_t) * num_points, alignment);
- *     int8_t* output =
- *         (int8_t*)volk_malloc(sizeof(int8_t) * num_points, alignment);
+ * input[0] = 256;   // 256 >> 8 = 1
+ * input[1] = 512;   // 512 >> 8 = 2
+ * input[2] = -256;  // -256 >> 8 = -1
+ * input[3] = 768;   // 768 >> 8 = 3
  *
- *     // Initialize with values whose high byte is meaningful
- *     // Right-shifting by 8 keeps the upper byte: 0x0100 >> 8 = 1, etc.
- *     input[0] = 0x0100;  // 256  -> 1
- *     input[1] = 0x0200;  // 512  -> 2
- *     input[2] = 0x0A00;  // 2560 -> 10
- *     input[3] = 0x7F00;  // 32512 -> 127
- *     input[4] = -256;    // 0xFF00 -> -1 (sign-preserving)
- *     input[5] = -512;    // 0xFE00 -> -2
- *     input[6] = 0x0050;  // 80   -> 0 (low byte discarded)
- *     input[7] = 0x03C0;  // 960  -> 3
+ * volk_16i_convert_8i(output, input, N);
  *
- *     // Convert 16-bit to 8-bit: output[i] = (int8_t)(input[i] >> 8)
- *     volk_16i_convert_8i(output, input, num_points);
+ * printf("Expected: 1, 2, -1, 3\n");
+ * printf("Result:   %d, %d, %d, %d\n", output[0], output[1], output[2], output[3]);
  *
- *     for (unsigned int i = 0; i < num_points; i++) {
- *       printf("input[%u] = %6d  ->  output[%u] = %4d\n",
- *              i, input[i], i, output[i]);
- *     }
- *
- *     volk_free(input);
- *     volk_free(output);
- *     return 0;
- *   }
+ * volk_free(input);
+ * volk_free(output);
  * \endcode
  */
 

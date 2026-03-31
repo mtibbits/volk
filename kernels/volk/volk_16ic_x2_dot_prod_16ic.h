@@ -12,61 +12,60 @@
  *
  * \b Overview
  *
- * Computes the dot product of two complex 16-bit integer vectors. Each
- * element-wise complex multiplication is accumulated into a single complex
- * result using saturated arithmetic to prevent overflow.
+ * Computes the complex inner product (dot product) of two 16-bit complex integer
+ * vectors with saturated accumulation: result = sum(in_a[i] * in_b[i]). The real
+ * and imaginary components are accumulated using saturation arithmetic so they
+ * never overflow the 16-bit range.
+ *
+ * This kernel is commonly used in matched filtering, correlation, and beamforming
+ * operations where one vector represents input signal samples and the other
+ * represents filter taps or reference coefficients. The saturated accumulation
+ * makes it suitable for fixed-point DSP pipelines where overflow protection is
+ * required without scaling.
  *
  * <b>Dispatcher Prototype</b>
  * \code
  * void volk_16ic_x2_dot_prod_16ic(lv_16sc_t* result, const lv_16sc_t* in_a, const
- * lv_16sc_t* in_b, unsigned int num_points)
+ * lv_16sc_t* in_b, unsigned int num_points);
  * \endcode
  *
  * \b Inputs
- * \li in_a: The first complex input vector (lv_16sc_t).
- * \li in_b: The second complex input vector (lv_16sc_t).
+ * \li in_a: Input vector of complex samples (lv_16sc_t).
+ * \li in_b: Input vector of complex taps or coefficients (lv_16sc_t).
  * \li num_points: The number of complex samples to multiply and accumulate.
  *
  * \b Outputs
- * \li result: The complex dot product of the two input vectors (lv_16sc_t).
+ * \li result: The complex inner product (lv_16sc_t).
  *
  * \b Example
- * Compute the complex dot product of two short vectors.
+ * Compute the inner product of two constant complex vectors and verify against
+ * a hand calculation.
  * \code
- *   #include <volk/volk.h>
- *   #include <stdio.h>
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
  *
- *   int main() {
- *     unsigned int N = 4;
- *     unsigned int alignment = volk_get_alignment();
+ * lv_16sc_t* in_a = (lv_16sc_t*)volk_malloc(sizeof(lv_16sc_t) * N, alignment);
+ * lv_16sc_t* in_b = (lv_16sc_t*)volk_malloc(sizeof(lv_16sc_t) * N, alignment);
+ * lv_16sc_t* result = (lv_16sc_t*)volk_malloc(sizeof(lv_16sc_t), alignment);
  *
- *     // Allocate input and output buffers
- *     lv_16sc_t* in_a =
- *         (lv_16sc_t*)volk_malloc(N * sizeof(lv_16sc_t), alignment);
- *     lv_16sc_t* in_b =
- *         (lv_16sc_t*)volk_malloc(N * sizeof(lv_16sc_t), alignment);
- *     lv_16sc_t result;
+ * for (unsigned int i = 0; i < N; ++i) {
+ *   in_a[i] = lv_cmake((int16_t)1, (int16_t)2);
+ *   in_b[i] = lv_cmake((int16_t)3, (int16_t)4);
+ * }
  *
- *     // Fill with complex samples: (real, imag)
- *     in_a[0] = lv_cmake((int16_t)100, (int16_t)200);
- *     in_a[1] = lv_cmake((int16_t)-50, (int16_t)300);
- *     in_a[2] = lv_cmake((int16_t)400, (int16_t)-100);
- *     in_a[3] = lv_cmake((int16_t)150, (int16_t)250);
+ * // (1+2j)*(3+4j) = (1*3 - 2*4) + (1*4 + 2*3)j = -5 + 10j
+ * // Sum of 4: -20 + 40j
+ * int16_t expected_real = -20;
+ * int16_t expected_imag = 40;
  *
- *     in_b[0] = lv_cmake((int16_t)10, (int16_t)-20);
- *     in_b[1] = lv_cmake((int16_t)30, (int16_t)40);
- *     in_b[2] = lv_cmake((int16_t)-10, (int16_t)50);
- *     in_b[3] = lv_cmake((int16_t)20, (int16_t)-30);
+ * volk_16ic_x2_dot_prod_16ic(result, in_a, in_b, N);
  *
- *     // Compute complex dot product: sum(in_a[i] * in_b[i])
- *     volk_16ic_x2_dot_prod_16ic(&result, in_a, in_b, N);
+ * printf("Expected: (%d, %d)\n", expected_real, expected_imag);
+ * printf("Result:   (%d, %d)\n", lv_creal(*result), lv_cimag(*result));
  *
- *     printf("Dot product: (%d, %d)\n", lv_creal(result), lv_cimag(result));
- *
- *     volk_free(in_a);
- *     volk_free(in_b);
- *     return 0;
- *   }
+ * volk_free(in_a);
+ * volk_free(in_b);
+ * volk_free(result);
  * \endcode
  */
 

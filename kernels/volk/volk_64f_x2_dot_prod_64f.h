@@ -15,35 +15,46 @@
  * Computes the dot product (inner product) of two double-precision vectors.
  * Returns the sum of element-wise products: result = sum(input[i] * taps[i]).
  *
+ * The inner product is a fundamental operation in DSP, most commonly used to
+ * compute one output sample of an FIR filter by multiplying signal samples
+ * against filter taps. It also appears in matched filtering, correlation-based
+ * synchronization, and beamforming weight application.
+ *
  * <b>Dispatcher Prototype</b>
  * \code
  * void volk_64f_x2_dot_prod_64f(double* result, const double* input, const double* taps,
- * unsigned int num_points) \endcode
+ * unsigned int num_points)
+ * \endcode
  *
  * \b Inputs
- * \li input: First input vector.
- * \li taps: Second input vector (filter coefficients).
- * \li num_points: Vector length.
+ * \li input: The input signal samples (double).
+ * \li taps: The filter coefficients or weight vector (double).
+ * \li num_points: The number of samples to process.
  *
  * \b Outputs
- * \li result: Pointer to store the scalar dot product result.
+ * \li result: The scalar dot product result (double).
  *
  * \b Example
+ * Dot product of [0,1,2,...,9] with all-ones gives the sum 0+1+...+9 = 45.
  * \code
  *   unsigned int N = 10;
- *   unsigned int align = volk_get_alignment();
- *   double* a = (double*)volk_malloc(N * sizeof(double), align);
- *   double* b = (double*)volk_malloc(N * sizeof(double), align);
+ *   unsigned int alignment = volk_get_alignment();
+ *   double* a = (double*)volk_malloc(N * sizeof(double), alignment);
+ *   double* b = (double*)volk_malloc(N * sizeof(double), alignment);
  *   double result;
  *
- *   // Compute dot product of [0,1,2,...,9] with [1,1,1,...,1]
  *   for (unsigned int i = 0; i < N; i++) {
  *       a[i] = (double)i;
  *       b[i] = 1.0;
  *   }
  *
+ *   // Expected: sum of 0 through 9 = N*(N-1)/2 = 45.0
+ *   double expected = 45.0;
+ *
  *   volk_64f_x2_dot_prod_64f(&result, a, b, N);
- *   // result == 45.0 (sum of 0 through 9)
+ *
+ *   printf("Expected: %f\n", expected);
+ *   printf("Result:   %f\n", result);
  *
  *   volk_free(a);
  *   volk_free(b);

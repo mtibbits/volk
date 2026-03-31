@@ -12,9 +12,14 @@
  *
  * \b Overview
  *
- * Computes the hyperbolic tangent of each element of the aVector:
+ * Computes the element-wise hyperbolic tangent of a float vector:
+ * c[i] = tanh(a[i]). The hyperbolic tangent maps each input sample to the
+ * range (-1, +1), acting as a soft limiter.
  *
- * c[i] = tanh(a[i])
+ * In signal processing, tanh is commonly used as a soft-clipping nonlinearity
+ * for signal compression and saturation modeling, as an activation function in
+ * neural-network-based receivers and equalizers, and as a smooth approximation
+ * to hard decision boundaries in demodulation.
  *
  * <b>Dispatcher Prototype</b>
  * \code
@@ -22,33 +27,33 @@
  * \endcode
  *
  * \b Inputs
- * \li aVector: The buffer of points.
- * \li num_points: The number of values in input buffer.
+ * \li aVector: The input buffer of signal samples (float).
+ * \li num_points: The number of samples to process.
  *
  * \b Outputs
- * \li cVector: The output buffer.
+ * \li cVector: The output buffer of tanh-mapped values (float).
  *
  * \b Example
+ * Compute tanh of a constant input and verify against tanhf.
  * \code
- *   int N = 10;
- *   unsigned int alignment = volk_get_alignment();
- *   float* in = (float*)volk_malloc(sizeof(float)*N, alignment);
- *   float* out = (float*)volk_malloc(sizeof(float)*N, alignment);
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
+ * float* in = (float*)volk_malloc(sizeof(float) * N, alignment);
+ * float* out = (float*)volk_malloc(sizeof(float) * N, alignment);
  *
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       // the approximate artanh(x) for x<1
- *       float x = (float)ii / (float)N;
- *       in[ii] = 0.5f * logf((1.f+x)/(1.f-x));
- *   }
+ * for (unsigned int i = 0; i < N; ++i) {
+ *     in[i] = 1.0f;
+ * }
  *
- *   volk_32f_tanh_32f(out, in, N);
+ * float expected = tanhf(1.0f); // 0.761594...
  *
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       printf("out(%i) = %f\n", ii, out[ii]);
- *   }
+ * volk_32f_tanh_32f(out, in, N);
  *
- *   volk_free(in);
- *   volk_free(out);
+ * printf("Expected: %f\n", expected);
+ * printf("Result:   %f\n", out[0]);
+ *
+ * volk_free(in);
+ * volk_free(out);
  * \endcode
  */
 

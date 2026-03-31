@@ -12,9 +12,14 @@
  *
  * \b Overview
  *
- * Wraps floating point numbers to stay within a defined [lower_bound, upper_bound]
- * range. Values outside the range are shifted by integer multiples of the range width
- * until they fall within bounds.
+ * Wraps floating-point values into a defined [lower_bound, upper_bound] range
+ * using modular arithmetic. Values outside the range are shifted by integer
+ * multiples of (upper_bound - lower_bound) until they fall within bounds.
+ *
+ * This kernel is commonly used for phase wrapping in signal processing
+ * applications such as phase-locked loops (PLLs), FM demodulation, and
+ * frequency estimation, where phase values must be constrained to a canonical
+ * range (e.g. [-pi, pi] or [0, 2*pi]).
  *
  * <b>Dispatcher Prototype</b>
  * \code
@@ -23,51 +28,38 @@
  * \endcode
  *
  * \b Inputs
- * \li inputVector: The input vector of floats to be wrapped.
- * \li lower_bound: The lower output boundary.
- * \li upper_bound: The upper output boundary.
+ * \li inputVector: The input vector of samples to wrap (float).
+ * \li lower_bound: The lower boundary of the output range (float).
+ * \li upper_bound: The upper boundary of the output range (float).
  * \li num_points: The number of data points.
  *
  * \b Outputs
- * \li outputVector: The vector where the wrapped results will be stored.
+ * \li outputVector: The wrapped output values (float).
  *
  * \b Example
- * Wrap phase values into the range [-pi, pi].
+ * Wrap four values into the range [-1.0, 1.0].
  * \code
- * #include <volk/volk.h>
- * #include <math.h>
- * #include <stdio.h>
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
  *
- * int main() {
- *     unsigned int N = 8;
- *     size_t alignment = volk_get_alignment();
+ * float* input = (float*)volk_malloc(sizeof(float) * N, alignment);
+ * float* output = (float*)volk_malloc(sizeof(float) * N, alignment);
  *
- *     float* input = (float*)volk_malloc(sizeof(float) * N, alignment);
- *     float* output = (float*)volk_malloc(sizeof(float) * N, alignment);
+ * input[0] = -1.5f;
+ * input[1] = -0.5f;
+ * input[2] = 0.5f;
+ * input[3] = 1.5f;
  *
- *     // Simulate accumulated phase values that have drifted outside [-pi, pi]
- *     input[0] = 0.5f;
- *     input[1] = 3.5f;       // slightly above pi
- *     input[2] = -3.5f;      // slightly below -pi
- *     input[3] = 7.0f;       // more than one full wrap above pi
- *     input[4] = -7.0f;      // more than one full wrap below -pi
- *     input[5] = (float)M_PI;
- *     input[6] = (float)-M_PI;
- *     input[7] = 12.566f;    // approximately 4*pi
+ * // Expected: -1.5 + 2.0 = 0.5, -0.5 (in range), 0.5 (in range), 1.5 - 2.0 = -0.5
  *
- *     float lower_bound = (float)-M_PI;
- *     float upper_bound = (float)M_PI;
+ * volk_32f_s32f_s32f_mod_range_32f(output, input, -1.0f, 1.0f, N);
  *
- *     volk_32f_s32f_s32f_mod_range_32f(output, input, lower_bound, upper_bound, N);
+ * printf("Expected: 0.5, -0.5, 0.5, -0.5\n");
+ * printf("Result:   %1.1f, %1.1f, %1.1f, %1.1f\n",
+ *        output[0], output[1], output[2], output[3]);
  *
- *     for (unsigned int i = 0; i < N; i++) {
- *         printf("input: %8.3f  ->  output: %8.3f\n", input[i], output[i]);
- *     }
- *
- *     volk_free(input);
- *     volk_free(output);
- *     return 0;
- * }
+ * volk_free(input);
+ * volk_free(output);
  * \endcode
  */
 

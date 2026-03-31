@@ -12,77 +12,67 @@
  *
  * \b Deprecation
  *
- * This kernel is deprecated, because passing in \p lv_32fc_t by value results in
- * undefined behavior, causing a segmentation fault on some architectures.
- * Use \ref volk_32fc_x2_s32fc_multiply_conjugate_add2_32fc instead.
+ * This kernel is deprecated, because passing in `lv_32fc_t` by value results in
+ * Undefined Behaviour, causing a segmentation fault on some architectures.
+ * Use `volk_32fc_x2_s32fc_multiply_conjugate_add2_32fc` instead.
  *
  * \b Overview
  *
- * Computes the conjugate of each element in a complex input vector, multiplies
- * by a complex scalar, and adds the result to a second complex input vector.
- * For each element the operation is:
+ * Conjugates the input complex vector, multiplies each element by a complex scalar,
+ * and adds the result to another input complex vector:
  *
- * \f[
- * c[i] = a[i] + \operatorname{conj}(b[i]) \times \text{scalar}
- * \f]
+ * c[i] = a[i] + conj(b[i]) * scalar
  *
- * This pattern appears in adaptive filtering algorithms such as LMS (Least Mean
- * Squares), where filter weights are updated using the conjugate of the input
- * signal.
+ * This conjugate-multiply-accumulate operation is a building block for adaptive
+ * filtering algorithms such as LMS and CMA equalizers, where filter tap weights
+ * are updated each sample interval using conjugated signal samples scaled by an
+ * error term.
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_32fc_x2_s32fc_multiply_conjugate_add_32fc(lv_32fc_t* cVector,
- *     const lv_32fc_t* aVector, const lv_32fc_t* bVector, const lv_32fc_t scalar,
- *     unsigned int num_points)
+ * void volk_32fc_x2_s32fc_multiply_conjugate_add_32fc(lv_32fc_t* cVector, const
+ * lv_32fc_t* aVector, const lv_32fc_t* bVector, const lv_32fc_t scalar, unsigned int
+ * num_points);
  * \endcode
  *
  * \b Inputs
- * \li aVector: Complex input vector to be added, of length \p num_points (lv_32fc_t).
- * \li bVector: Complex input vector to be conjugated and multiplied, of length
- *     \p num_points (lv_32fc_t).
- * \li scalar: Complex scalar multiplied against the conjugated elements of \p bVector
- *     (lv_32fc_t, passed by value).
- * \li num_points: The number of complex elements to process.
+ * \li aVector: The input vector to be added, e.g. current tap weights (lv_32fc_t).
+ * \li bVector: The input vector to be conjugated and multiplied, e.g. signal samples (lv_32fc_t).
+ * \li scalar: The complex scalar to multiply against conjugated bVector, e.g. step-size error term (lv_32fc_t).
+ * \li num_points: The number of complex values to process.
  *
  * \b Outputs
- * \li cVector: Complex output vector of length \p num_points (lv_32fc_t).
+ * \li cVector: The output vector of updated values (lv_32fc_t).
  *
  * \b Example
- * Conjugate-multiply a vector by a scalar and add to another vector.
+ * Compute c[i] = a[i] + conj(b[i]) * scalar with constant inputs.
+ *
  * \code
- * #include <volk/volk.h>
- * #include <stdio.h>
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
  *
- * int main() {
- *     unsigned int N = 4;
- *     unsigned int alignment = volk_get_alignment();
+ * lv_32fc_t* aVector = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t) * N, alignment);
+ * lv_32fc_t* bVector = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t) * N, alignment);
+ * lv_32fc_t* cVector = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t) * N, alignment);
  *
- *     lv_32fc_t* aVector = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t) * N, alignment);
- *     lv_32fc_t* bVector = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t) * N, alignment);
- *     lv_32fc_t* cVector = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t) * N, alignment);
- *
- *     // Initialize inputs
- *     for (unsigned int i = 0; i < N; ++i) {
- *         aVector[i] = lv_cmake(1.0f, 0.5f);
- *         bVector[i] = lv_cmake(2.0f, -1.0f);
- *     }
- *     lv_32fc_t scalar = lv_cmake(0.5f, 0.0f);
- *
- *     // c[i] = a[i] + conj(b[i]) * scalar
- *     volk_32fc_x2_s32fc_multiply_conjugate_add_32fc(cVector, aVector, bVector,
- *         scalar, N);
- *
- *     for (unsigned int i = 0; i < N; ++i) {
- *         printf("c[%u] = %+1.4f %+1.4fj\n",
- *             i, lv_creal(cVector[i]), lv_cimag(cVector[i]));
- *     }
- *
- *     volk_free(aVector);
- *     volk_free(bVector);
- *     volk_free(cVector);
- *     return 0;
+ * for (unsigned int i = 0; i < N; ++i) {
+ *   aVector[i] = lv_cmake(1.0f, 2.0f);
+ *   bVector[i] = lv_cmake(3.0f, 4.0f);
  * }
+ * lv_32fc_t scalar = lv_cmake(2.0f, 0.0f);
+ *
+ * // conj(b) = (3, -4), conj(b) * scalar = (6, -8)
+ * // c = a + conj(b) * scalar = (1+6, 2-8) = (7, -6)
+ * lv_32fc_t expected = lv_cmake(7.0f, -6.0f);
+ *
+ * volk_32fc_x2_s32fc_multiply_conjugate_add_32fc(cVector, aVector, bVector, scalar, N);
+ *
+ * printf("Expected: (%1.1f, %1.1f)\n", lv_creal(expected), lv_cimag(expected));
+ * printf("Result:   (%1.1f, %1.1f)\n", lv_creal(cVector[0]), lv_cimag(cVector[0]));
+ *
+ * volk_free(aVector);
+ * volk_free(bVector);
+ * volk_free(cVector);
  * \endcode
  */
 

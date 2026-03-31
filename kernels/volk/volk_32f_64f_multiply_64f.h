@@ -12,46 +12,54 @@
  *
  * \b Overview
  *
- * Multiplies a single-precision floating point vector by a double-precision floating point vector.
+ * Multiplies a single-precision float vector by a double-precision vector,
+ * producing a double-precision result. Each float sample is widened to double
+ * before multiplication: c[i] = (double)a[i] * b[i].
  *
- * c[i] = a[i] * b[i]
+ * This mixed-precision element-wise multiply is useful in signal processing
+ * pipelines where double-precision correction factors (e.g. gain coefficients,
+ * frequency-offset ramps, or calibration weights) must be applied to
+ * single-precision sample streams without accumulating rounding error.
  *
  * <b>Dispatcher Prototype</b>
  * \code
  * void volk_32f_64f_multiply_64f(double* cVector, const float* aVector, const double*
- * bVector, unsigned int num_points) \endcode
+ * bVector, unsigned int num_points)
+ * \endcode
  *
  * \b Inputs
- * \li aVector: First input vector.
- * \li bVector: Second input vector.
+ * \li aVector: Input sample vector (float).
+ * \li bVector: Input coefficient vector (double).
  * \li num_points: The number of values in both input vectors.
  *
  * \b Outputs
- * \li cVector: The output vector.
+ * \li cVector: The output product vector (double).
  *
  * \b Example
- * Multiply elements of an increasing vector by those of a decreasing vector.
+ * Multiply a constant float vector by a constant double vector.
  * \code
- *   int N = 10;
- *   unsigned int alignment = volk_get_alignment();
- *   float* increasing = (float*)volk_malloc(sizeof(float)*N, alignment);
- *   double* decreasing = (double*)volk_malloc(sizeof(double)*N, alignment);
- *   double* out = (double*)volk_malloc(sizeof(double)*N, alignment);
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
+ * float* aVector = (float*)volk_malloc(sizeof(float) * N, alignment);
+ * double* bVector = (double*)volk_malloc(sizeof(double) * N, alignment);
+ * double* out = (double*)volk_malloc(sizeof(double) * N, alignment);
  *
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       increasing[ii] = (float)ii;
- *       decreasing[ii] = 10. - (double)ii;
- *   }
+ * for (unsigned int i = 0; i < N; ++i) {
+ *     aVector[i] = 2.5f;
+ *     bVector[i] = 4.0;
+ * }
  *
- *   volk_32f_64f_multiply_64f(out, increasing, decreasing, N);
+ * // Expected: each element = 2.5 * 4.0 = 10.0
+ * double expected = 2.5 * 4.0;
  *
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       printf("out[%u] = %1.2F\n", ii, out[ii]);
- *   }
+ * volk_32f_64f_multiply_64f(out, aVector, bVector, N);
  *
- *   volk_free(increasing);
- *   volk_free(decreasing);
- *   volk_free(out);
+ * printf("Expected: %f\n", expected);
+ * printf("Result:   %f\n", out[0]);
+ *
+ * volk_free(aVector);
+ * volk_free(bVector);
+ * volk_free(out);
  * \endcode
  */
 

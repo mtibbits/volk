@@ -12,47 +12,53 @@
  *
  * \b Overview
  *
- * Selects minimum value from each entry between bVector and aVector
- * and store their results in the cVector.
+ * Selects the element-wise minimum of two double-precision vectors.
  *
  * c[i] = min(a[i], b[i])
+ *
+ * Element-wise minimum selection is used in signal processing for tasks such
+ * as noise floor estimation, envelope tracking, and clipping a signal to a
+ * sample-by-sample threshold. For example, when two spectral estimates are
+ * available, choosing the minimum at each bin yields a conservative noise
+ * floor estimate.
  *
  * <b>Dispatcher Prototype</b>
  * \code
  * void volk_64f_x2_min_64f(double* cVector, const double* aVector, const double* bVector,
- unsigned int num_points)
+ * unsigned int num_points)
  * \endcode
  *
  * \b Inputs
- * \li aVector: First input vector.
- * \li bVector: Second input vector.
- * \li num_points: The number of values in both input vectors.
+ * \li aVector: First input vector (double).
+ * \li bVector: Second input vector (double).
+ * \li num_points: The number of double-precision samples to process.
  *
  * \b Outputs
- * \li cVector: The output vector.
+ * \li cVector: The output vector containing the element-wise minima (double).
  *
  * \b Example
+ * Select the minimum of two short vectors with varying values.
  * \code
-    int N = 10;
-    unsigned int alignment = volk_get_alignment();
-    double* increasing = (double*)volk_malloc(sizeof(double)*N, alignment);
-    double* decreasing = (double*)volk_malloc(sizeof(double)*N, alignment);
-    double* out = (double*)volk_malloc(sizeof(double)*N, alignment);
-
-    for(unsigned int ii = 0; ii < N; ++ii){
-        increasing[ii] = (double)ii;
-        decreasing[ii] = 10.0 - (double)ii;
-    }
-
-    volk_64f_x2_min_64f(out, increasing, decreasing, N);
-
-    for(unsigned int ii = 0; ii < N; ++ii){
-        printf("out[%u] = %1.2g\n", ii, out[ii]);
-    }
-
-    volk_free(increasing);
-    volk_free(decreasing);
-    volk_free(out);
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
+ *
+ * double* aVector = (double*)volk_malloc(sizeof(double) * N, alignment);
+ * double* bVector = (double*)volk_malloc(sizeof(double) * N, alignment);
+ * double* out = (double*)volk_malloc(sizeof(double) * N, alignment);
+ *
+ * aVector[0] = 1.0; aVector[1] = 5.0; aVector[2] = 3.0; aVector[3] = 7.0;
+ * bVector[0] = 4.0; bVector[1] = 2.0; bVector[2] = 6.0; bVector[3] = 0.0;
+ *
+ * // Expected: min(1,4)=1, min(5,2)=2, min(3,6)=3, min(7,0)=0
+ *
+ * volk_64f_x2_min_64f(out, aVector, bVector, N);
+ *
+ * printf("Expected: %1.1f %1.1f %1.1f %1.1f\n", 1.0, 2.0, 3.0, 0.0);
+ * printf("Result:   %1.1f %1.1f %1.1f %1.1f\n", out[0], out[1], out[2], out[3]);
+ *
+ * volk_free(aVector);
+ * volk_free(bVector);
+ * volk_free(out);
  * \endcode
  */
 

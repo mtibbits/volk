@@ -12,59 +12,54 @@
  *
  * \b Overview
  *
- * Computes the log power spectrum of complex FFT data. Each output sample is
- * 10 * log10((real/norm)^2 + (imag/norm)^2), where norm is the normalization factor.
- * This is useful for converting complex FFT output into a power spectral density in dB.
+ * Computes the log10 power spectrum from complex FFT output data. Each complex
+ * input sample is divided by the normalization factor, then the squared magnitude
+ * is converted to decibels: output = 10 * log10((real/norm)^2 + (imag/norm)^2).
+ *
+ * This kernel is commonly used in spectral analysis and power spectral density
+ * (PSD) estimation. After computing an FFT, the complex frequency-domain bins
+ * are passed through this kernel to produce a calibrated power spectrum in dB,
+ * suitable for display or further processing such as noise floor estimation.
  *
  * <b>Dispatcher Prototype</b>
  * \code
  * void volk_32fc_s32f_power_spectrum_32f(float* logPowerOutput, const lv_32fc_t*
- * complexFFTInput, const float normalizationFactor, unsigned int num_points) \endcode
+ * complexFFTInput, const float normalizationFactor, unsigned int num_points)
+ * \endcode
  *
  * \b Inputs
- * \li complexFFTInput: The complex data output from the FFT.
- * \li normalizationFactor: Each input value is divided by this factor before the power is
- * calculated.
- * \li num_points: The number of FFT data points.
+ * \li complexFFTInput: The complex frequency-domain samples from an FFT (lv_32fc_t).
+ * \li normalizationFactor: Scale factor applied to each sample before computing power (float).
+ * \li num_points: The number of complex FFT data points.
  *
  * \b Outputs
- * \li logPowerOutput: The 10.0 * log10(r*r + i*i) for each data point, where r and i are
- * the normalized real and imaginary components.
+ * \li logPowerOutput: The 10.0 * log10(r*r + i*i) power in dB for each data point (float).
  *
  * \b Example
- * Compute the power spectrum in dB from simulated FFT output.
+ * Compute the power spectrum of four identical complex FFT bins with unit normalization.
  * \code
- * #include <volk/volk.h>
- * #include <stdio.h>
- * #include <math.h>
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
  *
- * int main() {
- *     unsigned int N = 8;
- *     unsigned int alignment = volk_get_alignment();
- *     float normalizationFactor = (float)N;
+ * lv_32fc_t* input = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t) * N, alignment);
+ * float* output = (float*)volk_malloc(sizeof(float) * N, alignment);
  *
- *     lv_32fc_t* fftOutput =
- *         (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t) * N, alignment);
- *     float* powerSpectrum =
- *         (float*)volk_malloc(sizeof(float) * N, alignment);
- *
- *     // Simulate FFT output with a strong bin at index 1
- *     for (unsigned int i = 0; i < N; i++) {
- *         fftOutput[i] = lv_cmake(0.01f, 0.01f);
- *     }
- *     fftOutput[1] = lv_cmake(4.0f, 3.0f); // magnitude 5.0
- *
- *     volk_32fc_s32f_power_spectrum_32f(
- *         powerSpectrum, fftOutput, normalizationFactor, N);
- *
- *     for (unsigned int i = 0; i < N; i++) {
- *         printf("bin[%u] = %+.2f dB\n", i, powerSpectrum[i]);
- *     }
- *
- *     volk_free(fftOutput);
- *     volk_free(powerSpectrum);
- *     return 0;
+ * // Input: (3, 4) so magnitude^2 = 9 + 16 = 25
+ * for (unsigned int i = 0; i < N; ++i) {
+ *   input[i] = lv_cmake(3.0f, 4.0f);
  * }
+ * float normFactor = 1.0f;
+ *
+ * // Expected: 10 * log10(25) = 10 * 1.39794 = 13.9794 dB
+ * float expected = 10.0f * log10f(25.0f);
+ *
+ * volk_32fc_s32f_power_spectrum_32f(output, input, normFactor, N);
+ *
+ * printf("Expected: %f\n", expected);
+ * printf("Result:   %f\n", output[0]);
+ *
+ * volk_free(input);
+ * volk_free(output);
  * \endcode
  */
 

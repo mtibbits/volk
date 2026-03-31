@@ -12,8 +12,14 @@
  *
  * \b Overview
  *
- * Reverses the bit order of each 32-bit unsigned integer in the input vector. For each
- * element, bit 0 becomes bit 31, bit 1 becomes bit 30, and so on.
+ * Reverses the bit order of each 32-bit unsigned integer. Bit 0 of the input
+ * becomes bit 31 of the output, bit 1 becomes bit 30, and so on.
+ *
+ * Bit reversal is a fundamental operation in FFT implementations that use
+ * decimation-in-time or decimation-in-frequency decompositions, where
+ * bit-reversed addressing reorders samples before or after the butterfly
+ * stages. It is also used in OFDM systems and other DSP algorithms that
+ * require permuted index access patterns.
  *
  * <b>Dispatcher Prototype</b>
  * \code
@@ -21,43 +27,37 @@
  * \endcode
  *
  * \b Inputs
- * \li in: Vector of 32-bit unsigned integers to bit-reverse (uint32_t).
- * \li num_points: The number of data points.
+ * \li in: The input vector of 32-bit unsigned integers (uint32_t).
+ * \li num_points: The number of values to reverse.
  *
  * \b Outputs
- * \li out: Vector of 32-bit unsigned integers containing the bit-reversed results
- * (uint32_t).
+ * \li out: The output vector of bit-reversed values (uint32_t).
  *
  * \b Example
- * Bit-reverse several 32-bit values and print the results in hex.
+ * Reverse a few known bit patterns and verify against hand-computed results.
  * \code
- *   #include <volk/volk.h>
- *   #include <stdio.h>
- *   #include <stdint.h>
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
  *
- *   int main() {
- *     unsigned int num_points = 4;
- *     unsigned int alignment = volk_get_alignment();
+ * uint32_t* in = (uint32_t*)volk_malloc(sizeof(uint32_t) * N, alignment);
+ * uint32_t* out = (uint32_t*)volk_malloc(sizeof(uint32_t) * N, alignment);
  *
- *     uint32_t* in = (uint32_t*)volk_malloc(sizeof(uint32_t) * num_points, alignment);
- *     uint32_t* out = (uint32_t*)volk_malloc(sizeof(uint32_t) * num_points, alignment);
+ * // 0x00000001 reversed = 0x80000000, 0x80000000 reversed = 0x00000001
+ * // 0x0F0F0F0F reversed = 0xF0F0F0F0, 0xFFFFFFFF reversed = 0xFFFFFFFF
+ * in[0] = 0x00000001;
+ * in[1] = 0x80000000;
+ * in[2] = 0x0F0F0F0F;
+ * in[3] = 0xFFFFFFFF;
  *
- *     // Initialize with values that have recognizable bit patterns
- *     in[0] = 0x00000001; // only LSB set -> expect only MSB set: 0x80000000
- *     in[1] = 0x80000000; // only MSB set -> expect only LSB set: 0x00000001
- *     in[2] = 0x0F0F0F0F; // alternating nibbles
- *     in[3] = 0xAAAAAAAA; // alternating bits: 1010... -> 0101...: 0x55555555
+ * volk_32u_reverse_32u(out, in, N);
  *
- *     volk_32u_reverse_32u(out, in, num_points);
+ * printf("Expected: 0x80000000, Result: 0x%08X\n", out[0]);
+ * printf("Expected: 0x00000001, Result: 0x%08X\n", out[1]);
+ * printf("Expected: 0xF0F0F0F0, Result: 0x%08X\n", out[2]);
+ * printf("Expected: 0xFFFFFFFF, Result: 0x%08X\n", out[3]);
  *
- *     for (unsigned int i = 0; i < num_points; i++) {
- *       printf("in: 0x%08X  ->  out: 0x%08X\n", in[i], out[i]);
- *     }
- *
- *     volk_free(in);
- *     volk_free(out);
- *     return 0;
- *   }
+ * volk_free(in);
+ * volk_free(out);
  * \endcode
  */
 #ifndef INCLUDED_VOLK_32u_REVERSE_32u_U_H

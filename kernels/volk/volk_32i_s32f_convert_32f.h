@@ -12,8 +12,12 @@
  *
  * \b Overview
  *
- * Converts the samples in the inputVector from 32-bit integers into
- * floating point values and then divides them by the input scalar.
+ * Converts samples from 32-bit integers to floating point values and divides
+ * each by a scalar: out[i] = (float)in[i] / scalar. This operation is commonly
+ * used in SDR receivers to normalize fixed-point ADC samples into a
+ * floating-point range suitable for downstream DSP, such as filtering,
+ * demodulation, or spectral analysis. The scalar typically represents the
+ * full-scale value of the converter.
  *
  * <b>Dispatcher Prototype</b>
  * \code
@@ -21,30 +25,36 @@
  * float scalar, unsigned int num_points) \endcode
  *
  * \b Inputs
- * \li inputVector: The vector of 32-bit integers.
- * \li scalar: The value that the output is divided by after being converted to a float.
- * \li num_points: The number of values.
+ * \li inputVector: The input vector of 32-bit integer samples (int32_t).
+ * \li scalar: The divisor applied after converting each sample to float (float).
+ * \li num_points: The number of samples to convert.
  *
  * \b Outputs
- * \li outputVector: The output vector of floats.
+ * \li outputVector: The output vector of normalized float samples (float).
  *
  * \b Example
- * Convert full-range integers to floats in range [0,1].
+ * Convert integers to floats scaled by 1/100.
  * \code
- *   int N = 1<<8;
- *   unsigned int alignment = volk_get_alignment();
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
  *
- *   int32_t* x = (int32_t*)volk_malloc(N*sizeof(int32_t), alignment);
- *   float* z = (float*)volk_malloc(N*sizeof(float), alignment);
- *   float scale = (float)N;
- *   for(unsigned int ii=0; ii<N; ++ii){
- *       x[ii] = ii;
- *   }
+ * int32_t* in = (int32_t*)volk_malloc(sizeof(int32_t) * N, alignment);
+ * float* out = (float*)volk_malloc(sizeof(float) * N, alignment);
  *
- *   volk_32i_s32f_convert_32f(z, x, scale, N);
+ * in[0] = 100; in[1] = 200; in[2] = -300; in[3] = 400;
+ * float scalar = 100.0f;
  *
- *   volk_free(x);
- *   volk_free(z);
+ * // Expected: 100/100=1.0, 200/100=2.0, -300/100=-3.0, 400/100=4.0
+ * float expected = 1.0f + 2.0f + (-3.0f) + 4.0f; // sum = 4.0
+ *
+ * volk_32i_s32f_convert_32f(out, in, scalar, N);
+ *
+ * float actual = out[0] + out[1] + out[2] + out[3];
+ * printf("Expected sum: %f\n", expected);
+ * printf("Actual sum:   %f\n", actual);
+ *
+ * volk_free(in);
+ * volk_free(out);
  * \endcode
  */
 

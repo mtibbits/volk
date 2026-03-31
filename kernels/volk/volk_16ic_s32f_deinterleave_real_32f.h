@@ -12,55 +12,52 @@
  *
  * \b Overview
  *
- * Deinterleaves a complex 16-bit integer vector and returns just the real
- * (in-phase) component as floating-point values, divided by a scalar.
+ * Deinterleaves a complex 16-bit integer vector and returns the real
+ * (in-phase) component as a scaled vector of floats:
+ * iBuffer[i] = real(complexVector[i]) / scalar.
+ *
+ * This kernel is useful in receiver signal processing chains where baseband
+ * I/Q samples arrive as interleaved 16-bit integers and only the in-phase
+ * channel is needed for further processing such as demodulation, AGC, or
+ * power estimation. The scalar parameter provides a convenient normalization
+ * step, converting fixed-point samples to calibrated floating-point values
+ * in a single operation.
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_16ic_s32f_deinterleave_real_32f(float* iBuffer, const lv_16sc_t*
- * complexVector, const float scalar, unsigned int num_points) \endcode
+ * void volk_16ic_s32f_deinterleave_real_32f(float* iBuffer, const lv_16sc_t* complexVector, const float scalar, unsigned int num_points)
+ * \endcode
  *
  * \b Inputs
- * \li complexVector: The complex input vector (lv_16sc_t).
- * \li scalar: The value to divide each real sample by.
- * \li num_points: The number of complex samples to process.
+ * \li complexVector: The complex input vector of interleaved I/Q samples (lv_16sc_t).
+ * \li scalar: The value to divide each real sample by (float).
+ * \li num_points: The number of complex samples to deinterleave.
  *
  * \b Outputs
  * \li iBuffer: The scaled real (in-phase) output values (float).
  *
  * \b Example
- * Extract and scale the real part of complex 16-bit samples.
+ * Scale the real part of four identical complex samples by dividing by 10.
  * \code
- *   #include <volk/volk.h>
- *   #include <stdio.h>
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
  *
- *   int main() {
- *     unsigned int N = 4;
- *     unsigned int alignment = volk_get_alignment();
+ * lv_16sc_t* complexVector =
+ *     (lv_16sc_t*)volk_malloc(sizeof(lv_16sc_t) * N, alignment);
+ * float* iBuffer = (float*)volk_malloc(sizeof(float) * N, alignment);
  *
- *     // Allocate input and output vectors
- *     lv_16sc_t* complexVector =
- *         (lv_16sc_t*)volk_malloc(N * sizeof(lv_16sc_t), alignment);
- *     float* iBuffer = (float*)volk_malloc(N * sizeof(float), alignment);
+ * for (unsigned int i = 0; i < N; ++i) {
+ *     complexVector[i] = lv_cmake((int16_t)100, (int16_t)200);
+ * }
+ * float scalar = 10.0f;
  *
- *     // Fill with complex samples: (real, imag)
- *     complexVector[0] = lv_cmake((int16_t)1000, (int16_t)2000);
- *     complexVector[1] = lv_cmake((int16_t)-500, (int16_t)3000);
- *     complexVector[2] = lv_cmake((int16_t)4000, (int16_t)-1000);
- *     complexVector[3] = lv_cmake((int16_t)0, (int16_t)7000);
+ * // Expected: each output = 100 / 10 = 10.0
+ * volk_16ic_s32f_deinterleave_real_32f(iBuffer, complexVector, scalar, N);
  *
- *     // Divide real part by scalar (e.g. normalize 16-bit range to +/-1.0)
- *     float scalar = 32768.0f;
- *     volk_16ic_s32f_deinterleave_real_32f(iBuffer, complexVector, scalar, N);
+ * printf("Expected: 10.0  Result: %f\n", iBuffer[0]);
  *
- *     for (unsigned int i = 0; i < N; i++) {
- *       printf("iBuffer[%u] = %f\n", i, iBuffer[i]);
- *     }
- *
- *     volk_free(complexVector);
- *     volk_free(iBuffer);
- *     return 0;
- *   }
+ * volk_free(complexVector);
+ * volk_free(iBuffer);
  * \endcode
  */
 

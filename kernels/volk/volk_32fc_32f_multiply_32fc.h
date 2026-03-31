@@ -12,63 +12,55 @@
  *
  * \b Overview
  *
- * Multiplies each element of a complex float vector by the corresponding
- * element of a real float vector. Both the real and imaginary parts of each
- * complex input are scaled by the real value.
+ * Multiplies each element of a complex vector by the corresponding element of a
+ * real (float) vector: cVector[i] = aVector[i] * bVector[i]. Both the real and
+ * imaginary parts of each complex sample are scaled by the float value.
+ *
+ * This element-wise complex-by-real multiplication is common in signal processing
+ * for operations such as applying a real-valued gain or envelope to a complex
+ * baseband signal (e.g. AGC, amplitude modulation, or windowing in spectral
+ * analysis).
  *
  * <b>Dispatcher Prototype</b>
  * \code
  * void volk_32fc_32f_multiply_32fc(lv_32fc_t* cVector, const lv_32fc_t* aVector,
- * const float* bVector, unsigned int num_points)
+ * const float* bVector, unsigned int num_points);
  * \endcode
  *
  * \b Inputs
- * \li aVector: The input vector of complex floats.
- * \li bVector: The input vector of floats.
- * \li num_points: The number of data points.
+ * \li aVector: The input vector of complex samples (lv_32fc_t).
+ * \li bVector: The input vector of real-valued scalars (float).
+ * \li num_points: The number of complex samples to process.
  *
  * \b Outputs
- * \li cVector: The output vector of complex floats.
+ * \li cVector: The output vector of scaled complex samples (lv_32fc_t).
  *
  * \b Example
- * Scale a complex signal by a real-valued gain ramp.
+ * Scale a complex signal by a real gain of 2.0, doubling both components.
  * \code
- *   #include <volk/volk.h>
- *   #include <stdio.h>
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
  *
- *   int main() {
- *     unsigned int N = 4;
- *     unsigned int alignment = volk_get_alignment();
+ * lv_32fc_t* aVector = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t) * N, alignment);
+ * float* bVector = (float*)volk_malloc(sizeof(float) * N, alignment);
+ * lv_32fc_t* cVector = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t) * N, alignment);
  *
- *     lv_32fc_t* aVector = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t) * N, alignment);
- *     float* bVector     = (float*)volk_malloc(sizeof(float) * N, alignment);
- *     lv_32fc_t* cVector = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t) * N, alignment);
+ * for (unsigned int i = 0; i < N; ++i) {
+ *     aVector[i] = lv_cmake(3.0f, 4.0f);
+ *     bVector[i] = 2.0f;
+ * }
  *
- *     // Complex signal: (1+2j, 3+4j, 5+6j, 7+8j)
- *     aVector[0] = lv_cmake(1.0f, 2.0f);
- *     aVector[1] = lv_cmake(3.0f, 4.0f);
- *     aVector[2] = lv_cmake(5.0f, 6.0f);
- *     aVector[3] = lv_cmake(7.0f, 8.0f);
+ * // Expected: (3+4j) * 2 = (6+8j) for each element
+ * lv_32fc_t expected = lv_cmake(6.0f, 8.0f);
  *
- *     // Real gain ramp: 0.5, 1.0, 1.5, 2.0
- *     bVector[0] = 0.5f;
- *     bVector[1] = 1.0f;
- *     bVector[2] = 1.5f;
- *     bVector[3] = 2.0f;
+ * volk_32fc_32f_multiply_32fc(cVector, aVector, bVector, N);
  *
- *     volk_32fc_32f_multiply_32fc(cVector, aVector, bVector, N);
+ * printf("Expected: (%1.1f, %1.1f)\n", lv_creal(expected), lv_cimag(expected));
+ * printf("Result:   (%1.1f, %1.1f)\n", lv_creal(cVector[0]), lv_cimag(cVector[0]));
  *
- *     // Expected: (0.5+1j, 3+4j, 7.5+9j, 14+16j)
- *     for (unsigned int i = 0; i < N; i++) {
- *       printf("cVector[%u] = (%.1f, %.1f)\n",
- *              i, lv_creal(cVector[i]), lv_cimag(cVector[i]));
- *     }
- *
- *     volk_free(aVector);
- *     volk_free(bVector);
- *     volk_free(cVector);
- *     return 0;
- *   }
+ * volk_free(aVector);
+ * volk_free(bVector);
+ * volk_free(cVector);
  * \endcode
  */
 

@@ -12,46 +12,49 @@
  *
  * \b Deprecation
  *
- * This kernel is deprecated, no replacement has been identified.
+ * This kernel is deprecated.
  *
  * \b Overview
  *
- * Gathers elements from a source vector using an index array, then adds
- * scalar-masked contributions from four control vectors. For each element i,
- * computes: target[i] = src0[permute_indexes[i]] + (cntl0[i] & scalars[0]) +
- * (cntl1[i] & scalars[1]) + (cntl2[i] & scalars[2]) + (cntl3[i] & scalars[3]).
- * The control vectors act as bitwise masks that selectively pass or block each scalar
- * value on a per-element basis.
+ * Gathers elements from a source vector according to a permutation index
+ * array, then adds masked scalar values controlled by four control vectors.
+ * For each output element: target[i] = src0[permute_indexes[i]] +
+ * (cntl0[i] & scalars[0]) + (cntl1[i] & scalars[1]) +
+ * (cntl2[i] & scalars[2]) + (cntl3[i] & scalars[3]).
+ *
+ * This pattern of indexed gather with conditional scalar accumulation is
+ * characteristic of trellis-based decoding, where survivor path states are
+ * reordered (permuted) and branch metrics (scalars) are selectively added
+ * according to transition masks. It can also serve other DSP operations
+ * that combine sample reordering with masked offset correction.
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_16i_permute_and_scalar_add(short* target, const short* src0, const short*
- * permute_indexes, const short* cntl0, const short* cntl1, const short* cntl2, const
- * short* cntl3, const short* scalars, unsigned int num_points)
+ * void volk_16i_permute_and_scalar_add(short* target, short* src0, short*
+ * permute_indexes, short* cntl0, short* cntl1, short* cntl2, short* cntl3, short*
+ * scalars, unsigned int num_points)
  * \endcode
  *
  * \b Inputs
- * \li src0: The source vector of short values to gather from.
- * \li permute_indexes: Vector of short indices used to look up elements in src0.
- * \li cntl0: First control mask vector of short values (num_points elements).
- * \li cntl1: Second control mask vector of short values (num_points elements).
- * \li cntl2: Third control mask vector of short values (num_points elements).
- * \li cntl3: Fourth control mask vector of short values (num_points elements).
- * \li scalars: Array of 4 short values, each bitwise ANDed with the corresponding
- * control vector.
- * \li num_points: The number of short values to process.
+ * \li src0: The source vector of 16-bit integers (short).
+ * \li permute_indexes: Index array specifying which element of src0 to gather for each output position (short).
+ * \li cntl0: Control mask vector for scalars[0] (short).
+ * \li cntl1: Control mask vector for scalars[1] (short).
+ * \li cntl2: Control mask vector for scalars[2] (short).
+ * \li cntl3: Control mask vector for scalars[3] (short).
+ * \li scalars: Array of four 16-bit scalar values (short).
+ * \li num_points: The number of 16-bit elements to process.
  *
  * \b Outputs
- * \li target: The output vector of short values (num_points elements).
+ * \li target: The output vector of 16-bit integers (short).
  *
  * \b Example
+ * Reverse a 4-element vector and add a constant offset via all-ones control masks.
  * \code
- * #include <volk/volk.h>
- * #include <stdio.h>
- *
- * int N = 8;
+ * unsigned int N = 4;
  * unsigned int alignment = volk_get_alignment();
  *
+ * short* target = (short*)volk_malloc(sizeof(short) * N, alignment);
  * short* src0 = (short*)volk_malloc(sizeof(short) * N, alignment);
  * short* permute_indexes = (short*)volk_malloc(sizeof(short) * N, alignment);
  * short* cntl0 = (short*)volk_malloc(sizeof(short) * N, alignment);
@@ -59,38 +62,26 @@
  * short* cntl2 = (short*)volk_malloc(sizeof(short) * N, alignment);
  * short* cntl3 = (short*)volk_malloc(sizeof(short) * N, alignment);
  * short* scalars = (short*)volk_malloc(sizeof(short) * 4, alignment);
- * short* target = (short*)volk_malloc(sizeof(short) * N, alignment);
  *
- * for (unsigned int ii = 0; ii < N; ++ii) {
- *     src0[ii] = (short)(ii * 10);
+ * src0[0] = 10; src0[1] = 20; src0[2] = 30; src0[3] = 40;
+ * permute_indexes[0] = 3; permute_indexes[1] = 2;
+ * permute_indexes[2] = 1; permute_indexes[3] = 0;
+ *
+ * for (unsigned int i = 0; i < N; ++i) {
+ *     cntl0[i] = -1; cntl1[i] = -1; cntl2[i] = -1; cntl3[i] = -1;
  * }
+ * scalars[0] = 1; scalars[1] = 2; scalars[2] = 3; scalars[3] = 4;
  *
- * // Reverse permutation: read src0 in reverse order
- * for (unsigned int ii = 0; ii < N; ++ii) {
- *     permute_indexes[ii] = (short)(N - 1 - ii);
- * }
+ * // Expected: target[i] = src0[reverse[i]] + (1 + 2 + 3 + 4) = src0[reverse[i]] + 10
+ * // target = {50, 40, 30, 20}
  *
- * // Control masks: -1 (all bits set) passes the scalar through, 0 blocks it
- * for (unsigned int ii = 0; ii < N; ++ii) {
- *     cntl0[ii] = -1;
- *     cntl1[ii] = 0;
- *     cntl2[ii] = 0;
- *     cntl3[ii] = 0;
- * }
+ * volk_16i_permute_and_scalar_add(target, src0, permute_indexes,
+ *     cntl0, cntl1, cntl2, cntl3, scalars, N);
  *
- * scalars[0] = 1;
- * scalars[1] = 2;
- * scalars[2] = 3;
- * scalars[3] = 4;
+ * printf("Expected: %d %d %d %d\n", 50, 40, 30, 20);
+ * printf("Result:   %d %d %d %d\n", target[0], target[1], target[2], target[3]);
  *
- * // target[i] = src0[7-i] + (-1 & 1) + 0 + 0 + 0 = src0[7-i] + 1
- * volk_16i_permute_and_scalar_add(target, src0, permute_indexes, cntl0, cntl1, cntl2,
- *                                 cntl3, scalars, N);
- *
- * for (unsigned int ii = 0; ii < N; ++ii) {
- *     printf("target[%u] = %d\n", ii, target[ii]);
- * }
- *
+ * volk_free(target);
  * volk_free(src0);
  * volk_free(permute_indexes);
  * volk_free(cntl0);
@@ -98,7 +89,6 @@
  * volk_free(cntl2);
  * volk_free(cntl3);
  * volk_free(scalars);
- * volk_free(target);
  * \endcode
  */
 

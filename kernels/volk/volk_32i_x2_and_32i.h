@@ -12,60 +12,52 @@
  *
  * \b Overview
  *
- * Computes the Boolean AND operation between two input 32-bit integer vectors.
+ * Computes the bitwise AND of two input 32-bit integer vectors, producing
+ * cVector[i] = aVector[i] & bVector[i] for each element. This operation is
+ * fundamental in digital signal processing for applying bit masks to sample
+ * data, extracting specific bit fields from packed representations, or
+ * implementing logical gating on quantized signals. It is commonly used in
+ * channelization, protocol decoding, and hardware control register manipulation.
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_32i_x2_and_32i(int32_t* cVector, const int32_t* aVector, const int32_t*
- * bVector, unsigned int num_points) \endcode
+ * void volk_32i_x2_and_32i(int32_t* cVector, const int32_t* aVector, const int32_t* bVector, unsigned int num_points)
+ * \endcode
  *
  * \b Inputs
- * \li aVector: Input vector of samples.
- * \li bVector: Input vector of samples.
- * \li num_points: The number of values.
+ * \li aVector: First input vector of samples (int32_t).
+ * \li bVector: Second input vector used as the bitmask or operand (int32_t).
+ * \li num_points: The number of 32-bit integer values to process.
  *
  * \b Outputs
- * \li cVector: The output vector.
+ * \li cVector: The output vector containing the bitwise AND results (int32_t).
  *
  * \b Example
- * This example generates a Karnaugh map for the lower two bits of x AND y.
+ * Bitwise AND two constant vectors and verify the result.
  * \code
- *   int N = 1<<4;
- *   unsigned int alignment = volk_get_alignment();
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
  *
- *   int32_t* x = (int32_t*)volk_malloc(N*sizeof(int32_t), alignment);
- *   int32_t* y = (int32_t*)volk_malloc(N*sizeof(int32_t), alignment);
- *   int32_t* z = (int32_t*)volk_malloc(N*sizeof(int32_t), alignment);
- *   int32_t in_seq[] = {0,1,3,2};
- *   unsigned int jj=0;
- *   for(unsigned int ii=0; ii<N; ++ii){
- *       x[ii] = in_seq[ii%4];
- *       y[ii] = in_seq[jj];
- *       if(((ii+1) % 4) == 0) jj++;
- *   }
+ * int32_t* aVector = (int32_t*)volk_malloc(sizeof(int32_t) * N, alignment);
+ * int32_t* bVector = (int32_t*)volk_malloc(sizeof(int32_t) * N, alignment);
+ * int32_t* cVector = (int32_t*)volk_malloc(sizeof(int32_t) * N, alignment);
  *
- *   volk_32i_x2_and_32i(z, x, y, N);
+ * for (unsigned int i = 0; i < N; ++i) {
+ *     aVector[i] = (int32_t)0xFF00FF00;
+ *     bVector[i] = (int32_t)0x0F0F0F0F;
+ * }
  *
- *   printf("Karnaugh map for x AND y\n");
- *   printf("y\\x|");
- *   for(unsigned int ii=0; ii<4; ++ii){
- *       printf(" %.2x ", in_seq[ii]);
- *   }
- *   printf("\n---|---------------\n");
- *   jj = 0;
- *   for(unsigned int ii=0; ii<N; ++ii){
- *       if(((ii+1) % 4) == 1){
- *           printf("%.2x | ", in_seq[jj++]);
- *       }
- *       printf("%.2x  ", z[ii]);
- *       if(!((ii+1) % 4)){
- *           printf("\n");
- *       }
- *   }
+ * // Expected: 0xFF00FF00 & 0x0F0F0F0F = 0x0F000F00
+ * int32_t expected = (int32_t)0x0F000F00;
  *
- *   volk_free(x);
- *   volk_free(y);
- *   volk_free(z);
+ * volk_32i_x2_and_32i(cVector, aVector, bVector, N);
+ *
+ * printf("Expected: 0x%08x\n", expected);
+ * printf("Result:   0x%08x\n", cVector[0]);
+ *
+ * volk_free(aVector);
+ * volk_free(bVector);
+ * volk_free(cVector);
  * \endcode
  */
 

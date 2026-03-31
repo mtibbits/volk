@@ -12,8 +12,15 @@
  *
  * \b Overview
  *
- * Converts 8-bit signed integers to 16-bit signed integers by scaling each value
- * by 256 (i.e. shifting left by 8 bits into the upper byte of the 16-bit output).
+ * Convert 8-bit signed integer samples to 16-bit signed integers with scaling.
+ * Each input value is multiplied by 256 (left-shifted by 8 bits), mapping the
+ * full 8-bit range into the upper byte of the 16-bit output:
+ * out[i] = (int16_t)in[i] * 256.
+ *
+ * This kernel is commonly used in SDR receive pipelines where digitized samples
+ * arrive as 8-bit I/Q values (e.g. from an RTL-SDR or similar front-end) and
+ * must be promoted to 16-bit precision for downstream processing such as
+ * filtering, mixing, or demodulation while preserving the full dynamic range.
  *
  * <b>Dispatcher Prototype</b>
  * \code
@@ -21,46 +28,34 @@
  * num_points) \endcode
  *
  * \b Inputs
- * \li inputVector: The input vector of 8-bit signed chars (int8_t).
- * \li num_points: The number of values to convert.
+ * \li inputVector: The input vector of 8-bit signed integer samples (int8_t).
+ * \li num_points: The number of samples to convert.
  *
  * \b Outputs
- * \li outputVector: The output vector of 16-bit signed shorts (int16_t).
+ * \li outputVector: The output vector of scaled 16-bit signed integers (int16_t).
  *
  * \b Example
- * Convert a small array of 8-bit values to 16-bit and verify the scaling.
+ * Convert a small array of 8-bit values and verify the scaling.
  * \code
- * #include <volk/volk.h>
- * #include <stdio.h>
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
  *
- * int main() {
- *     unsigned int N = 8;
- *     unsigned int alignment = volk_get_alignment();
+ * int8_t* input = (int8_t*)volk_malloc(sizeof(int8_t) * N, alignment);
+ * int16_t* output = (int16_t*)volk_malloc(sizeof(int16_t) * N, alignment);
  *
- *     int8_t* input = (int8_t*)volk_malloc(sizeof(int8_t) * N, alignment);
- *     int16_t* output = (int16_t*)volk_malloc(sizeof(int16_t) * N, alignment);
+ * input[0] = 1;
+ * input[1] = -1;
+ * input[2] = 127;
+ * input[3] = -128;
  *
- *     // Initialize with sample signed 8-bit values
- *     input[0] = 1;
- *     input[1] = -1;
- *     input[2] = 127;
- *     input[3] = -128;
- *     input[4] = 0;
- *     input[5] = 42;
- *     input[6] = -50;
- *     input[7] = 100;
+ * volk_8i_convert_16i(output, input, N);
  *
- *     // Each output value equals the input value multiplied by 256
- *     volk_8i_convert_16i(output, input, N);
+ * // Expected: each value * 256 -> 256, -256, 32512, -32768
+ * printf("Expected: 256, -256, 32512, -32768\n");
+ * printf("Result:   %d, %d, %d, %d\n", output[0], output[1], output[2], output[3]);
  *
- *     for (unsigned int i = 0; i < N; i++) {
- *         printf("in: %4d  out: %6d\n", input[i], output[i]);
- *     }
- *
- *     volk_free(input);
- *     volk_free(output);
- *     return 0;
- * }
+ * volk_free(input);
+ * volk_free(output);
  * \endcode
  */
 

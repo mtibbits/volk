@@ -13,7 +13,14 @@
  *
  * \b Overview
  *
- * Computes arctan of input vector and stores results in output vector.
+ * Computes the arctangent of each element in the input vector and stores the
+ * results in the output vector. For each sample x, the output is
+ * out = atan(x), with values in radians ranging from -pi/2 to pi/2.
+ *
+ * The arctangent is commonly used in signal processing for phase extraction,
+ * FM discrimination, and angle-of-arrival estimation. In an FM demodulator,
+ * for example, the arctangent converts an instantaneous frequency ratio into
+ * a phase angle for subsequent differentiation.
  *
  * <b>Dispatcher Prototype</b>
  * \code
@@ -21,37 +28,34 @@
  * \endcode
  *
  * \b Inputs
- * \li in: The input vector of floats.
- * \li num_points: The number of data points.
+ * \li in: The input vector of floats (float).
+ * \li num_points: The number of samples to process.
  *
  * \b Outputs
- * \li out: The vector where results will be stored.
+ * \li out: The output vector of arctangent values in radians (float).
  *
  * \b Example
- * Calculate common angles around the top half of the unit circle.
+ * Compute arctangent of 1.0 (should be pi/4).
  * \code
- *   int N = 10;
- *   unsigned int alignment = volk_get_alignment();
- *   float* in = (float*)volk_malloc(sizeof(float)*N, alignment);
- *   float* out = (float*)volk_malloc(sizeof(float)*N, alignment);
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
+ * float* in = (float*)volk_malloc(sizeof(float) * N, alignment);
+ * float* out = (float*)volk_malloc(sizeof(float) * N, alignment);
  *
- *   in[0] = 0.f;
- *   in[1] = 1.f/std::sqrt(3.f);
- *   in[2] = 1.f;
- *   in[3] = std::sqrt(3.f);
- *   in[4] = in[5] = 1e99;
- *   for(unsigned int ii = 6; ii < N; ++ii){
- *       in[ii] = - in[N-ii-1];
- *   }
+ * for (unsigned int i = 0; i < N; ++i) {
+ *     in[i] = 1.0f;
+ * }
  *
- *   volk_32f_atan_32f(out, in, N);
+ * // atan(1.0) = pi/4 ~ 0.7854
+ * float expected = 0.7853982f;
  *
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       printf("atan(%1.3f) = %1.3f\n", in[ii], out[ii]);
- *   }
+ * volk_32f_atan_32f(out, in, N);
  *
- *   volk_free(in);
- *   volk_free(out);
+ * printf("Expected: %1.7f\n", expected);
+ * printf("Result:   %1.7f\n", out[0]);
+ *
+ * volk_free(in);
+ * volk_free(out);
  * \endcode
  */
 #ifndef INCLUDED_volk_32f_atan_32f_u_H

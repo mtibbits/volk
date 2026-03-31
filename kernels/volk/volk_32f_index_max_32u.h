@@ -12,8 +12,13 @@
  *
  * \b Overview
  *
- * Returns Argmax_i x[i]. Finds and returns the index which contains the first maximum
- * value in the given vector.
+ * Computes Argmax_i x[i]. Finds and returns the index of the first maximum
+ * value in the given vector of floats.
+ *
+ * This kernel is commonly used in signal processing for peak detection, such as
+ * identifying the strongest frequency bin after an FFT for spectral analysis, or
+ * finding the best correlation lag in synchronization and timing recovery. It can
+ * also serve in maximum-likelihood decision stages of a demodulator.
  *
  * <b>Dispatcher Prototype</b>
  * \code
@@ -21,31 +26,36 @@
  * \endcode
  *
  * \b Inputs
- * \li src0: The input vector of floats.
- * \li num_points: The number of data points.
+ * \li src0: The input vector of samples (float).
+ * \li num_points: The number of samples in the input vector.
  *
  * \b Outputs
- * \li target: The index of the first maximum value in the input buffer.
+ * \li target: The index of the first maximum value in the input vector (uint32_t).
  *
  * \b Example
+ * Find the index of the maximum in a short vector.
  * \code
- *   int N = 10;
- *   uint32_t alignment = volk_get_alignment();
- *   float* in = (float*)volk_malloc(sizeof(float)*N, alignment);
- *   uint32_t* out = (uint32_t*)volk_malloc(sizeof(uint32_t), alignment);
+ * unsigned int N = 5;
+ * unsigned int alignment = volk_get_alignment();
+ * float* in = (float*)volk_malloc(sizeof(float) * N, alignment);
+ * uint32_t* out = (uint32_t*)volk_malloc(sizeof(uint32_t), alignment);
  *
- *   for(uint32_t ii = 0; ii < N; ++ii){
- *       float x = (float)ii;
- *       // a parabola with a maximum at x=4
- *       in[ii] = -(x-4) * (x-4) + 5;
- *   }
+ * in[0] = 1.0f;
+ * in[1] = 3.0f;
+ * in[2] = 5.0f;
+ * in[3] = 4.0f;
+ * in[4] = 2.0f;
  *
- *   volk_32f_index_max_32u(out, in, N);
+ * // Expected: max value is 5.0 at index 2
+ * uint32_t expected_index = 2;
  *
- *   printf("maximum is %1.2f at index %u\n", in[*out], *out);
+ * volk_32f_index_max_32u(out, in, N);
  *
- *   volk_free(in);
- *   volk_free(out);
+ * printf("Expected: index %u\n", expected_index);
+ * printf("Result:   index %u\n", *out);
+ *
+ * volk_free(in);
+ * volk_free(out);
  * \endcode
  */
 
