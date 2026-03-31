@@ -16,7 +16,15 @@
  *
  * \b Overview
  *
- * <FIXME>
+ * Computes the maximum value in a vector of 16-bit signed integers using the
+ * max* (max-star) operation and stores the result in the output. The kernel
+ * iterates through the input samples, keeping a running maximum via
+ * element-wise comparison.
+ *
+ * The max* operation appears in log-domain decoding algorithms such as
+ * log-MAP and SOVA used in turbo and convolutional decoders, where branch
+ * metrics represented as fixed-point values must be reduced to a single
+ * maximum.
  *
  * <b>Dispatcher Prototype</b>
  * \code
@@ -24,20 +32,33 @@
  * \endcode
  *
  * \b Inputs
- * \li src0: The input vector.
- * \li num_points: The number of complex data points.
+ * \li src0: The input vector of samples (short).
+ * \li num_points: The number of data points in the input vector.
  *
  * \b Outputs
- * \li target: The output value of the max* operation.
+ * \li target: The maximum value found in the input vector (short).
  *
  * \b Example
+ * Find the maximum value in a small vector of known values.
  * \code
- * int N = 10000;
+ * unsigned int N = 6;
+ * unsigned int alignment = volk_get_alignment();
  *
- * volk_16i_max_star_16i();
+ * short* src0 = (short*)volk_malloc(sizeof(short) * N, alignment);
+ * short* target = (short*)volk_malloc(sizeof(short), alignment);
  *
- * volk_free(x);
- * volk_free(t);
+ * src0[0] = 3; src0[1] = -2; src0[2] = 7;
+ * src0[3] = 1; src0[4] = 7; src0[5] = -5;
+ *
+ * short expected = 7;
+ *
+ * volk_16i_max_star_16i(target, src0, N);
+ *
+ * printf("Expected: %d\n", expected);
+ * printf("Result:   %d\n", target[0]);
+ *
+ * volk_free(src0);
+ * volk_free(target);
  * \endcode
  */
 

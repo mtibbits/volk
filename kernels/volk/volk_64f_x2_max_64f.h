@@ -12,46 +12,54 @@
  *
  * \b Overview
  *
- * Selects maximum value from each entry between bVector and aVector
- * and store their results in the cVector.
+ * Computes the element-wise maximum of two double-precision vectors:
  *
  * c[i] = max(a[i], b[i])
+ *
+ * In signal processing, element-wise maximum operations are used for envelope
+ * detection, spectral peak tracking, combining diversity receiver paths, and
+ * implementing clipping or limiting stages in AGC loops.
  *
  * <b>Dispatcher Prototype</b>
  * \code
  * void volk_64f_x2_max_64f(double* cVector, const double* aVector, const double* bVector,
- * unsigned int num_points) \endcode
+ * unsigned int num_points)
+ * \endcode
  *
  * \b Inputs
- * \li aVector: First input vector.
- * \li bVector: Second input vector.
+ * \li aVector: First input vector (double).
+ * \li bVector: Second input vector (double).
  * \li num_points: The number of values in both input vectors.
  *
  * \b Outputs
- * \li cVector: The output vector.
+ * \li cVector: The output vector (double).
  *
  * \b Example
+ * Maximum of a constant vector (3.0) and a counting vector (0, 1, 2, 3, 4).
  * \code
- *   int N = 10;
- *   unsigned int alignment = volk_get_alignment();
- *   double* increasing = (double*)volk_malloc(sizeof(double)*N, alignment);
- *   double* decreasing = (double*)volk_malloc(sizeof(double)*N, alignment);
- *   double* out = (double*)volk_malloc(sizeof(double)*N, alignment);
+ * unsigned int N = 5;
+ * unsigned int alignment = volk_get_alignment();
+ * double* aVector = (double*)volk_malloc(sizeof(double) * N, alignment);
+ * double* bVector = (double*)volk_malloc(sizeof(double) * N, alignment);
+ * double* out = (double*)volk_malloc(sizeof(double) * N, alignment);
  *
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       increasing[ii] = (double)ii;
- *       decreasing[ii] = 10.f - (double)ii;
- *   }
+ * for (unsigned int i = 0; i < N; ++i) {
+ *     aVector[i] = 3.0;
+ *     bVector[i] = (double)i;
+ * }
  *
- *   volk_64f_x2_max_64f(out, increasing, decreasing, N);
+ * // Expected: max(3,0)=3, max(3,1)=3, max(3,2)=3, max(3,3)=3, max(3,4)=4
  *
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       printf("out[%u] = %1.2g\n", ii, out[ii]);
- *   }
+ * volk_64f_x2_max_64f(out, aVector, bVector, N);
  *
- *   volk_free(increasing);
- *   volk_free(decreasing);
- *   volk_free(out);
+ * for (unsigned int i = 0; i < N; ++i) {
+ *     double expected = (aVector[i] > bVector[i]) ? aVector[i] : bVector[i];
+ *     printf("Expected: %1.2g  Result: %1.2g\n", expected, out[i]);
+ * }
+ *
+ * volk_free(aVector);
+ * volk_free(bVector);
+ * volk_free(out);
  * \endcode
  */
 

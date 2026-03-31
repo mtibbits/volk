@@ -12,7 +12,13 @@
  *
  * \b Overview
  *
- * Clamps the values to an upper and a lower bound.
+ * Clamps each input sample to lie within the range [min, max]. Values below
+ * min are set to min, values above max are set to max, and values within range
+ * are passed through unchanged: out[i] = clamp(in[i], min, max).
+ *
+ * Clamping is a common operation in signal processing for amplitude limiting,
+ * AGC (automatic gain control) output bounding, and constraining sample values
+ * to a valid DAC output range before digital-to-analog conversion.
  *
  * <b>Dispatcher Prototype</b>
  * \code
@@ -20,24 +26,39 @@
  *              const float* in,
  *              const float min,
  *              const float max,
- *              unsigned int num_points) \endcode
+ *              unsigned int num_points)
+ * \endcode
  *
  * \b Inputs
- * \li in: Pointer to float values.
- * \li min: Minimum value to clamp to. \li max: Maximum value to clamp to. \li
- * num_points: The number of points in the vector.
+ * \li in: Pointer to input signal samples (float).
+ * \li min: Minimum bound to clamp to (float).
+ * \li max: Maximum bound to clamp to (float).
+ * \li num_points: The number of float samples to process.
  *
  * \b Outputs
- * \li out: Pointer to output values.
+ * \li out: Pointer to clamped output samples (float).
  *
  * \b Example
+ * Clamp four samples to the range [-1.5, 1.5] and verify the result.
  * \code
- * float x[4] = {-2.f, -1.f, 1.f, 2.f};
- * float y[4];
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
  *
- * volk_32f_s32f_x2_clamp_32f(y, x, -1.5f, 1.5f, 4);
- * // Expect y = {-1.5f, -1.f, 1.f, 1.5f}
+ * float* in = (float*)volk_malloc(sizeof(float) * N, alignment);
+ * float* out = (float*)volk_malloc(sizeof(float) * N, alignment);
  *
+ * in[0] = -2.0f; in[1] = -1.0f; in[2] = 1.0f; in[3] = 2.0f;
+ *
+ * // Expected: {-1.5, -1.0, 1.0, 1.5}
+ * // -2.0 < -1.5 => clamped to -1.5; -1.0 in range; 1.0 in range; 2.0 > 1.5 => clamped to 1.5
+ *
+ * volk_32f_s32f_x2_clamp_32f(out, in, -1.5f, 1.5f, N);
+ *
+ * printf("Expected: -1.5, -1.0, 1.0, 1.5\n");
+ * printf("Result:   %.1f, %.1f, %.1f, %.1f\n", out[0], out[1], out[2], out[3]);
+ *
+ * volk_free(in);
+ * volk_free(out);
  * \endcode
  */
 

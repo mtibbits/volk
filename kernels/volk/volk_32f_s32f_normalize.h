@@ -12,45 +12,50 @@
  *
  * \b Overview
  *
- * Normalizes all points in the buffer by the scalar value (divides
- * each data point by the scalar value).
+ * Normalizes all samples in the buffer by dividing each value by a scalar:
+ * <tt>vecBuffer[i] = vecBuffer[i] / scalar</tt>. The operation is performed
+ * in-place.
+ *
+ * Scalar normalization is a fundamental operation in signal processing,
+ * commonly used for gain adjustment, power normalization, or scaling sample
+ * amplitudes to a reference level before downstream processing such as
+ * quantization or fixed-point conversion.
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_32f_s32f_normalize(float* vecBuffer, const float scalar, unsigned int
- * num_points) \endcode
+ * void volk_32f_s32f_normalize(float* vecBuffer, const float scalar, unsigned int num_points)
+ * \endcode
  *
  * \b Inputs
- * \li vecBuffer: The buffer of values to be vectorized.
- * \li scalar: The scale value to be applied to each buffer value.
- * \li num_points: The number of data points.
+ * \li vecBuffer: The buffer of signal samples to normalize (float).
+ * \li scalar: The normalization factor to divide each sample by (float).
+ * \li num_points: The number of float samples in the buffer.
  *
  * \b Outputs
- * \li vecBuffer: returns as an in-place calculation.
+ * \li vecBuffer: The normalized samples, computed in-place (float).
  *
  * \b Example
+ * Divide four constant values by a scalar and verify the result.
  * \code
- *   int N = 10;
- *   unsigned int alignment = volk_get_alignment();
- *   float* increasing = (float*)volk_malloc(sizeof(float)*N, alignment);
- *   float* out = (float*)volk_malloc(sizeof(float)*N, alignment);
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
+ * float* buf = (float*)volk_malloc(sizeof(float) * N, alignment);
  *
+ * for (unsigned int i = 0; i < N; ++i) {
+ *     buf[i] = 10.0f;
+ * }
  *
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       increasing[ii] = 2.f * ((float)ii / (float)N) - 1.f;
- *   }
+ * float scalar = 2.0f;
  *
- *   // Normalize by the smallest delta (0.2 in this example)
- *   float scale = 5.0f;
+ * // Expected: 10.0 / 2.0 = 5.0 for each element
+ * float expected = 5.0f;
  *
- *   volk_32f_s32f_normalize(increasing, scale, N);
+ * volk_32f_s32f_normalize(buf, scalar, N);
  *
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       printf("increasing[%u] = %f\n", ii, increasing[ii]);
- *   }
+ * printf("Expected: %f\n", expected);
+ * printf("Result:   %f\n", buf[0]);
  *
- *   volk_free(increasing);
- *   volk_free(out);
+ * volk_free(buf);
  * \endcode
  */
 

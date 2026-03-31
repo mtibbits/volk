@@ -12,46 +12,53 @@
  *
  * \b Overview
  *
- * Selects maximum value from each entry between bVector and aVector
- * and store their results in the cVector.
+ * Computes the element-wise maximum of two floating-point vectors:
+ * c[i] = max(a[i], b[i]).
  *
- * c[i] = max(a[i], b[i])
+ * In signal processing, element-wise maximum is used for operations such as
+ * selection combining in diversity receivers, peak-hold envelope detection,
+ * noise floor thresholding, and clipping signals to a sample-by-sample
+ * reference level in AGC or limiter stages.
  *
  * <b>Dispatcher Prototype</b>
  * \code
  * void volk_32f_x2_max_32f(float* cVector, const float* aVector, const float* bVector,
- * unsigned int num_points) \endcode
+ * unsigned int num_points)
+ * \endcode
  *
  * \b Inputs
- * \li aVector: First input vector.
- * \li bVector: Second input vector.
- * \li num_points: The number of values in both input vectors.
+ * \li aVector: First input vector of samples (float).
+ * \li bVector: Second input vector of samples (float).
+ * \li num_points: The number of samples in each input vector.
  *
  * \b Outputs
- * \li cVector: The output vector.
+ * \li cVector: The output vector containing the element-wise maxima (float).
  *
  * \b Example
+ * Compare two constant vectors and verify the element-wise maximum.
  * \code
- *   int N = 10;
- *   unsigned int alignment = volk_get_alignment();
- *   float* increasing = (float*)volk_malloc(sizeof(float)*N, alignment);
- *   float* decreasing = (float*)volk_malloc(sizeof(float)*N, alignment);
- *   float* out = (float*)volk_malloc(sizeof(float)*N, alignment);
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
+ * float* aVector = (float*)volk_malloc(sizeof(float) * N, alignment);
+ * float* bVector = (float*)volk_malloc(sizeof(float) * N, alignment);
+ * float* cVector = (float*)volk_malloc(sizeof(float) * N, alignment);
  *
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       increasing[ii] = (float)ii;
- *       decreasing[ii] = 10.f - (float)ii;
- *   }
+ * for (unsigned int i = 0; i < N; ++i) {
+ *     aVector[i] = 3.0f;
+ *     bVector[i] = 5.0f;
+ * }
  *
- *   volk_32f_x2_max_32f(out, increasing, decreasing, N);
+ * // Expected: max(3.0, 5.0) = 5.0 for every element
+ * float expected = 5.0f;
  *
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       printf("out[%u] = %1.2f\n", ii, out[ii]);
- *   }
+ * volk_32f_x2_max_32f(cVector, aVector, bVector, N);
  *
- *   volk_free(increasing);
- *   volk_free(decreasing);
- *   volk_free(out);
+ * printf("Expected: %1.2f\n", expected);
+ * printf("Result:   %1.2f\n", cVector[0]);
+ *
+ * volk_free(aVector);
+ * volk_free(bVector);
+ * volk_free(cVector);
  * \endcode
  */
 

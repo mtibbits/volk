@@ -12,40 +12,51 @@
  *
  * \b Overview
  *
- * Adds two uint16_t vectors element-wise with saturation. Results are clamped
- * to the range [0, 65535] to prevent overflow wraparound.
+ * Adds two unsigned 16-bit integer vectors element-wise with saturation,
+ * clamping results to the range [0, 65535] to prevent overflow wraparound.
+ * Mathematically, out[i] = min(a[i] + b[i], 65535).
+ *
+ * Saturated addition is essential in DSP pipelines where signal magnitudes or
+ * power estimates are combined and overflow would introduce severe artifacts.
+ * Common applications include audio sample mixing, image pixel accumulation,
+ * and AGC loops where unsigned signal levels must remain bounded.
  *
  * <b>Dispatcher Prototype</b>
  * \code
  * void volk_16u_x2_add_saturated_16u(uint16_t* outVector, const uint16_t* inVectorA,
- * const uint16_t* inVectorB, unsigned int num_points) \endcode
+ * const uint16_t* inVectorB, unsigned int num_points)
+ * \endcode
  *
  * \b Inputs
- * \li inVectorA: First input vector.
- * \li inVectorB: Second input vector.
- * \li num_points: Vector length.
+ * \li inVectorA: First input vector (uint16_t).
+ * \li inVectorB: Second input vector (uint16_t).
+ * \li num_points: The number of elements to process.
  *
  * \b Outputs
- * \li outVector: Saturated sum output.
+ * \li outVector: Saturated sum output (uint16_t).
  *
  * \b Example
+ * Add two vectors demonstrating both saturation and non-saturation cases.
  * \code
- *   unsigned int N = 8;
- *   unsigned int align = volk_get_alignment();
- *   uint16_t* a = (uint16_t*)volk_malloc(N * sizeof(uint16_t), align);
- *   uint16_t* b = (uint16_t*)volk_malloc(N * sizeof(uint16_t), align);
- *   uint16_t* result = (uint16_t*)volk_malloc(N * sizeof(uint16_t), align);
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
+ * uint16_t* a = (uint16_t*)volk_malloc(sizeof(uint16_t) * N, alignment);
+ * uint16_t* b = (uint16_t*)volk_malloc(sizeof(uint16_t) * N, alignment);
+ * uint16_t* result = (uint16_t*)volk_malloc(sizeof(uint16_t) * N, alignment);
  *
- *   // Values that will cause saturation
- *   a[0] = 60000; b[0] = 10000; // 70000 -> saturates to 65535
- *   a[1] = 1000;  b[1] = 2000;  // 3000 -> no saturation
+ * a[0] = 60000; b[0] = 10000; // 70000 -> saturates to 65535
+ * a[1] = 1000;  b[1] = 2000;  // 3000 -> no saturation
+ * a[2] = 65535; b[2] = 1;     // 65536 -> saturates to 65535
+ * a[3] = 100;   b[3] = 200;   // 300 -> no saturation
  *
- *   volk_16u_x2_add_saturated_16u(result, a, b, N);
- *   // result[0] == 65535, result[1] == 3000
+ * volk_16u_x2_add_saturated_16u(result, a, b, N);
  *
- *   volk_free(a);
- *   volk_free(b);
- *   volk_free(result);
+ * printf("Expected: 65535, 3000, 65535, 300\n");
+ * printf("Result:   %u, %u, %u, %u\n", result[0], result[1], result[2], result[3]);
+ *
+ * volk_free(a);
+ * volk_free(b);
+ * volk_free(result);
  * \endcode
  */
 

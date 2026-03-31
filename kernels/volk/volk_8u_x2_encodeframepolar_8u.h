@@ -7,8 +7,63 @@
  * SPDX-License-Identifier: LGPL-3.0-or-later
  */
 
-/*
- * for documentation see 'volk_8u_x3_encodepolar_8u_x2.h'
+/*!
+ * \page volk_8u_x2_encodeframepolar_8u
+ *
+ * \b Overview
+ *
+ * Performs in-place polar encoding of a binary frame using the Arikan butterfly
+ * transform. The frame size must be a power of two. The kernel applies
+ * log2(frame_size) stages of XOR butterfly operations, producing the polar-encoded
+ * codeword in the frame buffer. A scratch buffer (temp) of the same size is
+ * required and must be initialized with a copy of the frame data before calling.
+ *
+ * Polar codes are capacity-achieving channel codes used in modern communications
+ * standards such as 5G NR, where they encode control channel information. This
+ * kernel implements the core encoding transform that maps an information word
+ * (with frozen bit positions already set) into a polar codeword ready for
+ * transmission.
+ *
+ * <b>Dispatcher Prototype</b>
+ * \code
+ * void volk_8u_x2_encodeframepolar_8u(unsigned char* frame, unsigned char* temp, unsigned int frame_size)
+ * \endcode
+ *
+ * \b Inputs
+ * \li frame: The binary frame to encode, one bit per byte (unsigned char).
+ * \li temp: Scratch buffer initialized with a copy of frame (unsigned char). Must be the same size as frame.
+ * \li frame_size: The number of bytes in the frame. Must be a power of two.
+ *
+ * \b Outputs
+ * \li frame: The polar-encoded codeword, one bit per byte (unsigned char).
+ *
+ * \b Example
+ * Encode a 4-element binary frame and verify the result by tracing the butterfly stages.
+ * \code
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
+ *
+ * unsigned char* frame = (unsigned char*)volk_malloc(sizeof(unsigned char) * N, alignment);
+ * unsigned char* temp = (unsigned char*)volk_malloc(sizeof(unsigned char) * N, alignment);
+ *
+ * // Input: all ones
+ * frame[0] = 1; frame[1] = 1; frame[2] = 1; frame[3] = 1;
+ * // temp must be a copy of frame
+ * memcpy(temp, frame, N);
+ *
+ * // Expected result by hand (two butterfly stages):
+ * // Stage 1 (pairs of 2): (1^1,1), (1^1,1) -> {0,0,1,1}
+ * // Stage 2 (pairs of 1): (0^0,0), (1^1,1) -> {0,0,0,1}
+ * unsigned char expected[] = {0, 0, 0, 1};
+ *
+ * volk_8u_x2_encodeframepolar_8u(frame, temp, N);
+ *
+ * printf("Expected: %d %d %d %d\n", expected[0], expected[1], expected[2], expected[3]);
+ * printf("Result:   %d %d %d %d\n", frame[0], frame[1], frame[2], frame[3]);
+ *
+ * volk_free(frame);
+ * volk_free(temp);
+ * \endcode
  */
 
 #ifndef VOLK_KERNELS_VOLK_VOLK_8U_X2_ENCODEFRAMEPOLAR_8U_U_H_

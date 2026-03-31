@@ -12,8 +12,15 @@
  *
  * \b Overview
  *
- * Convert the input vector of 8-bit chars to a vector of 16-bit
- * shorts.
+ * Convert 8-bit signed integer samples to 16-bit signed integers with scaling.
+ * Each input value is multiplied by 256 (left-shifted by 8 bits), mapping the
+ * full 8-bit range into the upper byte of the 16-bit output:
+ * out[i] = (int16_t)in[i] * 256.
+ *
+ * This kernel is commonly used in SDR receive pipelines where digitized samples
+ * arrive as 8-bit I/Q values (e.g. from an RTL-SDR or similar front-end) and
+ * must be promoted to 16-bit precision for downstream processing such as
+ * filtering, mixing, or demodulation while preserving the full dynamic range.
  *
  * <b>Dispatcher Prototype</b>
  * \code
@@ -21,19 +28,34 @@
  * num_points) \endcode
  *
  * \b Inputs
- * \li inputVector: The input vector of 8-bit chars.
- * \li num_points: The number of values.
+ * \li inputVector: The input vector of 8-bit signed integer samples (int8_t).
+ * \li num_points: The number of samples to convert.
  *
  * \b Outputs
- * \li outputVector: The output 16-bit shorts.
+ * \li outputVector: The output vector of scaled 16-bit signed integers (int16_t).
  *
  * \b Example
+ * Convert a small array of 8-bit values and verify the scaling.
  * \code
- * int N = 10000;
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
  *
- * volk_8i_convert_16i();
+ * int8_t* input = (int8_t*)volk_malloc(sizeof(int8_t) * N, alignment);
+ * int16_t* output = (int16_t*)volk_malloc(sizeof(int16_t) * N, alignment);
  *
- * volk_free(x);
+ * input[0] = 1;
+ * input[1] = -1;
+ * input[2] = 127;
+ * input[3] = -128;
+ *
+ * volk_8i_convert_16i(output, input, N);
+ *
+ * // Expected: each value * 256 -> 256, -256, 32512, -32768
+ * printf("Expected: 256, -256, 32512, -32768\n");
+ * printf("Result:   %d, %d, %d, %d\n", output[0], output[1], output[2], output[3]);
+ *
+ * volk_free(input);
+ * volk_free(output);
  * \endcode
  */
 

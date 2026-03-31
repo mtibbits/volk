@@ -12,28 +12,50 @@
  *
  * \b Overview
  *
- * Deinterleaves the complex 8-bit char vector into just the I (real)
- * vector.
+ * Deinterleaves a complex 8-bit integer vector into just the real (I)
+ * component. For each complex sample (I + jQ), the kernel extracts the
+ * in-phase value and discards the quadrature value.
+ *
+ * This operation is common in receivers where only the real part of a
+ * baseband signal is needed, such as after demodulation of real-valued
+ * modulation schemes (e.g. BPSK, ASK) or when separating I/Q streams
+ * for independent processing in digital downconverters.
  *
  * <b>Dispatcher Prototype</b>
  * \code
  * void volk_8ic_deinterleave_real_8i(int8_t* iBuffer, const lv_8sc_t* complexVector,
- * unsigned int num_points) \endcode
+ * unsigned int num_points)
+ * \endcode
  *
  * \b Inputs
- * \li complexVector: The complex input vector.
- * \li num_points: The number of complex data values to be deinterleaved.
+ * \li complexVector: The complex input vector (lv_8sc_t).
+ * \li num_points: The number of complex samples to be deinterleaved.
  *
  * \b Outputs
- * \li iBuffer: The I buffer output data.
+ * \li iBuffer: The real (I) component output vector (int8_t).
  *
  * \b Example
+ * Generate a small complex vector and extract just the real (I) components.
  * \code
- * int N = 10000;
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
  *
- * volk_8ic_deinterleave_real_8i();
+ * lv_8sc_t* complexVector = (lv_8sc_t*)volk_malloc(sizeof(lv_8sc_t) * N, alignment);
+ * int8_t* iBuffer = (int8_t*)volk_malloc(sizeof(int8_t) * N, alignment);
  *
- * volk_free(x);
+ * // Initialize: (1,2), (3,4), (5,6), (7,8)
+ * for (unsigned int i = 0; i < N; ++i) {
+ *   complexVector[i] = lv_cmake((int8_t)(2 * i + 1), (int8_t)(2 * i + 2));
+ * }
+ *
+ * volk_8ic_deinterleave_real_8i(iBuffer, complexVector, N);
+ *
+ * // Expected: iBuffer = {1, 3, 5, 7}
+ * printf("Expected: 1, 3, 5, 7\n");
+ * printf("Result:   %d, %d, %d, %d\n", iBuffer[0], iBuffer[1], iBuffer[2], iBuffer[3]);
+ *
+ * volk_free(complexVector);
+ * volk_free(iBuffer);
  * \endcode
  */
 

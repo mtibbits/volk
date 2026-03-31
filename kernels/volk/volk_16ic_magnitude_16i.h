@@ -12,29 +12,52 @@
  *
  * \b Overview
  *
- * Computes the magnitude of the complexVector and stores the results
- * in the magnitudeVector.
+ * Computes the magnitude of each complex sample in the input vector:
+ * magnitude = sqrt(I^2 + Q^2), where I and Q are the real and imaginary
+ * components of each 16-bit complex value. Internally the samples are
+ * normalized to floating-point, the magnitude is computed, and the result
+ * is scaled back to the 16-bit integer range.
+ *
+ * This kernel is commonly used in envelope detection, received signal
+ * strength indication (RSSI), and AGC loops where the instantaneous
+ * magnitude of a complex baseband signal is needed in fixed-point
+ * pipelines.
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_16ic_magnitude_16i(int16_t* magnitudeVector, const lv_16sc_t* complexVector,
- * unsigned int num_points) \endcode
+ * void volk_16ic_magnitude_16i(int16_t* magnitudeVector, const lv_16sc_t* complexVector, unsigned int num_points)
+ * \endcode
  *
  * \b Inputs
- * \li complexVector: The complex input vector.
- * \li num_points: The number of samples.
+ * \li complexVector: The complex input samples (lv_16sc_t).
+ * \li num_points: The number of complex samples to process.
  *
  * \b Outputs
- * \li magnitudeVector: The magnitude of the complex values.
+ * \li magnitudeVector: The per-sample magnitude values (int16_t).
  *
  * \b Example
+ * Compute the magnitude of complex samples using a 3000+4000j Pythagorean triple.
  * \code
- * int N = 10000;
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
  *
- * volk_16ic_magnitude_16i();
+ * lv_16sc_t* complexVector = (lv_16sc_t*)volk_malloc(sizeof(lv_16sc_t) * N, alignment);
+ * int16_t* magnitudeVector = (int16_t*)volk_malloc(sizeof(int16_t) * N, alignment);
  *
- * volk_free(x);
- * volk_free(t);
+ * for (unsigned int i = 0; i < N; ++i) {
+ *     complexVector[i] = lv_cmake((int16_t)3000, (int16_t)4000);
+ * }
+ *
+ * // Expected: sqrt(3000^2 + 4000^2) = sqrt(25000000) = 5000
+ * int16_t expected = 5000;
+ *
+ * volk_16ic_magnitude_16i(magnitudeVector, complexVector, N);
+ *
+ * printf("Expected: %d\n", expected);
+ * printf("Result:   %d\n", magnitudeVector[0]);
+ *
+ * volk_free(magnitudeVector);
+ * volk_free(complexVector);
  * \endcode
  */
 

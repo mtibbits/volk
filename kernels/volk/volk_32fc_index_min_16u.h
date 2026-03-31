@@ -12,51 +12,52 @@
  *
  * \b Overview
  *
- * Returns Argmin_i mag(x[i]). Finds and returns the index which contains the
- * minimum magnitude for complex points in the given vector.
+ * Returns Argmin_i mag(x[i]). Finds and returns the index of the complex
+ * sample with the minimum squared magnitude (re*re + im*im) in the input
+ * vector.
  *
- * Note that num_points is a uint32_t, but the return value is
- * uint16_t. Providing a vector larger than the max of a uint16_t
- * (65536) would miss anything outside of this boundary. The kernel
- * will check the length of num_points and cap it to this max value,
- * anyways.
+ * This kernel is useful in signal processing tasks that require identifying
+ * the weakest signal component, such as finding nulls in a spectral search,
+ * locating minimum-energy bins after an FFT, or selecting the closest
+ * constellation point in a demodulator.
+ *
+ * Note that num_points is a uint32_t, but the return value is uint16_t.
+ * The kernel caps num_points to 65535 (USHRT_MAX), so elements beyond that
+ * boundary are not examined.
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_32fc_index_min_16u(uint16_t* target, const lv_32fc_t* source, uint32_t
- * num_points) \endcode
+ * void volk_32fc_index_min_16u(uint16_t* target, const lv_32fc_t* source, uint32_t num_points)
+ * \endcode
  *
  * \b Inputs
- * \li source: The complex input vector.
- * \li num_points: The number of samples.
+ * \li source: The complex input vector (lv_32fc_t).
+ * \li num_points: The number of complex samples.
  *
  * \b Outputs
- * \li target: The index of the point with minimum magnitude.
+ * \li target: The index of the sample with minimum magnitude (uint16_t).
  *
  * \b Example
- * Calculate the index of the minimum value of \f$x^2 + x\f$ for points around
- * the unit circle.
+ * Find the index of the smallest-magnitude sample in a short vector.
  * \code
- *   int N = 10;
- *   uint32_t alignment = volk_get_alignment();
- *   lv_32fc_t* in  = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t)*N, alignment);
- *   uint16_t* min = (uint16_t*)volk_malloc(sizeof(uint16_t), alignment);
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
+ * lv_32fc_t* in = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t) * N, alignment);
+ * uint16_t* target = (uint16_t*)volk_malloc(sizeof(uint16_t), alignment);
  *
- *   for(uint32_t ii = 0; ii < N/2; ++ii){
- *       float real = 2.f * ((float)ii / (float)N) - 1.f;
- *       float imag = std::sqrt(1.f - real * real);
- *       in[ii] = lv_cmake(real, imag);
- *       in[ii] = in[ii] * in[ii] + in[ii];
- *       in[N-ii] = lv_cmake(real, imag);
- *       in[N-ii] = in[N-ii] * in[N-ii] + in[N-ii];
- *   }
+ * in[0] = lv_cmake(3.0f, 4.0f);  // mag^2 = 25
+ * in[1] = lv_cmake(1.0f, 0.0f);  // mag^2 = 1  <-- min
+ * in[2] = lv_cmake(2.0f, 2.0f);  // mag^2 = 8
+ * in[3] = lv_cmake(5.0f, 0.0f);  // mag^2 = 25
  *
- *   volk_32fc_index_min_16u(min, in, N);
+ * volk_32fc_index_min_16u(target, in, N);
  *
- *   printf("index of min value = %u\n",  *min);
+ * // in[1] = (1,0) has the smallest squared magnitude (1), so expected index is 1.
+ * printf("Expected: %u\n", 1);
+ * printf("Result:   %u\n", *target);
  *
- *   volk_free(in);
- *   volk_free(min);
+ * volk_free(in);
+ * volk_free(target);
  * \endcode
  */
 

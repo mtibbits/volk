@@ -13,29 +13,52 @@
  * \b Overview
  *
  * Deinterleaves the complex 8-bit char vector into just the real (I)
- * vector, converts the samples to floats, and divides the results by
- * the scalar factor.
+ * component, converts the samples to 32-bit floats, and divides the
+ * results by the scalar factor: iBuffer[i] = real(complexVector[i]) / scalar.
+ *
+ * This kernel is useful in receiver front-ends where an ADC produces
+ * interleaved 8-bit I/Q samples and only the in-phase (I) channel is
+ * needed for further processing such as AM demodulation or power
+ * estimation. The scalar division provides convenient gain normalization
+ * in one step.
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_8ic_s32f_deinterleave_real_32f(float* iBuffer, const lv_8sc_t* complexVector,
- * const float scalar, unsigned int num_points) \endcode
+ * void volk_8ic_s32f_deinterleave_real_32f(float* iBuffer, const lv_8sc_t*
+ * complexVector, const float scalar, unsigned int num_points) \endcode
  *
  * \b Inputs
- * \li complexVector: The complex input vector.
- * \li scalar: The scalar value used to divide the floating point results.
- * \li num_points: The number of complex data values to be deinterleaved.
+ * \li complexVector: The complex input vector of interleaved I/Q samples (lv_8sc_t).
+ * \li scalar: The scalar divisor applied to each real sample (float).
+ * \li num_points: The number of complex samples to be deinterleaved.
  *
  * \b Outputs
- * \li iBuffer: The I buffer output data.
+ * \li iBuffer: The deinterleaved and scaled real (I) output samples (float).
  *
  * \b Example
+ * Deinterleave and scale 4 complex 8-bit samples, then verify the first output.
  * \code
- * int N = 10000;
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
+ * float scalar = 2.0f;
  *
- * volk_8ic_s32f_deinterleave_real_32f();
+ * lv_8sc_t* complexVector = (lv_8sc_t*)volk_malloc(sizeof(lv_8sc_t) * N, alignment);
+ * float* iBuffer = (float*)volk_malloc(sizeof(float) * N, alignment);
  *
- * volk_free(x);
+ * for (unsigned int i = 0; i < N; ++i) {
+ *   complexVector[i] = lv_cmake((int8_t)(10 * (i + 1)), (int8_t)0);
+ * }
+ *
+ * // Expected: real parts divided by scalar: 10/2=5, 20/2=10, 30/2=15, 40/2=20
+ * float expected = 10.0f / scalar;
+ *
+ * volk_8ic_s32f_deinterleave_real_32f(iBuffer, complexVector, scalar, N);
+ *
+ * printf("Expected: %f\n", expected);
+ * printf("Result:   %f\n", iBuffer[0]);
+ *
+ * volk_free(complexVector);
+ * volk_free(iBuffer);
  * \endcode
  */
 

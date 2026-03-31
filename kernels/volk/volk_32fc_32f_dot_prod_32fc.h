@@ -12,38 +12,54 @@
  *
  * \b Overview
  *
- * This block computes the dot product (or inner product) between two
- * vectors, the \p input and \p taps vectors. Given a set of \p
- * num_points taps, the result is the sum of products between the two
- * vectors. The result is a single value stored in the \p result
- * address and will be complex.
+ * Computes the dot product (inner product) of a complex input vector and a
+ * real-valued tap vector: result = sum(input[i] * taps[i]). Each real tap
+ * scales both the real and imaginary parts of the corresponding complex sample.
+ *
+ * This kernel is commonly used in FIR filtering where the input samples are
+ * complex (e.g. baseband I/Q data) and the filter coefficients (taps) are
+ * real-valued. It also appears in matched filtering, correlation, and
+ * beamforming operations.
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_32fc_32f_dot_prod_32fc(lv_32fc_t* result, const lv_32fc_t* input, const float
- * * taps, unsigned int num_points) \endcode
+ * void volk_32fc_32f_dot_prod_32fc(lv_32fc_t* result, const lv_32fc_t* input,
+ *   const float* taps, unsigned int num_points)
+ * \endcode
  *
  * \b Inputs
- * \li input: vector of complex samples
- * \li taps:  floating point taps
- * \li num_points: number of samples in both \p input and \p taps
+ * \li input: The complex input samples (lv_32fc_t).
+ * \li taps: The real-valued filter taps (float).
+ * \li num_points: The number of samples in both \p input and \p taps.
  *
  * \b Outputs
- * \li result: pointer to a complex value to hold the dot product result.
+ * \li result: The complex dot product result (lv_32fc_t).
  *
  * \b Example
+ * Dot product of constant-valued vectors so the result equals N * input * tap.
  * \code
- * int N = 10000;
- * lv_32fc_t y;
- * lv_32fc_t *x = (lv_32fc_t*)volk_malloc(N*sizeof(lv_32fc_t), volk_get_alignment());
- * float *t = (float*)volk_malloc(N*sizeof(float), volk_get_alignment());
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
  *
- * <populate x and t with some values>
+ * lv_32fc_t* input = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t) * N, alignment);
+ * float* taps = (float*)volk_malloc(sizeof(float) * N, alignment);
+ * lv_32fc_t result;
  *
- * volk_32fc_dot_prod_32fc(&y, x, t, N);
+ * for (unsigned int i = 0; i < N; ++i) {
+ *   input[i] = lv_cmake(3.0f, -1.0f);
+ *   taps[i] = 2.0f;
+ * }
  *
- * volk_free(x);
- * volk_free(t);
+ * // Expected: 4 * (3.0 - 1.0j) * 2.0 = 24.0 - 8.0j
+ * lv_32fc_t expected = lv_cmake(24.0f, -8.0f);
+ *
+ * volk_32fc_32f_dot_prod_32fc(&result, input, taps, N);
+ *
+ * printf("Expected: %1.1f + %1.1fj\n", lv_creal(expected), lv_cimag(expected));
+ * printf("Result:   %1.1f + %1.1fj\n", lv_creal(result), lv_cimag(result));
+ *
+ * volk_free(input);
+ * volk_free(taps);
  * \endcode
  */
 
