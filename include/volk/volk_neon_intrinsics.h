@@ -437,6 +437,20 @@ static inline float32x4_t _vlog2_poly_f32(float32x4_t x)
 }
 
 #ifdef LV_HAVE_NEONV8
+/* FMA-based complex multiplication for NEONV8 */
+static inline float32x4x2_t _vmultiply_complexq_f32_neonv8(float32x4x2_t a_val,
+                                                             float32x4x2_t b_val)
+{
+    float32x4x2_t c_val;
+    /* real = a.re*b.re - a.im*b.im */
+    c_val.val[0] = vfmsq_f32(vmulq_f32(a_val.val[0], b_val.val[0]),
+                              a_val.val[1], b_val.val[1]);
+    /* imag = a.re*b.im + a.im*b.re */
+    c_val.val[1] = vfmaq_f32(vmulq_f32(a_val.val[0], b_val.val[1]),
+                              a_val.val[1], b_val.val[0]);
+    return c_val;
+}
+
 /* ARMv8 NEON FMA-based arctan polynomial for better accuracy and throughput */
 static inline float32x4_t _varctan_poly_neonv8(float32x4_t x)
 {
