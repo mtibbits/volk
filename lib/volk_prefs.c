@@ -20,6 +20,13 @@
 #endif
 #include <volk/volk_prefs.h>
 
+/* Prefer static const, but in C (non-MSVC builds) that is not a
+   compile-time constant, making char path[CONFIG_PATH_MAX] a VLA.
+   MSVC builds force this file to C++ (see lib/CMakeLists.txt), where
+   static const would work, but Linux/GCC compiles it as C.  Use enum
+   for a portable compile-time constant without resorting to #define. */
+enum { CONFIG_PATH_MAX = 1024 };
+
 void volk_get_config_path(char* path, bool read)
 {
     if (!path)
@@ -31,8 +38,7 @@ void volk_get_config_path(char* path, bool read)
     // allows config redirection via env variable
     home = getenv("VOLK_CONFIGPATH");
     if (home != NULL) {
-        strncpy(path, home, 512);
-        strcat(path, suffix2);
+        snprintf(path, CONFIG_PATH_MAX, "%s%s", home, suffix2);
         if (!read || access(path, F_OK) != -1) {
             return;
         }
@@ -43,8 +49,7 @@ void volk_get_config_path(char* path, bool read)
     // a default equal to $HOME/.config should be used."
     home = getenv("XDG_CONFIG_HOME");
     if (home != NULL && home[0] != '\0') {
-        strncpy(path, home, 512);
-        strcat(path, suffix2);
+        snprintf(path, CONFIG_PATH_MAX, "%s%s", home, suffix2);
         if (!read || access(path, F_OK) != -1) {
             return;
         }
@@ -53,9 +58,7 @@ void volk_get_config_path(char* path, bool read)
     // check for XDG default location ($HOME/.config/volk)
     home = getenv("HOME");
     if (home != NULL && home[0] != '\0') {
-        strncpy(path, home, 512);
-        strcat(path, "/.config");
-        strcat(path, suffix2);
+        snprintf(path, CONFIG_PATH_MAX, "%s/.config%s", home, suffix2);
         if (!read || access(path, F_OK) != -1) {
             return;
         }
@@ -67,8 +70,7 @@ void volk_get_config_path(char* path, bool read)
     // diverging here to detect legacy configs that should be migrated.
     home = getenv("HOME");
     if (home != NULL) {
-        strncpy(path, home, 512);
-        strcat(path, suffix);
+        snprintf(path, CONFIG_PATH_MAX, "%s%s", home, suffix);
         if (read && (access(path, F_OK) != -1)) {
             return;
         }
@@ -77,8 +79,7 @@ void volk_get_config_path(char* path, bool read)
     // check for config file in APPDATA (Windows)
     home = getenv("APPDATA");
     if (home != NULL) {
-        strncpy(path, home, 512);
-        strcat(path, suffix);
+        snprintf(path, CONFIG_PATH_MAX, "%s%s", home, suffix);
         if (!read || (access(path, F_OK) != -1)) {
             return;
         }
@@ -101,7 +102,7 @@ void volk_get_config_path(char* path, bool read)
 size_t volk_load_preferences(volk_arch_pref_t** prefs_res)
 {
     FILE* config_file;
-    char path[512], line[512];
+    char path[CONFIG_PATH_MAX], line[512];
     size_t n_arch_prefs = 0;
     volk_arch_pref_t* prefs = NULL;
 
@@ -122,7 +123,7 @@ size_t volk_load_preferences(volk_arch_pref_t** prefs_res)
         }
         prefs = (volk_arch_pref_t*)new_prefs;
         volk_arch_pref_t* p = prefs + n_arch_prefs;
-        if (sscanf(line, "%s %s %s", p->name, p->impl_a, p->impl_u) == 3 &&
+        if (sscanf(line, "%127s %127s %127s", p->name, p->impl_a, p->impl_u) == 3 &&
             !strncmp(p->name, "volk_", 5)) {
             n_arch_prefs++;
         }
