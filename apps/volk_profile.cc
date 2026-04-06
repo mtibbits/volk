@@ -29,9 +29,30 @@ namespace fs = std::filesystem;
 volk_test_params_t test_params(1e-6f, 327.f, 131071, 1987, false, "");
 
 void set_benchmark(bool val) { test_params.set_benchmark(val); }
-void set_tolerance(float val) { test_params.set_tol(val); }
-void set_vlen(int val) { test_params.set_vlen((unsigned int)val); }
-void set_iter(int val) { test_params.set_iter((unsigned int)val); }
+void set_tolerance(float val)
+{
+    if (val < 0) {
+        std::cerr << "Error: tolerance must not be negative" << std::endl;
+        exit(1);
+    }
+    test_params.set_tol(val);
+}
+void set_vlen(int val)
+{
+    if (val <= 0) {
+        std::cerr << "Error: vlen must be positive" << std::endl;
+        exit(1);
+    }
+    test_params.set_vlen((unsigned int)val);
+}
+void set_iter(int val)
+{
+    if (val <= 0) {
+        std::cerr << "Error: iter must be positive" << std::endl;
+        exit(1);
+    }
+    test_params.set_iter((unsigned int)val);
+}
 std::vector<std::string> kernel_patterns;
 void set_substr(std::string val) { kernel_patterns.push_back(val); }
 bool update_mode = false;
@@ -42,7 +63,14 @@ std::string json_filename("");
 void set_json(std::string val) { json_filename = val; }
 std::string volk_config_path("");
 void set_volk_config(std::string val) { volk_config_path = val; }
-void set_warmup(int val) { volk_test_set_warmup_ms((double)val); }
+void set_warmup(int val)
+{
+    if (val < 0) {
+        std::cerr << "Error: warmup must not be negative" << std::endl;
+        exit(1);
+    }
+    volk_test_set_warmup_ms((double)val);
+}
 
 int main(int argc, char* argv[])
 {
