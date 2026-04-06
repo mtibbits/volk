@@ -1088,43 +1088,50 @@ bool run_volk_tests(volk_func_desc_t desc,
         g_warmup_done = true;
     }
 
-    // Reset all test buffers after warmup
-    for (size_t i = 0; i < arch_list.size(); i++) {
-        for (size_t j = 0; j < outputsig.size(); j++) {
-            memset(test_data[i][j],
-                   0,
-                   vlen * outputsig[j].size * (outputsig[j].is_complex ? 2 : 1));
+    // Zero output buffers and reload input buffers from the original data
+    // for every arch. Used between warmup and timed runs.
+    auto reset_test_buffers = [&]() {
+        for (size_t i = 0; i < arch_list.size(); i++) {
+            for (size_t j = 0; j < outputsig.size(); j++) {
+                memset(test_data[i][j],
+                       0,
+                       vlen * outputsig[j].size * (outputsig[j].is_complex ? 2 : 1));
+            }
+            for (size_t j = 0; j < inputsig.size(); j++) {
+                memcpy(test_data[i][outputsig.size() + j],
+                       inbuffs[j],
+                       vlen * inputsig[j].size * (inputsig[j].is_complex ? 2 : 1));
+            }
         }
-        // Reload input buffers from original data
-        for (size_t j = 0; j < inputsig.size(); j++) {
-            memcpy(test_data[i][outputsig.size() + j],
-                   inbuffs[j],
-                   vlen * inputsig[j].size * (inputsig[j].is_complex ? 2 : 1));
-        }
-    }
+    };
 
-    for (size_t i = 0; i < arch_list.size(); i++) {
-        start = std::chrono::system_clock::now();
+    // Reset all test buffers after the global CPU-frequency warmup.
+    reset_test_buffers();
 
+    // Dispatch one timed run of arch index `i` with `n_iter` iterations.
+    auto run_one_arch = [&](size_t i, unsigned int n_iter) {
         switch (both_sigs.size()) {
         case 1:
             if (inputsc.size() == 0) {
-                run_cast_test1(
-                    (volk_fn_1arg)(manual_func), test_data[i], vlen, iter, arch_list[i]);
+                run_cast_test1((volk_fn_1arg)(manual_func),
+                               test_data[i],
+                               vlen,
+                               n_iter,
+                               arch_list[i]);
             } else if (inputsc.size() == 1 && inputsc[0].is_float) {
                 if (inputsc[0].is_complex) {
                     run_cast_test1_s32fc((volk_fn_1arg_s32fc)(manual_func),
                                          test_data[i],
                                          scalar,
                                          vlen,
-                                         iter,
+                                         n_iter,
                                          arch_list[i]);
                 } else {
                     run_cast_test1_s32f((volk_fn_1arg_s32f)(manual_func),
                                         test_data[i],
                                         scalar.real(),
                                         vlen,
-                                        iter,
+                                        n_iter,
                                         arch_list[i]);
                 }
             } else
@@ -1132,22 +1139,25 @@ bool run_volk_tests(volk_func_desc_t desc,
             break;
         case 2:
             if (inputsc.size() == 0) {
-                run_cast_test2(
-                    (volk_fn_2arg)(manual_func), test_data[i], vlen, iter, arch_list[i]);
+                run_cast_test2((volk_fn_2arg)(manual_func),
+                               test_data[i],
+                               vlen,
+                               n_iter,
+                               arch_list[i]);
             } else if (inputsc.size() == 1 && inputsc[0].is_float) {
                 if (inputsc[0].is_complex) {
                     run_cast_test2_s32fc((volk_fn_2arg_s32fc)(manual_func),
                                          test_data[i],
                                          scalar,
                                          vlen,
-                                         iter,
+                                         n_iter,
                                          arch_list[i]);
                 } else {
                     run_cast_test2_s32f((volk_fn_2arg_s32f)(manual_func),
                                         test_data[i],
                                         scalar.real(),
                                         vlen,
-                                        iter,
+                                        n_iter,
                                         arch_list[i]);
                 }
             } else
@@ -1155,22 +1165,25 @@ bool run_volk_tests(volk_func_desc_t desc,
             break;
         case 3:
             if (inputsc.size() == 0) {
-                run_cast_test3(
-                    (volk_fn_3arg)(manual_func), test_data[i], vlen, iter, arch_list[i]);
+                run_cast_test3((volk_fn_3arg)(manual_func),
+                               test_data[i],
+                               vlen,
+                               n_iter,
+                               arch_list[i]);
             } else if (inputsc.size() == 1 && inputsc[0].is_float) {
                 if (inputsc[0].is_complex) {
                     run_cast_test3_s32fc((volk_fn_3arg_s32fc)(manual_func),
                                          test_data[i],
                                          scalar,
                                          vlen,
-                                         iter,
+                                         n_iter,
                                          arch_list[i]);
                 } else {
                     run_cast_test3_s32f((volk_fn_3arg_s32f)(manual_func),
                                         test_data[i],
                                         scalar.real(),
                                         vlen,
-                                        iter,
+                                        n_iter,
                                         arch_list[i]);
                 }
             } else
@@ -1178,14 +1191,32 @@ bool run_volk_tests(volk_func_desc_t desc,
             break;
         case 4:
             run_cast_test4(
-                (volk_fn_4arg)(manual_func), test_data[i], vlen, iter, arch_list[i]);
+                (volk_fn_4arg)(manual_func), test_data[i], vlen, n_iter, arch_list[i]);
             break;
         default:
             throw "no function handler for this signature";
             break;
         }
+    };
 
+    // Per-arch warmup pass: run each arch once with iter=1 so ORC JIT
+    // compilation, instruction caches, and branch predictors are warm
+    // before the timed measurement. The generic arch is intentionally
+    // included even though g_warmup_done covers it; the cost is one
+    // extra single-iteration call. Fixes gnuradio/volk#203.
+    for (size_t i = 0; i < arch_list.size(); i++) {
+        run_one_arch(i, 1);
+    }
+
+    // Reset all test buffers after the per-arch warmup pass.
+    reset_test_buffers();
+
+    // Timed measurement pass.
+    for (size_t i = 0; i < arch_list.size(); i++) {
+        start = std::chrono::system_clock::now();
+        run_one_arch(i, iter);
         end = std::chrono::system_clock::now();
+
         std::chrono::duration<double> elapsed_seconds = end - start;
         double arch_time = 1000.0 * elapsed_seconds.count();
 
