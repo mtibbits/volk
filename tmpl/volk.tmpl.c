@@ -29,7 +29,7 @@ struct volk_machine *get_machine(void)
   if(machine != NULL)
     return machine;
   else {
-    unsigned int max_score = 0;
+    uint64_t max_score = 0;
     unsigned int i;
     struct volk_machine *max_machine = NULL;
     for(i=0; i<n_volk_machines; i++) {
@@ -71,7 +71,7 @@ const char* volk_get_machine(void)
   if(machine != NULL)
     return machine->name;
   else {
-    unsigned int max_score = 0;
+    uint64_t max_score = 0;
     unsigned int i;
     struct volk_machine *max_machine = NULL;
     for(i=0; i<n_volk_machines; i++) {
@@ -133,7 +133,7 @@ static inline void __init_${kern.name}(void)
 {
     const char *name = get_machine()->${kern.name}_name;
     const char **impl_names = get_machine()->${kern.name}_impl_names;
-    const int *impl_deps = get_machine()->${kern.name}_impl_deps;
+    const uint64_t *impl_deps = get_machine()->${kern.name}_impl_deps;
     const bool *alignment = get_machine()->${kern.name}_impl_alignment;
     const size_t n_impls = get_machine()->${kern.name}_n_impls;
     const size_t index_a = volk_rank_archs(name, impl_names, impl_deps, alignment, n_impls, true/*aligned*/);
@@ -188,7 +188,7 @@ void ${kern.name}_manual(${kern.arglist_full}, const char* impl_name)
 
 volk_func_desc_t ${kern.name}_get_func_desc(void) {
     const char **impl_names = get_machine()->${kern.name}_impl_names;
-    const int *impl_deps = get_machine()->${kern.name}_impl_deps;
+    const uint64_t *impl_deps = get_machine()->${kern.name}_impl_deps;
     const bool *alignment = get_machine()->${kern.name}_impl_alignment;
     const size_t n_impls = get_machine()->${kern.name}_n_impls;
     volk_func_desc_t desc = {

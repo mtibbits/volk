@@ -25,7 +25,7 @@ __VOLK_DECL_BEGIN
 typedef struct volk_func_desc
 {
     const char **impl_names;
-    const int *impl_deps;
+    const uint64_t *impl_deps;
     const bool *impl_alignment;
     size_t n_impls;
 } volk_func_desc_t;
