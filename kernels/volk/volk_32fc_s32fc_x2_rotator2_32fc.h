@@ -66,6 +66,16 @@
  * \endcode
  */
 
+#include <math.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <volk/volk_complex.h>
+#define ROTATOR_RELOAD 512
+#define ROTATOR_RELOAD_2 (ROTATOR_RELOAD / 2)
+#define ROTATOR_RELOAD_4 (ROTATOR_RELOAD / 4)
+#define ROTATOR_RELOAD_8 (ROTATOR_RELOAD / 8)
+
+
 #ifndef INCLUDED_volk_32fc_s32fc_x2_rotator2_32fc_u_H
 #define INCLUDED_volk_32fc_s32fc_x2_rotator2_32fc_u_H
 
