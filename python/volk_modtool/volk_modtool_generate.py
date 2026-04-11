@@ -8,6 +8,7 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
 #
 
+import fnmatch
 import os
 import re
 import sys
@@ -88,11 +89,20 @@ class volk_modtool(object):
         need_ifdef_updates = ["constant.h", "volk_complex.h", "volk_malloc.h", "volk_prefs.h",
                               "volk_common.h", "volk_cpu.tmpl.h", "volk_config_fixed.tmpl.h",
                               "volk_typedefs.h", "volk.tmpl.h"]
-        # skip VCS metadata and Python bytecode caches so we don't try
-        # to read .git/index, *.pyc, etc. as UTF-8 text
+        # skip VCS metadata, Python bytecode caches, and CMake build dirs
         skip_dirs = {'.git', '.hg', '.svn', '__pycache__'}
+        build_dir_patterns = ['build*', 'cmake-build-*']
         for root, dirnames, filenames in os.walk(self.my_dict['base']):
-            dirnames[:] = [d for d in dirnames if d not in skip_dirs]
+            pruned = []
+            for d in dirnames:
+                if d in skip_dirs:
+                    continue
+                if os.path.isfile(os.path.join(root, d, 'CMakeCache.txt')):
+                    continue
+                if any(fnmatch.fnmatch(d, pat) for pat in build_dir_patterns):
+                    continue
+                pruned.append(d)
+            dirnames[:] = pruned
             for name in filenames:
                 t_table = [re.search(a, name) for a in current_kernel_names]
                 t_table = set(t_table)
