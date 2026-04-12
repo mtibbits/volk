@@ -67,6 +67,7 @@ private:
     unsigned int _vlen;
     unsigned int _iter;
     unsigned int _trials = 1;
+    bool _with_minmax = false;
     bool _benchmark_mode;
     bool _absolute_mode;
     std::string _kernel_regex;
@@ -94,6 +95,7 @@ public:
     void set_vlen(unsigned int vlen) { _vlen = vlen; };
     void set_iter(unsigned int iter) { _iter = iter; };
     void set_trials(unsigned int trials) { _trials = trials; };
+    void set_with_minmax(bool val) { _with_minmax = val; };
     void set_benchmark(bool benchmark) { _benchmark_mode = benchmark; };
     void set_regex(std::string regex) { _kernel_regex = regex; };
     void add_float_edge_cases(const std::vector<float>& edge_cases)
@@ -110,6 +112,7 @@ public:
     unsigned int vlen() { return _vlen; };
     unsigned int iter() { return _iter; };
     unsigned int trials() { return _trials; };
+    bool with_minmax() { return _with_minmax; };
     bool benchmark_mode() { return _benchmark_mode; };
     bool absolute_mode() { return _absolute_mode; };
     std::string kernel_regex() { return _kernel_regex; };
@@ -207,7 +210,8 @@ bool run_volk_tests(
     bool benchmark_mode = false,
     const std::vector<float>& float_edge_cases = std::vector<float>(),
     const std::vector<lv_32fc_t>& complex_edge_cases = std::vector<lv_32fc_t>(),
-    unsigned int trials = 1);
+    unsigned int trials = 1,
+    bool with_minmax = false);
 
 #define VOLK_PROFILE(func, test_params, results) \
     run_volk_tests(func##_get_func_desc(),       \
