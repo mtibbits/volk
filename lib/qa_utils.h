@@ -13,6 +13,7 @@
 #include <stdbool.h>   // for bool, false
 #include <volk/volk.h> // for volk_func_desc_t
 #include <cstdlib>     // for NULL
+#include <iosfwd>      // for std::ofstream (forward decl)
 #include <map>         // for map
 #include <string>      // for string, basic_string
 #include <vector>      // for vector
@@ -194,7 +195,8 @@ bool run_volk_tests(volk_func_desc_t,
                     std::string,
                     volk_test_params_t,
                     std::vector<volk_test_results_t>* results = NULL,
-                    std::string puppet_master_name = "NULL");
+                    std::string puppet_master_name = "NULL",
+                    std::ofstream* csv_out = nullptr);
 
 bool run_volk_tests(
     volk_func_desc_t,
@@ -211,7 +213,8 @@ bool run_volk_tests(
     const std::vector<float>& float_edge_cases = std::vector<float>(),
     const std::vector<lv_32fc_t>& complex_edge_cases = std::vector<lv_32fc_t>(),
     unsigned int trials = 1,
-    bool with_minmax = false);
+    bool with_minmax = false,
+    std::ofstream* csv_out = nullptr);
 
 #define VOLK_PROFILE(func, test_params, results) \
     run_volk_tests(func##_get_func_desc(),       \

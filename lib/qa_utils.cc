@@ -23,6 +23,7 @@
 #include <cmath>    // for sqrt, fabs, abs
 #include <cstring>  // for memcpy, memset
 #include <ctime>    // for clock
+#include <fstream>  // for std::ofstream (csv_out)
 #include <iostream> // for cerr
 #include <limits>   // for numeric_limits
 #include <map>      // for map, map<>::mappe...
@@ -30,6 +31,7 @@
 #include <vector> // for vector, _Bit_refe...
 
 #include <fmt/format.h>
+#include <fmt/ostream.h>
 
 // Warmup time for CPU frequency scaling (ms)
 static double g_warmup_ms = 2000.0;
@@ -788,7 +790,8 @@ bool run_volk_tests(volk_func_desc_t desc,
                     std::string name,
                     volk_test_params_t test_params,
                     std::vector<volk_test_results_t>* results,
-                    std::string puppet_master_name)
+                    std::string puppet_master_name,
+                    std::ofstream* csv_out)
 {
     return run_volk_tests(desc,
                           manual_func,
@@ -804,7 +807,8 @@ bool run_volk_tests(volk_func_desc_t desc,
                           test_params.float_edge_cases(),
                           test_params.complex_edge_cases(),
                           test_params.trials(),
-                          test_params.with_minmax());
+                          test_params.with_minmax(),
+                          csv_out);
 }
 
 bool run_volk_tests(volk_func_desc_t desc,
@@ -821,7 +825,8 @@ bool run_volk_tests(volk_func_desc_t desc,
                     const std::vector<float>& float_edge_cases,
                     const std::vector<lv_32fc_t>& complex_edge_cases,
                     unsigned int trials,
-                    bool with_minmax)
+                    bool with_minmax,
+                    std::ofstream* csv_out)
 {
     // Initialize this entry in results vector
     results->push_back(volk_test_results_t());
@@ -1276,6 +1281,18 @@ bool run_volk_tests(volk_func_desc_t desc,
         results->back().results[result.name] = result;
 
         profile_times.push_back(arch_time);
+
+        // Write per-trial CSV rows if csv_out is active
+        if (csv_out) {
+            for (unsigned int t = 0; t < trials; t++) {
+                fmt::print(*csv_out,
+                           "{},{},{},{:.6g}\n",
+                           name,
+                           arch_list[i],
+                           t,
+                           arch_samples[t]);
+            }
+        }
     }
 
     // and now compare each output to the generic output
