@@ -803,7 +803,8 @@ bool run_volk_tests(volk_func_desc_t desc,
                           test_params.benchmark_mode(),
                           test_params.float_edge_cases(),
                           test_params.complex_edge_cases(),
-                          test_params.trials());
+                          test_params.trials(),
+                          test_params.with_minmax());
 }
 
 bool run_volk_tests(volk_func_desc_t desc,
@@ -819,7 +820,8 @@ bool run_volk_tests(volk_func_desc_t desc,
                     bool benchmark_mode,
                     const std::vector<float>& float_edge_cases,
                     const std::vector<lv_32fc_t>& complex_edge_cases,
-                    unsigned int trials)
+                    unsigned int trials,
+                    bool with_minmax)
 {
     // Initialize this entry in results vector
     results->push_back(volk_test_results_t());
@@ -1243,6 +1245,8 @@ bool run_volk_tests(volk_func_desc_t desc,
 
     // Timed measurement pass.
     std::vector<double> profile_mads(arch_list.size(), 0.0);
+    std::vector<double> profile_mins(arch_list.size(), 0.0);
+    std::vector<double> profile_maxes(arch_list.size(), 0.0);
 
     for (size_t i = 0; i < arch_list.size(); i++) {
         std::vector<double> arch_samples;
@@ -1259,6 +1263,10 @@ bool run_volk_tests(volk_func_desc_t desc,
 
         double arch_time = compute_median(arch_samples);
         profile_mads[i] = compute_mad(arch_samples, arch_time);
+        auto [min_it, max_it] =
+            std::minmax_element(arch_samples.begin(), arch_samples.end());
+        profile_mins[i] = *min_it;
+        profile_maxes[i] = *max_it;
 
         volk_test_time_t result;
         result.name = arch_list[i];
@@ -1530,8 +1538,45 @@ bool run_volk_tests(volk_func_desc_t desc,
         return fmt::format("{:.1f} MB/s", mbps);
     };
 
-    // Print table header — Mode B adds a MAD% column and renames "time" to "median".
-    if (trials > 1) {
+    // Print table header — Mode A, B, or C.
+    if (trials > 1 && with_minmax) {
+        fmt::print("{:<{}} | {:>{}} | {:>{}} | {:>{}} | {:>{}} "
+                   "| {:>{}} | {:>{}} | {:>{}} |\n",
+                   "arch",
+                   w_arch,
+                   "median",
+                   w_time,
+                   "MAD%",
+                   w_mad,
+                   "min",
+                   w_time,
+                   "max",
+                   w_time,
+                   "throughput",
+                   w_tput,
+                   "speedup",
+                   w_speedup,
+                   err_col,
+                   w_err);
+        fmt::print("{:-<{}}-+-{:-<{}}-+-{:-<{}}-+-{:-<{}}-+-{:-<{}}"
+                   "-+-{:-<{}}-+-{:-<{}}-+-{:-<{}}-+\n",
+                   "",
+                   w_arch,
+                   "",
+                   w_time,
+                   "",
+                   w_mad,
+                   "",
+                   w_time,
+                   "",
+                   w_time,
+                   "",
+                   w_tput,
+                   "",
+                   w_speedup,
+                   "",
+                   w_err);
+    } else if (trials > 1) {
         fmt::print("{:<{}} | {:>{}} | {:>{}} | {:>{}} | {:>{}} | {:>{}} |\n",
                    "arch",
                    w_arch,
@@ -1603,7 +1648,33 @@ bool run_volk_tests(volk_func_desc_t desc,
         std::string win_str =
             (arch_list[i] == best_arch_a || arch_list[i] == best_arch_u) ? " *" : "";
 
-        if (trials > 1) {
+        if (trials > 1 && with_minmax) {
+            std::string mad_str =
+                (profile_times[i] > 0.0)
+                    ? fmt::format("{:.1f}%", 100.0 * profile_mads[i] / profile_times[i])
+                    : std::string("-");
+            std::string min_str = format_time(profile_mins[i]);
+            std::string max_str = format_time(profile_maxes[i]);
+            fmt::print("{:<{}} | {:>{}} | {:>{}} | {:>{}} | {:>{}} "
+                       "| {:>{}} | {:>{}} | {:>{}} |{}\n",
+                       arch_list[i],
+                       w_arch,
+                       time_str,
+                       w_time,
+                       mad_str,
+                       w_mad,
+                       min_str,
+                       w_time,
+                       max_str,
+                       w_time,
+                       tput_str,
+                       w_tput,
+                       speedup_str,
+                       w_speedup,
+                       err_str,
+                       w_err,
+                       win_str);
+        } else if (trials > 1) {
             std::string mad_str =
                 (profile_times[i] > 0.0)
                     ? fmt::format("{:.1f}%", 100.0 * profile_mads[i] / profile_times[i])
@@ -1662,7 +1733,9 @@ bool run_volk_tests(volk_func_desc_t desc,
                           tol_f);
     }
 
-    if (trials > 1) {
+    if (trials > 1 && with_minmax) {
+        fmt::print("{:-<131}\n", "");
+    } else if (trials > 1) {
         fmt::print("{:-<97}\n", "");
     } else {
         fmt::print("{:-<88}\n", "");
