@@ -9,6 +9,9 @@
 
 #include <stddef.h>          // for size_t
 #include <sys/stat.h>        // for stat
+#ifndef _MSC_VER
+#include <unistd.h> // for isatty, fileno
+#endif
 #include <volk/volk_prefs.h> // for volk_get_config_path
 #include <filesystem>
 #include <fstream>  // IWYU pragma: keep
@@ -83,6 +86,63 @@ int main(int argc, char* argv[])
         std::cout << "Warning: this IS a dry-run. Config will not be written!"
                   << std::endl;
     }
+
+#ifndef _MSC_VER // XDG is Unix/Linux only; migration prompt cannot fire on Windows
+    // Check for legacy config that should be migrated to XDG location
+    if (volk_config_path == "") {
+        char xdg_path[512], legacy_path[512];
+        volk_get_config_path(legacy_path, true); // find existing config
+        volk_get_config_path(xdg_path, false);   // find preferred write path
+
+        std::string legacy(legacy_path);
+        std::string xdg(xdg_path);
+
+        // If read path (legacy) differs from write path (XDG), offer migration
+        if (!legacy.empty() && !xdg.empty() && legacy != xdg) {
+            const std::string legacy_dir = fs::path(legacy).parent_path().string();
+
+            if (isatty(fileno(stdin))) {
+                std::cout << "Found config at: " << legacy << std::endl;
+                std::cout << "New standard location: " << xdg << std::endl;
+                std::cout << "Move config to new location? [Y/n] ";
+                std::string answer;
+                std::getline(std::cin, answer);
+
+                if (answer.empty() || answer[0] == 'Y' || answer[0] == 'y') {
+                    const fs::path xdg_fs(xdg);
+                    std::error_code ec;
+                    fs::create_directories(xdg_fs.parent_path(), ec);
+                    fs::rename(legacy, xdg, ec);
+                    if (ec) {
+                        // rename fails across filesystems; fall back to copy+remove
+                        fs::copy_file(legacy, xdg, ec);
+                        if (!ec) {
+                            fs::remove(legacy, ec);
+                        }
+                    }
+                    if (!ec) {
+                        std::cout << "Moved to " << xdg << std::endl;
+                        // Clean up empty legacy directory
+                        if (fs::is_empty(legacy_dir, ec) && !ec) {
+                            fs::remove(fs::path(legacy_dir), ec);
+                        }
+                    } else {
+                        std::cerr << "Warning: could not move config: " << ec.message()
+                                  << std::endl;
+                        std::cerr << "Continuing with legacy path." << std::endl;
+                        volk_config_path = legacy_dir;
+                    }
+                } else {
+                    // User chose to keep legacy location for this run
+                    volk_config_path = legacy_dir;
+                }
+            } else {
+                // Non-interactive: keep legacy path silently
+                volk_config_path = legacy_dir;
+            }
+        }
+    }
+#endif // _MSC_VER
 
     // Adding program options
     std::ofstream json_file;
