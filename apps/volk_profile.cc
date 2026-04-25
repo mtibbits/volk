@@ -372,7 +372,7 @@ void write_results(const std::vector<volk_test_results_t>* results, bool update_
     char path[1024];
     volk_get_config_path(path, false);
     if (path[0] == 0) {
-        std::cout << "Aborting 'No config save path found' ..." << std::endl;
+        std::cerr << "Aborting 'No config save path found' ..." << std::endl;
         return;
     }
 
@@ -401,14 +401,14 @@ void write_results(const std::vector<volk_test_results_t>* results,
         config.open(path.c_str(), std::ofstream::app);
         if (!config.is_open()) { // either we don't have write access or we don't have the
                                  // dir yet
-            std::cout << "Error opening file " << path << std::endl;
+            std::cerr << "Error opening file " << path << std::endl;
         }
     } else {
         std::cout << "Writing " << path << "..." << std::endl;
         config.open(path.c_str());
         if (!config.is_open()) { // either we don't have write access or we don't have the
                                  // dir yet
-            std::cout << "Error opening file " << path << std::endl;
+            std::cerr << "Error opening file " << path << std::endl;
         }
 
         config << "\
