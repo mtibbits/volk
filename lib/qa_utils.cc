@@ -205,7 +205,7 @@ void load_random_data(void* data,
     }
 }
 
-static std::vector<std::string> get_arch_list(volk_func_desc_t desc)
+std::vector<std::string> get_arch_list(volk_func_desc_t desc)
 {
     std::vector<std::string> archlist;
 
@@ -303,9 +303,9 @@ std::vector<std::string> split_signature(const std::string& protokernel_signatur
     return signature_tokens;
 }
 
-static void get_signatures_from_name(std::vector<volk_type_t>& inputsig,
-                                     std::vector<volk_type_t>& outputsig,
-                                     std::string name)
+void get_signatures_from_name(std::vector<volk_type_t>& inputsig,
+                              std::vector<volk_type_t>& outputsig,
+                              std::string name)
 {
 
     std::vector<std::string> toked = split_signature(name);
@@ -761,27 +761,6 @@ struct fail_info_t {
     double max_err;
 };
 
-class volk_qa_aligned_mem_pool
-{
-public:
-    void* get_new(size_t size)
-    {
-        size_t alignment = volk_get_alignment();
-        void* ptr = volk_malloc(size, alignment);
-        memset(ptr, 0x00, size);
-        _mems.push_back(ptr);
-        return ptr;
-    }
-    ~volk_qa_aligned_mem_pool()
-    {
-        for (unsigned int ii = 0; ii < _mems.size(); ++ii) {
-            volk_free(_mems[ii]);
-        }
-    }
-
-private:
-    std::vector<void*> _mems;
-};
 
 bool run_volk_tests(volk_func_desc_t desc,
                     void (*manual_func)(),
