@@ -12,46 +12,53 @@
  *
  * \b Overview
  *
- * Divides aVector by bVector to produce cVector:
+ * Performs element-wise division of two floating-point vectors:
  *
  * c[i] = a[i] / b[i]
  *
+ * Element-wise division is used in signal processing for operations such as
+ * normalization, computing signal-to-noise ratios, applying per-bin gain
+ * corrections in spectral analysis, and implementing adaptive gain control
+ * where each sample is scaled by a per-element divisor.
+ *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_32f_x2_divide_32f(float* cVector, const float* aVector, const float* bVector,
- * unsigned int num_points) \endcode
+ * void volk_32f_x2_divide_32f(float* cVector, const float* aVector, const float* bVector, unsigned int num_points)
+ * \endcode
  *
  * \b Inputs
- * \li aVector: First vector of input points.
- * \li bVector: Second vector of input points.
- * \li num_points: The number of values in both input vector.
+ * \li aVector: The numerator vector of input samples (float).
+ * \li bVector: The denominator vector of input samples (float).
+ * \li num_points: The number of float values in each input vector.
  *
  * \b Outputs
- * \li cVector: The output vector.
+ * \li cVector: The output vector of quotients (float).
  *
  * \b Example
- * Divide an increasing vector by a decreasing vector
+ * Divide a constant vector by another and verify the result.
  * \code
- *   int N = 10;
+ *   unsigned int N = 4;
  *   unsigned int alignment = volk_get_alignment();
- *   float* increasing = (float*)volk_malloc(sizeof(float)*N, alignment);
- *   float* decreasing = (float*)volk_malloc(sizeof(float)*N, alignment);
- *   float* out = (float*)volk_malloc(sizeof(float)*N, alignment);
+ *   float* aVector = (float*)volk_malloc(sizeof(float) * N, alignment);
+ *   float* bVector = (float*)volk_malloc(sizeof(float) * N, alignment);
+ *   float* cVector = (float*)volk_malloc(sizeof(float) * N, alignment);
  *
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       increasing[ii] = (float)ii;
- *       decreasing[ii] = 10.f - (float)ii;
+ *   for (unsigned int i = 0; i < N; ++i) {
+ *       aVector[i] = 10.0f;
+ *       bVector[i] = 2.0f;
  *   }
  *
- *   volk_32f_x2_divide_32f(out, increasing, decreasing, N);
+ *   // Expected: 10.0 / 2.0 = 5.0 for every element
+ *   float expected = 5.0f;
  *
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       printf("out[%u] = %1.2f\n", ii, out[ii]);
- *   }
+ *   volk_32f_x2_divide_32f(cVector, aVector, bVector, N);
  *
- *   volk_free(increasing);
- *   volk_free(decreasing);
- *   volk_free(out);
+ *   printf("Expected: %1.2f\n", expected);
+ *   printf("Result:   %1.2f\n", cVector[0]);
+ *
+ *   volk_free(aVector);
+ *   volk_free(bVector);
+ *   volk_free(cVector);
  * \endcode
  */
 

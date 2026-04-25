@@ -16,30 +16,64 @@
  *
  * \b Overview
  *
- * <FIXME>
+ * Computes the element-wise maximum across four 16-bit integer input vectors
+ * using a tree-structured max-star reduction:
+ * target[i] = max(max(src0[i], src1[i]), max(src2[i], src3[i])).
+ *
+ * The max-star operation is used in log-MAP and max-log-MAP turbo decoding,
+ * where branch metrics from multiple trellis paths must be compared
+ * element-wise to select the surviving path. This kernel accelerates the
+ * four-way path selection step common in quad-rate convolutional decoders
+ * and BCJR-based turbo decoders operating on 16-bit fixed-point metrics.
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_16i_x4_quad_max_star_16i(short* target, short* src0, short* src1, short*
- * src2, short* src3, unsigned int num_points) \endcode
+ * void volk_16i_x4_quad_max_star_16i(short* target, short* src0, short* src1,
+ * short* src2, short* src3, unsigned int num_points)
+ * \endcode
  *
  * \b Inputs
- * \li src0: The input vector 0.
- * \li src1: The input vector 1.
- * \li src2: The input vector 2.
- * \li src3: The input vector 3.
- * \li num_points: The number of data points.
+ * \li src0: First branch metric vector (short).
+ * \li src1: Second branch metric vector (short).
+ * \li src2: Third branch metric vector (short).
+ * \li src3: Fourth branch metric vector (short).
+ * \li num_points: The number of 16-bit metric values to process.
  *
  * \b Outputs
- * \li target: The output value.
+ * \li target: The element-wise maximum across all four inputs (short).
  *
  * \b Example
+ * Compute the four-way element-wise maximum of constant metric vectors.
  * \code
- * int N = 10000;
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
  *
- * volk_16i_x4_quad_max_star_16i();
+ * short* target = (short*)volk_malloc(sizeof(short) * N, alignment);
+ * short* src0 = (short*)volk_malloc(sizeof(short) * N, alignment);
+ * short* src1 = (short*)volk_malloc(sizeof(short) * N, alignment);
+ * short* src2 = (short*)volk_malloc(sizeof(short) * N, alignment);
+ * short* src3 = (short*)volk_malloc(sizeof(short) * N, alignment);
  *
- * volk_free(x);
+ * for (unsigned int i = 0; i < N; ++i) {
+ *     src0[i] = 1;
+ *     src1[i] = 3;
+ *     src2[i] = 2;
+ *     src3[i] = 4;
+ * }
+ *
+ * // Expected: max(max(1, 3), max(2, 4)) = max(3, 4) = 4 for each element
+ * short expected = 4;
+ *
+ * volk_16i_x4_quad_max_star_16i(target, src0, src1, src2, src3, N);
+ *
+ * printf("Expected: %d\n", expected);
+ * printf("Result:   %d\n", target[0]);
+ *
+ * volk_free(target);
+ * volk_free(src0);
+ * volk_free(src1);
+ * volk_free(src2);
+ * volk_free(src3);
  * \endcode
  */
 

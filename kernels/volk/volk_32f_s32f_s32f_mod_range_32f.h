@@ -10,22 +10,56 @@
 /*!
  * \page volk_32f_s32f_s32f_mod_range_32f
  *
- * \b wraps floating point numbers to stay within a defined [min,max] range
+ * \b Overview
+ *
+ * Wraps floating-point values into a defined [lower_bound, upper_bound] range
+ * using modular arithmetic. Values outside the range are shifted by integer
+ * multiples of (upper_bound - lower_bound) until they fall within bounds.
+ *
+ * This kernel is commonly used for phase wrapping in signal processing
+ * applications such as phase-locked loops (PLLs), FM demodulation, and
+ * frequency estimation, where phase values must be constrained to a canonical
+ * range (e.g. [-pi, pi] or [0, 2*pi]).
  *
  * <b>Dispatcher Prototype</b>
  * \code
  * void volk_32f_s32f_s32f_mod_range_32f(float* outputVector, const float* inputVector,
- * const float lower_bound, const float upper_bound, unsigned int num_points) \endcode
+ * const float lower_bound, const float upper_bound, unsigned int num_points)
+ * \endcode
  *
  * \b Inputs
- * \li inputVector: The input vector
- * \li lower_bound: The lower output boundary
- * \li upper_bound: The upper output boundary
- * \li num_points The number of data points.
+ * \li inputVector: The input vector of samples to wrap (float).
+ * \li lower_bound: The lower boundary of the output range (float).
+ * \li upper_bound: The upper boundary of the output range (float).
+ * \li num_points: The number of data points.
  *
  * \b Outputs
- * \li outputVector: The vector where the results will be stored.
+ * \li outputVector: The wrapped output values (float).
  *
+ * \b Example
+ * Wrap four values into the range [-1.0, 1.0].
+ * \code
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
+ *
+ * float* input = (float*)volk_malloc(sizeof(float) * N, alignment);
+ * float* output = (float*)volk_malloc(sizeof(float) * N, alignment);
+ *
+ * input[0] = -1.5f;
+ * input[1] = -0.5f;
+ * input[2] = 0.5f;
+ * input[3] = 1.5f;
+ *
+ * // Expected: -1.5 + 2.0 = 0.5, -0.5 (in range), 0.5 (in range), 1.5 - 2.0 = -0.5
+ *
+ * volk_32f_s32f_s32f_mod_range_32f(output, input, -1.0f, 1.0f, N);
+ *
+ * printf("Expected: 0.5, -0.5, 0.5, -0.5\n");
+ * printf("Result:   %1.1f, %1.1f, %1.1f, %1.1f\n",
+ *        output[0], output[1], output[2], output[3]);
+ *
+ * volk_free(input);
+ * volk_free(output);
  * \endcode
  */
 

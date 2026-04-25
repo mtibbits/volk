@@ -12,8 +12,15 @@
  *
  * \b Overview
  *
- * Deinterleaves the complex 8-bit char vector into I & Q vector data
- * and converts them to 16-bit shorts.
+ * Deinterleaves a complex 8-bit char vector into separate I (in-phase) and
+ * Q (quadrature) vectors and converts them to 16-bit shorts. Each 8-bit
+ * sample is scaled by 256 (left-shifted by 8 bits) so the result occupies
+ * the upper byte of the 16-bit output, preserving full dynamic range.
+ *
+ * This kernel is commonly used in SDR receiver front-ends where an ADC
+ * produces interleaved 8-bit I/Q samples that must be separated and
+ * promoted to 16-bit precision for downstream processing such as
+ * filtering, mixing, or demodulation.
  *
  * <b>Dispatcher Prototype</b>
  * \code
@@ -21,20 +28,38 @@
  * complexVector, unsigned int num_points) \endcode
  *
  * \b Inputs
- * \li complexVector: The complex input vector.
- * \li num_points: The number of complex data values to be deinterleaved.
+ * \li complexVector: The complex input vector of interleaved I/Q samples (lv_8sc_t).
+ * \li num_points: The number of complex samples to deinterleave.
  *
  * \b Outputs
- * \li iBuffer: The I buffer output data.
- * \li qBuffer: The Q buffer output data.
+ * \li iBuffer: The deinterleaved I (in-phase) output vector (int16_t).
+ * \li qBuffer: The deinterleaved Q (quadrature) output vector (int16_t).
  *
  * \b Example
+ * Deinterleave 4 complex 8-bit samples and verify the scaled 16-bit output.
  * \code
- * int N = 10000;
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
  *
- * volk_8ic_deinterleave_16i_x2();
+ * lv_8sc_t* input = (lv_8sc_t*)volk_malloc(sizeof(lv_8sc_t) * N, alignment);
+ * int16_t* iBuffer = (int16_t*)volk_malloc(sizeof(int16_t) * N, alignment);
+ * int16_t* qBuffer = (int16_t*)volk_malloc(sizeof(int16_t) * N, alignment);
  *
- * volk_free(x);
+ * // Input: (1+j2), (3+j4), (-1+j0), (0-j1)
+ * input[0] = lv_cmake((int8_t)1, (int8_t)2);
+ * input[1] = lv_cmake((int8_t)3, (int8_t)4);
+ * input[2] = lv_cmake((int8_t)-1, (int8_t)0);
+ * input[3] = lv_cmake((int8_t)0, (int8_t)-1);
+ *
+ * volk_8ic_deinterleave_16i_x2(iBuffer, qBuffer, input, N);
+ *
+ * // Each value is scaled by 256: expected I = {256, 768, -256, 0}
+ * printf("iBuffer[0] = %d (expected 256)\n", iBuffer[0]);
+ * printf("qBuffer[1] = %d (expected 1024)\n", qBuffer[1]);
+ *
+ * volk_free(input);
+ * volk_free(iBuffer);
+ * volk_free(qBuffer);
  * \endcode
  */
 

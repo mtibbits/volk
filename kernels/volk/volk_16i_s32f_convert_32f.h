@@ -12,29 +12,52 @@
  *
  * \b Overview
  *
- * Converts 16-bit shorts to scaled 32-bit floating point values.
+ * Converts 16-bit integer samples to scaled 32-bit floating point values by
+ * dividing each sample by a scalar: out[i] = (float)in[i] / scalar.
+ *
+ * This kernel is commonly used when ingesting fixed-point ADC samples into a
+ * floating-point signal processing pipeline. The scalar divisor normalizes the
+ * integer sample range to a desired floating-point amplitude, which is essential
+ * for correct operation of downstream blocks such as filters, demodulators, and
+ * spectral analysis routines.
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_16i_s32f_convert_32f(float* outputVector, const int16_t* inputVector, const
- * float scalar, unsigned int num_points); \endcode
+ * void volk_16i_s32f_convert_32f(float* outputVector, const int16_t* inputVector, const float scalar, unsigned int num_points)
+ * \endcode
  *
  * \b Inputs
- * \li inputVector: The input vector of 16-bit shorts.
- * \li scalar: The value divided against each point in the output buffer.
- * \li num_points: The number of complex data points.
+ * \li inputVector: The input vector of 16-bit integer samples (int16_t).
+ * \li scalar: The divisor applied to each converted sample (float).
+ * \li num_points: The number of samples to convert.
  *
  * \b Outputs
- * \li outputVector: The output vector of 8-bit chars.
+ * \li outputVector: The output vector of scaled 32-bit floating point values (float).
  *
  * \b Example
+ * Convert four int16 samples with a scalar divisor of 2 and verify the result.
  * \code
- * int N = 10000;
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
  *
- * volk_16i_s32f_convert_32f();
+ * int16_t* input = (int16_t*)volk_malloc(sizeof(int16_t) * N, alignment);
+ * float* output = (float*)volk_malloc(sizeof(float) * N, alignment);
  *
- * volk_free(x);
- * volk_free(t);
+ * for (unsigned int i = 0; i < N; ++i) {
+ *   input[i] = (int16_t)((i + 1) * 100);  // 100, 200, 300, 400
+ * }
+ * float scalar = 2.0f;
+ *
+ * // Expected: 100/2=50, 200/2=100, 300/2=150, 400/2=200
+ *
+ * volk_16i_s32f_convert_32f(output, input, scalar, N);
+ *
+ * printf("Expected: 50, 100, 150, 200\n");
+ * printf("Result:   %1.0f, %1.0f, %1.0f, %1.0f\n",
+ *        output[0], output[1], output[2], output[3]);
+ *
+ * volk_free(input);
+ * volk_free(output);
  * \endcode
  */
 

@@ -13,7 +13,13 @@
  *
  * \b Overview
  *
- * Computes arccosine of input vector and stores results in output vector.
+ * Computes the element-wise arccosine (inverse cosine) of an input vector,
+ * storing the results in radians in the output vector: out[i] = acos(in[i]).
+ * Input values must lie in the range [-1, +1].
+ *
+ * In signal processing, arccosine is used to extract phase angles from
+ * normalized dot products, for example when computing angles of arrival in
+ * beamforming arrays or recovering phase offsets in coherent demodulation.
  *
  * <b>Dispatcher Prototype</b>
  * \code
@@ -21,37 +27,33 @@
  * \endcode
  *
  * \b Inputs
- * \li aVector: The input vector of floats.
- * \li num_points: The number of data points.
+ * \li aVector: Input vector of sample values in [-1, +1] (float).
+ * \li num_points: The number of samples to process.
  *
  * \b Outputs
- * \li bVector: The vector where results will be stored.
+ * \li bVector: Output vector of arccosine results in radians (float).
  *
  * \b Example
+ * Compute arccosine for known values and verify against expected results.
  * \code
- * Calculate common angles around the top half of the unit circle.
- *   int N = 10;
- *   unsigned int alignment = volk_get_alignment();
- *   float* in = (float*)volk_malloc(sizeof(float)*N, alignment);
- *   float* out = (float*)volk_malloc(sizeof(float)*N, alignment);
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
+ * float* in = (float*)volk_malloc(sizeof(float) * N, alignment);
+ * float* out = (float*)volk_malloc(sizeof(float) * N, alignment);
  *
- *   in[0] = 1;
- *   in[1] = std::sqrt(3.f)/2.f;
- *   in[2] = std::sqrt(2.f)/2.f;
- *   in[3] = 0.5;
- *   in[4] = in[5] = 0;
- *   for(unsigned int ii = 6; ii < N; ++ii){
- *       in[ii] = - in[N-ii-1];
- *   }
+ * in[0] = 1.0f;   // acos(1)  = 0
+ * in[1] = 0.5f;   // acos(0.5) = pi/3
+ * in[2] = 0.0f;   // acos(0)  = pi/2
+ * in[3] = -1.0f;  // acos(-1) = pi
  *
- *   volk_32f_acos_32f(out, in, N);
+ * volk_32f_acos_32f(out, in, N);
  *
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       printf("acos(%1.3f) = %1.3f\n", in[ii], out[ii]);
- *   }
+ * // Expected: 0, pi/3, pi/2, pi
+ * printf("Expected: %1.4f, %1.4f, %1.4f, %1.4f\n", 0.0f, 1.0472f, 1.5708f, 3.1416f);
+ * printf("Result:   %1.4f, %1.4f, %1.4f, %1.4f\n", out[0], out[1], out[2], out[3]);
  *
- *   volk_free(in);
- *   volk_free(out);
+ * volk_free(in);
+ * volk_free(out);
  * \endcode
  */
 

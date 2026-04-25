@@ -12,40 +12,47 @@
  *
  * \b Overview
  *
- * Converts float values into doubles.
+ * Converts a vector of single-precision floating-point samples (32-bit float) to
+ * double-precision (64-bit double): out[i] = (double) in[i].
+ *
+ * Precision promotion is common in DSP pipelines where intermediate computations
+ * require higher dynamic range or reduced round-off error, such as accumulating
+ * long FIR filter outputs, computing high-resolution spectral analysis via FFT,
+ * or maintaining numerical stability in feedback loops (e.g. PLLs, AGC).
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_32f_convert_64f(double* outputVector, const float* inputVector, unsigned int
- * num_points) \endcode
+ * void volk_32f_convert_64f(double* outputVector, const float* inputVector, unsigned int num_points)
+ * \endcode
  *
  * \b Inputs
- * \li inputVector: The vector of floats to convert to doubles.
- * \li num_points: The number of data points.
+ * \li inputVector: The input vector of single-precision samples (float).
+ * \li num_points: The number of samples to convert.
  *
  * \b Outputs
- * \li outputVector: returns the converted doubles.
+ * \li outputVector: The output vector of double-precision samples (double).
  *
  * \b Example
- * Generate floats and convert them to doubles.
+ * Convert constant float values to doubles and verify the result.
  * \code
- *   int N = 10;
- *   unsigned int alignment = volk_get_alignment();
- *   float* in = (float*)volk_malloc(sizeof(float)*N, alignment);
- *   double* out = (double*)volk_malloc(sizeof(double)*N, alignment);
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
+ * float* in = (float*)volk_malloc(sizeof(float) * N, alignment);
+ * double* out = (double*)volk_malloc(sizeof(double) * N, alignment);
  *
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       in[ii] = (float)ii;
- *   }
+ * for (unsigned int i = 0; i < N; ++i) {
+ *     in[i] = 1.5f;
+ * }
  *
- *   volk_32f_convert_64f(out, in, N);
+ * double expected = 1.5;
  *
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       printf("out(%i) = %g\n", ii, out[ii]);
- *   }
+ * volk_32f_convert_64f(out, in, N);
  *
- *   volk_free(in);
- *   volk_free(out);
+ * printf("Expected: %f\n", expected);
+ * printf("Result:   %f\n", out[0]);
+ *
+ * volk_free(in);
+ * volk_free(out);
  * \endcode
  */
 

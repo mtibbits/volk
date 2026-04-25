@@ -12,48 +12,55 @@
  *
  * \b Overview
  *
- * Adds two input vectors and store result as a double-precision vectors. One
- * of the input vector is defined as a single precision floating point, so
- * upcasting is performed before the addition
+ * Adds a single-precision float vector to a double-precision vector element by
+ * element, upcasting the float input to double before the addition. The result
+ * is stored as double-precision.
  *
- * c[i] = a[i] + b[i]
+ * c[i] = (double)a[i] + b[i]
+ *
+ * Mixed-precision addition is common in signal processing pipelines where
+ * samples arrive as 32-bit floats but must be accumulated or combined with
+ * higher-precision quantities — for example, accumulating signal energy over
+ * long integration windows or adding correction terms in adaptive filtering.
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_32f_64f_add_64f(double* cVector, const double* aVector, const
- * double* bVector, unsigned int num_points) \endcode
+ * void volk_32f_64f_add_64f(double* cVector, const float* aVector, const
+ * double* bVector, unsigned int num_points)
+ * \endcode
  *
  * \b Inputs
- * \li aVector: First input vector.
- * \li bVector: Second input vector.
- * \li num_points: The number of values in both input vectors.
+ * \li aVector: First input vector of samples (float).
+ * \li bVector: Second input vector (double).
+ * \li num_points: The number of elements in each input vector.
  *
  * \b Outputs
- * \li cVector: The output vector.
+ * \li cVector: The output vector containing the element-wise sums (double).
  *
  * \b Example
- * add elements of an increasing vector by those of a decreasing vector.
+ * Add a constant float vector to a constant double vector and verify the sum.
  * \code
- *   int N = 10;
- *   unsigned int alignment = volk_get_alignment();
- *   float* increasing = (float*)volk_malloc(sizeof(float)*N, alignment);
- *   double* decreasing = (double*)volk_malloc(sizeof(double)*N, alignment);
- *   double* out = (double*)volk_malloc(sizeof(double)*N, alignment);
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
+ * float* aVector = (float*)volk_malloc(sizeof(float) * N, alignment);
+ * double* bVector = (double*)volk_malloc(sizeof(double) * N, alignment);
+ * double* cVector = (double*)volk_malloc(sizeof(double) * N, alignment);
  *
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       increasing[ii] = (double)ii;
- *       decreasing[ii] = 10.f - (double)ii;
- *   }
+ * for (unsigned int i = 0; i < N; ++i) {
+ *     aVector[i] = 1.5f;
+ *     bVector[i] = 2.5;
+ * }
  *
- *   volk_32f_64f_add_64f(out, increasing, decreasing, N);
+ * double expected = 1.5 + 2.5;  // 4.0
  *
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       printf("out[%u] = %1.2F\n", ii, out[ii]);
- *   }
+ * volk_32f_64f_add_64f(cVector, aVector, bVector, N);
  *
- *   volk_free(increasing);
- *   volk_free(decreasing);
- *   volk_free(out);
+ * printf("Expected: %1.2f\n", expected);
+ * printf("Result:   %1.2f\n", cVector[0]);
+ *
+ * volk_free(aVector);
+ * volk_free(bVector);
+ * volk_free(cVector);
  * \endcode
  */
 

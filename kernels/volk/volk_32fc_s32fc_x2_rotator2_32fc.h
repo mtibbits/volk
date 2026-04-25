@@ -12,56 +12,57 @@
  *
  * \b Overview
  *
- * Rotate input vector at fixed rate per sample from initial phase
- * offset.
+ * Rotates each complex sample by a continuously advancing phase:
+ * out[i] = in[i] * phase * phase_inc^i. The phase accumulator is updated
+ * in place and periodically renormalized to prevent magnitude drift.
+ *
+ * This kernel implements a numerically controlled oscillator (NCO) multiply,
+ * the core operation behind frequency shifting, fine carrier recovery, and
+ * digital down-conversion. In a typical receiver chain the rotator shifts a
+ * signal to baseband or corrects a residual frequency offset estimated by a
+ * synchronization block.
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_32fc_s32fc_x2_rotator2_32fc(lv_32fc_t* outVector, const lv_32fc_t* inVector,
- * const lv_32fc_t* phase_inc, lv_32fc_t* phase, unsigned int num_points) \endcode
+ * void volk_32fc_s32fc_x2_rotator2_32fc(lv_32fc_t* outVector,
+ *     const lv_32fc_t* inVector, const lv_32fc_t* phase_inc, lv_32fc_t* phase,
+ *     unsigned int num_points)
+ * \endcode
  *
  * \b Inputs
- * \li inVector: Vector to be rotated.
- * \li phase_inc: rotational velocity (scalar, input).
- * \li phase: phase offset (scalar, input & output).
- * \li num_points: The number of values in inVector to be rotated and stored into
- * outVector.
+ * \li inVector: Input signal samples to be rotated (lv_32fc_t).
+ * \li phase_inc: Phase increment per sample, i.e. rotational velocity (lv_32fc_t pointer).
+ * \li phase: Initial phase accumulator, updated on return (lv_32fc_t pointer).
+ * \li num_points: The number of complex samples to process.
  *
  * \b Outputs
- * \li outVector: The vector where the results will be stored.
+ * \li outVector: The rotated output samples (lv_32fc_t).
  *
  * \b Example
- * Generate a tone at f=0.3 (normalized frequency) and use the rotator with
- * f=0.1 to shift the tone to f=0.4. Change this example to start with a DC
- * tone (initialize in with lv_cmake(1, 0)) to observe rotator signal generation.
+ * Rotate a DC signal by 90 degrees per sample (phase_inc = j).
  * \code
- *   int N = 10;
- *   unsigned int alignment = volk_get_alignment();
- *   lv_32fc_t* in  = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t)*N, alignment);
- *   lv_32fc_t* out = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t)*N, alignment);
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
+ * lv_32fc_t* in = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t) * N, alignment);
+ * lv_32fc_t* out = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t) * N, alignment);
  *
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       // Generate a tone at f=0.3
- *       float real = std::cos(0.3f * (float)ii);
- *       float imag = std::sin(0.3f * (float)ii);
- *       in[ii] = lv_cmake(real, imag);
- *   }
- *   // The oscillator rotates at f=0.1
- *   float frequency = 0.1f;
- *   lv_32fc_t phase_increment = lv_cmake(std::cos(frequency), std::sin(frequency));
- *   lv_32fc_t phase= lv_cmake(1.f, 0.0f); // start at 1 (0 rad phase)
+ * // DC input: all samples = 1 + 0j
+ * for (unsigned int i = 0; i < N; ++i) {
+ *     in[i] = lv_cmake(1.0f, 0.0f);
+ * }
  *
- *   // rotate so the output is a tone at f=0.4
- *   volk_32fc_s32fc_x2_rotator2_32fc(out, in, &phase_increment, &phase, N);
+ * // Rotate by 90 degrees per sample (phase_inc = 0 + 1j)
+ * lv_32fc_t phase_inc = lv_cmake(0.0f, 1.0f);
+ * lv_32fc_t phase = lv_cmake(1.0f, 0.0f);
  *
- *   // print results for inspection
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       printf("out[%u] = %+1.2f %+1.2fj\n",
- *           ii, lv_creal(out[ii]), lv_cimag(out[ii]));
- *   }
+ * volk_32fc_s32fc_x2_rotator2_32fc(out, in, &phase_inc, &phase, N);
  *
- *   volk_free(in);
- *   volk_free(out);
+ * // Expected: out[i] = j^i -> out[0]=1, out[1]=j, out[2]=-1, out[3]=-j
+ * printf("Expected: %+1.1f %+1.1fj\n", 0.0f, -1.0f);
+ * printf("Result:   %+1.1f %+1.1fj\n", lv_creal(out[3]), lv_cimag(out[3]));
+ *
+ * volk_free(in);
+ * volk_free(out);
  * \endcode
  */
 

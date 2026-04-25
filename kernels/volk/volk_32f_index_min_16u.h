@@ -12,14 +12,18 @@
  *
  * \b Overview
  *
- * Returns Argmin_i x[i]. Finds and returns the index which contains
- * the fist minimum value in the given vector.
+ * Returns Argmin_i x[i]. Finds and returns the index of the first
+ * minimum value in the given vector of floats.
+ *
+ * This kernel is useful in signal processing tasks that require locating the
+ * sample with the lowest amplitude or power, such as identifying noise floors,
+ * finding minimum-error timing offsets in synchronization, or selecting the
+ * least-cost path in Viterbi decoding metrics.
  *
  * Note that num_points is a uint32_t, but the return value is
  * uint16_t. Providing a vector larger than the max of a uint16_t
  * (65536) would miss anything outside of this boundary. The kernel
- * will check the length of num_points and cap it to this max value,
- * anyways.
+ * will check the length of num_points and cap it to this max value.
  *
  * <b>Dispatcher Prototype</b>
  * \code
@@ -27,31 +31,32 @@
  * \endcode
  *
  * \b Inputs
- * \li source: The input vector of floats.
- * \li num_points: The number of data points.
+ * \li source: The input vector of samples (float).
+ * \li num_points: The number of data points (uint32_t).
  *
  * \b Outputs
- * \li target: The index of the fist minimum value in the input buffer.
+ * \li target: The index of the first minimum value in the input vector (uint16_t).
  *
  * \b Example
+ * Find the minimum in a short vector where the answer is obvious by inspection.
  * \code
- *   int N = 10;
- *   uint32_t alignment = volk_get_alignment();
- *   float* in = (float*)volk_malloc(sizeof(float)*N, alignment);
- *   uint16_t* out = (uint16_t*)volk_malloc(sizeof(uint16_t), alignment);
+ * unsigned int N = 5;
+ * unsigned int alignment = volk_get_alignment();
+ * float* in = (float*)volk_malloc(sizeof(float) * N, alignment);
+ * uint16_t* out = (uint16_t*)volk_malloc(sizeof(uint16_t), alignment);
  *
- *   for(uint32_t ii = 0; ii < N; ++ii){
- *       float x = (float)ii;
- *       // a parabola with a minimum at x=4
- *       in[ii] = (x-4) * (x-4) - 5;
- *   }
+ * in[0] = 3.0f; in[1] = 1.0f; in[2] = 4.0f; in[3] = 0.5f; in[4] = 2.0f;
  *
- *   volk_32f_index_min_16u(out, in, N);
+ * // Expected: minimum is 0.5 at index 3
+ * unsigned int expected_index = 3;
  *
- *   printf("minimum is %1.2f at index %u\n", in[*out], *out);
+ * volk_32f_index_min_16u(out, in, N);
  *
- *   volk_free(in);
- *   volk_free(out);
+ * printf("Expected: index %u\n", expected_index);
+ * printf("Result:   index %u (value %1.2f)\n", *out, in[*out]);
+ *
+ * volk_free(in);
+ * volk_free(out);
  * \endcode
  */
 

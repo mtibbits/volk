@@ -12,48 +12,53 @@
  *
  * \b Overview
  *
- * Deinterleaves the complex floating point vector and return the real
- * part (inphase) of the samples scaled to 16-bit shorts.
+ * Deinterleaves the complex floating point vector and returns the real
+ * (in-phase) component of each sample, scaled by a scalar and converted
+ * to 16-bit integers: iBuffer[i] = (int16_t)(real(complexVector[i]) * scalar).
+ *
+ * This kernel is useful in receiver chains where complex baseband samples
+ * must be quantized to fixed-point for downstream processing such as
+ * demodulation or digital-to-analog conversion. The scalar controls the
+ * amplitude mapping from the normalized floating-point range into the
+ * int16 range.
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_32fc_s32f_deinterleave_real_16i(int16_t* iBuffer, const lv_32fc_t*
- * complexVector, const float scalar, unsigned int num_points) \endcode
+ * void volk_32fc_s32f_deinterleave_real_16i(int16_t* iBuffer, const lv_32fc_t* complexVector, const float scalar, unsigned int num_points)
+ * \endcode
  *
  * \b Inputs
- * \li complexVector: The complex input vector.
- * \li scalar: The value to be multiplied against each of the input vectors..
- * \li num_points: The number of complex data values to be deinterleaved.
+ * \li complexVector: The complex input samples (lv_32fc_t).
+ * \li scalar: The scaling factor applied to each real component (float).
+ * \li num_points: The number of complex samples to deinterleave.
  *
  * \b Outputs
- * \li iBuffer: The I buffer output data.
+ * \li iBuffer: The scaled in-phase output values (int16_t).
  *
  * \b Example
- * Generate points around the unit circle and map them to integers with
- * magnitude 50 to preserve smallest deltas.
+ * Scale the real parts of four constant complex samples by 100 and verify the result.
  * \code
- *   int N = 10;
- *   unsigned int alignment = volk_get_alignment();
- *   lv_32fc_t* in  = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t)*N, alignment);
- *   int16_t* out = (int16_t*)volk_malloc(sizeof(int16_t)*N, alignment);
- *   float scale = 50.f;
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
+ * lv_32fc_t* in = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t) * N, alignment);
+ * int16_t* out = (int16_t*)volk_malloc(sizeof(int16_t) * N, alignment);
+ * float scalar = 100.f;
  *
- *   for(unsigned int ii = 0; ii < N/2; ++ii){
- *       // Generate points around the unit circle
- *       float real = -4.f * ((float)ii / (float)N) + 1.f;
- *       float imag = std::sqrt(1.f - real * real);
- *       in[ii] = lv_cmake(real, imag);
- *       in[ii+N/2] = lv_cmake(-real, -imag);
- *   }
+ * // All inputs have real part 0.25, imaginary part 0.75 (ignored)
+ * for (unsigned int i = 0; i < N; ++i) {
+ *     in[i] = lv_cmake(0.25f, 0.75f);
+ * }
  *
- *   volk_32fc_s32f_deinterleave_real_16i(out, in, scale, N);
+ * // Expected: (int16_t)(0.25 * 100) = 25 for every element
+ * int16_t expected = 25;
  *
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       printf("out[%u] = %i\n", ii, out[ii]);
- *   }
+ * volk_32fc_s32f_deinterleave_real_16i(out, in, scalar, N);
  *
- *   volk_free(in);
- *   volk_free(out);
+ * printf("Expected: %d\n", expected);
+ * printf("Result:   %d\n", out[0]);
+ *
+ * volk_free(in);
+ * volk_free(out);
  * \endcode
  */
 
