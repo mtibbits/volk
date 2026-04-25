@@ -60,6 +60,14 @@ std::vector<std::string> kernel_patterns;
 void set_substr(std::string val) { kernel_patterns.push_back(val); }
 bool update_mode = false;
 void set_update(bool val) { update_mode = val; }
+void set_trials(int val)
+{
+    if (val < 1) {
+        std::cerr << "volk_profile: --trials must be at least 1\n";
+        std::exit(1);
+    }
+    test_params.set_trials((unsigned int)val);
+}
 bool dry_run = false;
 void set_dryrun(bool val) { dry_run = val; }
 std::string json_filename("");
@@ -87,6 +95,12 @@ int main(int argc, char* argv[])
         option_t("vlen", "v", "Set the default vector length for tests", set_vlen));
     profile_options.add((option_t(
         "iter", "i", "Set the default number of test iterations per kernel", set_iter)));
+    profile_options.add(
+        (option_t("trials",
+                  "T",
+                  "Run the timed loop N times per kernel and report median + MAD "
+                  "(default 1; 10-30 recommended for a stable MAD estimate)",
+                  set_trials)));
     profile_options.add((option_t("tests-substr",
                                   "R",
                                   "Run tests matching substring (can be repeated)",
