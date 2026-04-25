@@ -32,6 +32,7 @@ namespace fs = std::filesystem;
 volk_test_params_t test_params(1e-6f, 327.f, 131071, 1987, false, "");
 
 void set_benchmark(bool val) { test_params.set_benchmark(val); }
+void set_with_minmax(bool val) { test_params.set_with_minmax(val); }
 void set_tolerance(float val)
 {
     if (val < 0) {
@@ -89,6 +90,12 @@ int main(int argc, char* argv[])
     option_list profile_options("volk_profile");
     profile_options.add(
         option_t("benchmark", "b", "Run all kernels (benchmark mode)", set_benchmark));
+    profile_options.add(
+        option_t("with-minmax",
+                 "",
+                 "Add per-arch min and max columns to the -T results table "
+                 "(requires -T >= 2)",
+                 set_with_minmax));
     profile_options.add(
         option_t("tol", "t", "Set the default tolerance for all tests", set_tolerance));
     profile_options.add(
