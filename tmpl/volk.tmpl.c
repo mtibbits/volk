@@ -14,6 +14,7 @@
 #include "volk_rank_archs.h"
 #include <volk/volk.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <assert.h>
 
@@ -41,6 +42,12 @@ struct volk_machine *get_machine(void)
       }
     }
     machine = max_machine;
+    if(machine == NULL) {
+      fprintf(stderr,
+              "Volk error: get_machine(): no installed machine matches "
+              "host caps. Aborting.\n");
+      abort();
+    }
     //printf("Using Volk machine: %s\n", machine->name);
     __alignment = machine->alignment;
     __alignment_mask = (intptr_t)(__alignment-1);
@@ -83,6 +90,12 @@ const char* volk_get_machine(void)
       }
     }
     machine = max_machine;
+    if(machine == NULL) {
+      fprintf(stderr,
+              "Volk error: volk_get_machine(): no installed machine matches "
+              "host caps. Aborting.\n");
+      abort();
+    }
     return machine->name;
   }
 }
