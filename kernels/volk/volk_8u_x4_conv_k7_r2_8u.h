@@ -150,8 +150,7 @@ static inline void BFLY(int i,
     Y[2 * i] = decision0 ? m1 : m0;
     Y[2 * i + 1] = decision1 ? m3 : m2;
 
-    d->w[i / (sizeof(unsigned int) * 8 / 2) +
-         s * (sizeof(decision_t) / sizeof(unsigned int))] |=
+    d[s].w[i / (sizeof(unsigned int) * 8 / 2)] |=
         (decision0 | decision1 << 1) << ((2 * i) & (sizeof(unsigned int) * 8 - 1));
 }
 
