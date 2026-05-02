@@ -25,7 +25,7 @@ missing_pkgs <- REQUIRED_PACKAGES[
 ]
 if (length(missing_pkgs) > 0) {
     install_cmd <- sprintf(
-        'install.packages(c(%s))',
+        "install.packages(c(%s))",
         paste(sprintf('"%s"', missing_pkgs), collapse = ", ")
     )
     cat("error: missing required R package(s): ",
@@ -143,8 +143,10 @@ read_validated_csv <- function(path) {
     df <- tryCatch(
         utils::read.csv(path, header = TRUE, stringsAsFactors = FALSE,
                         colClasses = "character"),
-        error = function(e) stop_loud(sprintf(
-            "could not read %s: %s", path, conditionMessage(e)))
+        error = function(e) {
+            stop_loud(sprintf(
+                "could not read %s: %s", path, conditionMessage(e)))
+        }
     )
     # Header check (exact match including order).
     if (!identical(colnames(df), EXPECTED_CSV_HEADER)) {
