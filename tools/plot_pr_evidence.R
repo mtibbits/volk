@@ -168,14 +168,18 @@ read_validated_csv <- function(path) {
             path, line_no, df$trial[bad_trial[1]]))
     }
     trial_num <- as.integer(df$trial)
-    # time_ms: numeric coercion, then reject NA/Inf/NaN explicitly so
-    # an "Inf" string in the CSV cannot survive into scale_y_log10().
+    # time_ms: numeric coercion, then reject NA/Inf/NaN/<=0 explicitly.
+    # Wall-times must be strictly positive: zero would survive as
+    # log10(0) = -Inf and silently disappear from the plot; negative
+    # values are nonsensical. volk_profile produces neither, but we
+    # validate at the boundary the same way we reject "Inf".
     time_ms_num <- suppressWarnings(as.numeric(df$time_ms))
-    bad_time <- which(is.na(time_ms_num) | !is.finite(time_ms_num))
+    bad_time <- which(is.na(time_ms_num) | !is.finite(time_ms_num) |
+                      time_ms_num <= 0)
     if (length(bad_time) > 0) {
         line_no <- bad_time[1] + 1L
         stop_loud(sprintf(
-            "%s:%d: non-finite time_ms value '%s'",
+            "%s:%d: non-positive or non-finite time_ms value '%s'",
             path, line_no, df$time_ms[bad_time[1]]))
     }
     df$trial   <- trial_num
@@ -209,13 +213,20 @@ render_kernel_plot <- function(summary_df, kernel_name, outdir,
                                 run_labels) {
     # Defensive filename validation: kernel_name becomes part of the
     # output path. Volk's actual kernel-naming convention is a strict
-    # subset of [A-Za-z0-9_]+, so this never trips on legitimate
-    # input — but a hand-crafted CSV with "../etc/passwd" as a kernel
-    # name would otherwise escape outdir.
+    # subset of [A-Za-z0-9_]+ and the longest real kernel is ~47
+    # chars, so the cap below never trips on legitimate input — but
+    # a hand-crafted CSV with "../etc/passwd" or a 5000-char name
+    # would otherwise escape outdir or exceed NAME_MAX (255).
     if (!grepl("^[A-Za-z0-9_-]+$", kernel_name)) {
         stop_loud(sprintf(
             "kernel name '%s' contains characters unsafe for filename",
             kernel_name))
+    }
+    if (nchar(kernel_name) > 128L) {
+        stop_loud(sprintf(
+            "kernel name too long (%d chars, max 128): '%s'",
+            nchar(kernel_name),
+            substr(kernel_name, 1L, 60L)))
     }
     sub <- summary_df[summary_df$kernel == kernel_name, ]
     sub$arch <- factor(sub$arch, levels = sort(unique(sub$arch)))
@@ -244,6 +255,15 @@ render_kernel_plot <- function(summary_df, kernel_name, outdir,
     ggplot2::ggsave(out_path, plot = p,
                     width = CANVAS_WIDTH_IN, height = CANVAS_HEIGHT_IN,
                     units = "in", dpi = CANVAS_DPI)
+    # ggsave() emits warnings (not errors) on filename-too-long, mid-
+    # run permission revocation, disk-full, etc. Verify the PNG was
+    # actually written so the manifest cannot claim success when the
+    # output is missing or zero-length.
+    if (!file.exists(out_path) || file.size(out_path) == 0L) {
+        stop_loud(sprintf(
+            "ggsave failed to write '%s' (file missing or empty)",
+            out_path))
+    }
     invisible(out_path)
 }
 
