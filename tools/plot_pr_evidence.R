@@ -51,6 +51,25 @@ PALETTE_DARK2 <- c(
     "#66A61E", "#E6AB02", "#A6761D", "#666666"
 )
 
+# Order archs for plotting: `generic` always leftmost; other
+# prefix-less algorithm names (generic_branchless, lut, polynomial,
+# 1972magic, etc.) next, alphabetically; then SIMD archs grouped by
+# family with a_/u_ pairs adjacent (a_ before u_ within each family).
+# Within tier 2, the family sort key replaces '_' with ' ' so that
+# variants (avx_fma, avx2_fma, sse4_1) sort *adjacent to their base*
+# rather than after it lexicographically — pure byte order would
+# place avx_fma after avx512f because '_' (0x5F) > '5' (0x35).
+sort_archs_for_plot <- function(archs) {
+    has_au_prefix <- grepl("^[au]_", archs)
+    is_generic    <- archs == "generic"
+    tier   <- ifelse(is_generic, 0L,
+                     ifelse(!has_au_prefix, 1L, 2L))
+    family <- ifelse(has_au_prefix, sub("^[au]_", "", archs), archs)
+    family_key <- gsub("_", " ", family, fixed = TRUE)
+    au     <- ifelse(has_au_prefix, substr(archs, 1L, 1L), "")
+    archs[order(tier, family_key, au, archs)]
+}
+
 # ---- Error helpers ----------------------------------------------
 
 stop_loud <- function(msg) {
@@ -229,26 +248,40 @@ render_kernel_plot <- function(summary_df, kernel_name, outdir,
             substr(kernel_name, 1L, 60L)))
     }
     sub <- summary_df[summary_df$kernel == kernel_name, ]
-    sub$arch <- factor(sub$arch, levels = sort(unique(sub$arch)))
+    sub$arch <- factor(sub$arch,
+                       levels = sort_archs_for_plot(unique(sub$arch)))
     n_runs <- length(run_labels)
     palette_used <- PALETTE_DARK2[seq_len(n_runs)]
     names(palette_used) <- run_labels
 
+    # Median rendered as a horizontal line; MAD as whiskers around it.
+    # Both use position_dodge so 2+ runs sit side-by-side per arch.
+    # We deliberately do NOT draw bars: bar height to a y=0 baseline
+    # forces log10 to clip at the lowest tick (1 ms) and visually
+    # compresses the legitimate data range. With lines, the y-axis
+    # auto-scales to the data — sub-percent MAD whiskers stay
+    # invisibly tight, and the cluster structure is immediately
+    # legible.
+    dodge <- ggplot2::position_dodge(width = 0.6)
     p <- ggplot2::ggplot(sub,
-            ggplot2::aes(x = arch, y = median_ms, fill = run)) +
-        ggplot2::geom_col(position = ggplot2::position_dodge(width = 0.8),
-                          width = 0.7) +
+            ggplot2::aes(x = arch, y = median_ms, color = run,
+                         group = run)) +
         ggplot2::geom_errorbar(
             ggplot2::aes(ymin = pmax(median_ms - mad_ms, 1e-12),
                          ymax = median_ms + mad_ms),
-            position = ggplot2::position_dodge(width = 0.8),
-            width = 0.25
+            position = dodge, width = 0.25, linewidth = 0.6
+        ) +
+        # Horizontal "median line" via geom_errorbar with ymin == ymax;
+        # the bracket collapses to two overlapping caps = one line.
+        ggplot2::geom_errorbar(
+            ggplot2::aes(ymin = median_ms, ymax = median_ms),
+            position = dodge, width = 0.5, linewidth = 1.2
         ) +
         ggplot2::scale_y_log10() +
-        ggplot2::scale_fill_manual(values = palette_used) +
+        ggplot2::scale_color_manual(values = palette_used) +
         ggplot2::labs(title = kernel_name,
                       x = "arch", y = "wall-time (ms, log scale)",
-                      fill = "run") +
+                      color = "run") +
         ggplot2::theme_bw(base_family = "sans")
 
     out_path <- file.path(outdir, sprintf("%s.png", kernel_name))
