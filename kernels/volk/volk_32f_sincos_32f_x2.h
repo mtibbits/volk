@@ -344,6 +344,89 @@ static inline void volk_32f_sincos_32f_x2_a_avx2(float* sinVector,
 
 #endif /* LV_HAVE_AVX2 for aligned */
 
+#ifdef LV_HAVE_AVX
+#include <immintrin.h>
+#include <volk/volk_avx_intrinsics.h>
+
+static inline void volk_32f_sincos_32f_x2_a_avx(float* sinVector,
+                                                float* cosVector,
+                                                const float* inVector,
+                                                unsigned int num_points)
+{
+    float* sinPtr = sinVector;
+    float* cosPtr = cosVector;
+    const float* inPtr = inVector;
+
+    unsigned int number = 0;
+    unsigned int eighthPoints = num_points / 8;
+
+    // Constants for Cody-Waite argument reduction
+    const __m256 two_over_pi = _mm256_set1_ps(0x1.45f306p-1f);
+    const __m256 pi_over_2_hi = _mm256_set1_ps(0x1.921fb6p+0f);
+    const __m256 pi_over_2_lo = _mm256_set1_ps(-0x1.777a5cp-25f);
+
+    // 128-bit integer constants -- used per-half because AVX1 has no
+    // 256-bit integer AND / CMPEQ / ADD.
+    const __m128i ones_128 = _mm_set1_epi32(1);
+    const __m128i twos_128 = _mm_set1_epi32(2);
+    const __m256 sign_bit = _mm256_set1_ps(-0.0f);
+
+    for (; number < eighthPoints; number++) {
+        __m256 x = _mm256_load_ps(inPtr);
+
+        // Argument reduction
+        __m256 n_f = _mm256_round_ps(_mm256_mul_ps(x, two_over_pi),
+                                     _MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC);
+        __m256i n = _mm256_cvtps_epi32(n_f);
+
+        __m256 r = _mm256_sub_ps(x, _mm256_mul_ps(n_f, pi_over_2_hi));
+        r = _mm256_sub_ps(r, _mm256_mul_ps(n_f, pi_over_2_lo));
+
+        // Evaluate both polynomials once per iteration; reuse for sin
+        // and cos outputs.
+        __m256 sin_r = _mm256_sin_poly_avx(r);
+        __m256 cos_r = _mm256_cos_poly_avx(r);
+
+        // Split-128 once; reuse n_lo / n_hi across all three masks.
+        __m128i n_lo = _mm256_castsi256_si128(n);
+        __m128i n_hi = _mm256_extractf128_si256(n, 1);
+
+        // Shared swap mask: (n & 1) == 1   (Pattern A)
+        //   sin output uses cos_r when set, sin_r otherwise
+        //   cos output uses sin_r when set, cos_r otherwise
+        __m256 swap_mask = _mm256_mask_bit_set_avx(n_lo, n_hi, ones_128);
+
+        // sin negation mask: (n & 2) == 2   (Pattern A)
+        __m256 sin_neg_mask = _mm256_mask_bit_set_avx(n_lo, n_hi, twos_128);
+
+        // cos negation mask: ((n+1) & 2) == 2   (Pattern B)
+        __m256 cos_neg_mask = _mm256_mask_bit_set_avx(
+            _mm_add_epi32(n_lo, ones_128), _mm_add_epi32(n_hi, ones_128), twos_128);
+
+        // Reconstruct sin: swap to cos_r when n&1, then negate when n&2
+        __m256 sin_result = _mm256_blendv_ps(sin_r, cos_r, swap_mask);
+        sin_result = _mm256_xor_ps(sin_result, _mm256_and_ps(sin_neg_mask, sign_bit));
+
+        // Reconstruct cos: swap to sin_r when n&1, then negate when (n+1)&2
+        __m256 cos_result = _mm256_blendv_ps(cos_r, sin_r, swap_mask);
+        cos_result = _mm256_xor_ps(cos_result, _mm256_and_ps(cos_neg_mask, sign_bit));
+
+        _mm256_store_ps(sinPtr, sin_result);
+        _mm256_store_ps(cosPtr, cos_result);
+        inPtr += 8;
+        sinPtr += 8;
+        cosPtr += 8;
+    }
+
+    number = eighthPoints * 8;
+    for (; number < num_points; number++) {
+        *sinPtr++ = sinf(*inPtr);
+        *cosPtr++ = cosf(*inPtr++);
+    }
+}
+
+#endif /* LV_HAVE_AVX */
+
 #ifdef LV_HAVE_SSE4_1
 #include <smmintrin.h>
 #include <volk/volk_sse_intrinsics.h>
@@ -650,6 +733,81 @@ static inline void volk_32f_sincos_32f_x2_u_avx2(float* sinVector,
 }
 
 #endif /* LV_HAVE_AVX2 for unaligned */
+
+#ifdef LV_HAVE_AVX
+#include <immintrin.h>
+#include <volk/volk_avx_intrinsics.h>
+
+static inline void volk_32f_sincos_32f_x2_u_avx(float* sinVector,
+                                                float* cosVector,
+                                                const float* inVector,
+                                                unsigned int num_points)
+{
+    float* sinPtr = sinVector;
+    float* cosPtr = cosVector;
+    const float* inPtr = inVector;
+
+    unsigned int number = 0;
+    unsigned int eighthPoints = num_points / 8;
+
+    // Constants for Cody-Waite argument reduction
+    const __m256 two_over_pi = _mm256_set1_ps(0x1.45f306p-1f);
+    const __m256 pi_over_2_hi = _mm256_set1_ps(0x1.921fb6p+0f);
+    const __m256 pi_over_2_lo = _mm256_set1_ps(-0x1.777a5cp-25f);
+
+    const __m128i ones_128 = _mm_set1_epi32(1);
+    const __m128i twos_128 = _mm_set1_epi32(2);
+    const __m256 sign_bit = _mm256_set1_ps(-0.0f);
+
+    for (; number < eighthPoints; number++) {
+        __m256 x = _mm256_loadu_ps(inPtr);
+
+        // Argument reduction
+        __m256 n_f = _mm256_round_ps(_mm256_mul_ps(x, two_over_pi),
+                                     _MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC);
+        __m256i n = _mm256_cvtps_epi32(n_f);
+
+        __m256 r = _mm256_sub_ps(x, _mm256_mul_ps(n_f, pi_over_2_hi));
+        r = _mm256_sub_ps(r, _mm256_mul_ps(n_f, pi_over_2_lo));
+
+        __m256 sin_r = _mm256_sin_poly_avx(r);
+        __m256 cos_r = _mm256_cos_poly_avx(r);
+
+        // Split-128 once; reuse n_lo / n_hi across all three masks.
+        __m128i n_lo = _mm256_castsi256_si128(n);
+        __m128i n_hi = _mm256_extractf128_si256(n, 1);
+
+        // Shared swap mask: (n & 1) == 1   (Pattern A)
+        __m256 swap_mask = _mm256_mask_bit_set_avx(n_lo, n_hi, ones_128);
+
+        // sin negation mask: (n & 2) == 2   (Pattern A)
+        __m256 sin_neg_mask = _mm256_mask_bit_set_avx(n_lo, n_hi, twos_128);
+
+        // cos negation mask: ((n+1) & 2) == 2   (Pattern B)
+        __m256 cos_neg_mask = _mm256_mask_bit_set_avx(
+            _mm_add_epi32(n_lo, ones_128), _mm_add_epi32(n_hi, ones_128), twos_128);
+
+        __m256 sin_result = _mm256_blendv_ps(sin_r, cos_r, swap_mask);
+        sin_result = _mm256_xor_ps(sin_result, _mm256_and_ps(sin_neg_mask, sign_bit));
+
+        __m256 cos_result = _mm256_blendv_ps(cos_r, sin_r, swap_mask);
+        cos_result = _mm256_xor_ps(cos_result, _mm256_and_ps(cos_neg_mask, sign_bit));
+
+        _mm256_storeu_ps(sinPtr, sin_result);
+        _mm256_storeu_ps(cosPtr, cos_result);
+        inPtr += 8;
+        sinPtr += 8;
+        cosPtr += 8;
+    }
+
+    number = eighthPoints * 8;
+    for (; number < num_points; number++) {
+        *sinPtr++ = sinf(*inPtr);
+        *cosPtr++ = cosf(*inPtr++);
+    }
+}
+
+#endif /* LV_HAVE_AVX */
 
 #ifdef LV_HAVE_SSE4_1
 #include <smmintrin.h>
