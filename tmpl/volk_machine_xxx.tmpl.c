@@ -12,6 +12,9 @@
 
 %for arch in this_machine.archs:
 #define LV_HAVE_${arch.name.upper()} 1
+%for prov in arch.provides:
+#define LV_HAVE_${prov.upper()} 1
+%endfor
 %endfor
 
 #include <volk/volk_common.h>

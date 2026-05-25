@@ -21,6 +21,8 @@ class arch_class(object):
             try: setattr(self, key, cast(kwargs[key]))
             except: setattr(self, key, failval)
         self.checks = checks
+        prov = kwargs.get('provides', [])
+        self.provides = prov if isinstance(prov, list) else []
         assert(self.name)
         self._flags = flags
 
@@ -69,7 +71,11 @@ for arch_xml in archs_xml:
         name = flag_xml.attributes["compiler"].value
         if name not in flags: flags[name] = list()
         flags[name].append(flag_xml.firstChild.data)
-    register_arch(flags=flags, checks=checks, **kwargs)
+    provides = [p.firstChild.data for p in arch_xml.getElementsByTagName("provides")]
+    # The generic child-element loop above stashed the first <provides>'s string
+    # data under kwargs['provides']; discard it so the list form below wins.
+    kwargs.pop('provides', None)
+    register_arch(flags=flags, checks=checks, provides=provides, **kwargs)
 
 if __name__ == '__main__':
     print(archs)
