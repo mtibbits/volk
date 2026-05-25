@@ -538,6 +538,19 @@ if(MSVC)
     set_source_files_properties(${volk_sources} PROPERTIES LANGUAGE CXX)
 endif()
 
+# Verify per-machine dispatch-table integrity after codegen, before
+# compiling any machine .c file. See mtibbits/volk#58
+# for the bug class this catches.
+add_custom_target(volk_check_dispatch_tables
+    COMMAND ${PYTHON_EXECUTABLE} ${PYTHON_DASH_B}
+            ${PROJECT_SOURCE_DIR}/cmake/check_dispatch_tables.py
+            --source-dir ${PROJECT_SOURCE_DIR}
+            --build-lib-dir ${PROJECT_BINARY_DIR}/lib
+    DEPENDS ${volk_gen_sources}
+    COMMENT "Checking per-machine impl dispatch-table integrity"
+    VERBATIM
+)
+
 #Create an object to reference Volk source and object files.
 #
 #NOTE: This object cannot be used to propagate include directories or
@@ -545,6 +558,7 @@ endif()
 #work. There are options starting with CMake 3.13 for using the OBJECT
 #to propagate this information.
 add_library(volk_obj OBJECT ${volk_sources})
+add_dependencies(volk_obj volk_check_dispatch_tables)
 target_include_directories(
     volk_obj
     PRIVATE $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/include>
