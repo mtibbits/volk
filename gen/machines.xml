@@ -46,7 +46,7 @@
 </machine-->
 
 <machine name="sse4_a">
-<archs>generic 64| mmx| sse sse2 sse3 sse4_a popcount orc|</archs>
+<archs>generic 64| mmx| sse sse2 sse3 sse4_a orc|</archs>
 </machine>
 
 <machine name="sse4_1">
@@ -54,32 +54,32 @@
 </machine>
 
 <machine name="sse4_2">
-<archs>generic 64| mmx| sse sse2 sse3 ssse3 sse4_1 sse4_2 popcount orc|</archs>
+<archs>generic 64| mmx| sse sse2 sse3 ssse3 sse4_1 sse4_2 orc|</archs>
 </machine>
 
 <!-- trailing | bar means generate without either for MSVC -->
 <machine name="avx">
-<archs>generic 64| mmx| sse sse2 sse3 ssse3 sse4_1 sse4_2 popcount avx orc|</archs>
+<archs>generic 64| mmx| sse sse2 sse3 ssse3 sse4_1 sse4_2 avx orc|</archs>
 </machine>
 
 <!-- trailing | bar means generate without either for MSVC -->
 <machine name="avx2">
-<archs>generic 64| mmx| sse sse2 sse3 ssse3 sse4_1 sse4_2 popcount avx fma avx2 orc|</archs>
+<archs>generic 64| mmx| sse sse2 sse3 ssse3 sse4_1 sse4_2 avx fma avx2 orc|</archs>
 </machine>
 
 <!-- trailing | bar means generate without either for MSVC -->
 <machine name="avx512f">
-<archs>generic 64| mmx| sse sse2 sse3 ssse3 sse4_1 sse4_2 popcount avx fma avx2 avx512f orc|</archs>
+<archs>generic 64| mmx| sse sse2 sse3 ssse3 sse4_1 sse4_2 avx fma avx2 avx512f orc|</archs>
 </machine>
 
 <!-- trailing | bar means generate without either for MSVC -->
 <machine name="avx512cd">
-<archs>generic 64| mmx| sse sse2 sse3 ssse3 sse4_1 sse4_2 popcount avx fma avx2 avx512f avx512cd orc|</archs>
+<archs>generic 64| mmx| sse sse2 sse3 ssse3 sse4_1 sse4_2 avx fma avx2 avx512f avx512cd orc|</archs>
 </machine>
 
 <!-- trailing | bar means generate without either for MSVC -->
 <machine name="avx512dq">
-<archs>generic 64| mmx| sse sse2 sse3 ssse3 sse4_1 sse4_2 popcount avx fma avx2 avx512f avx512dq orc|</archs>
+<archs>generic 64| mmx| sse sse2 sse3 ssse3 sse4_1 sse4_2 avx fma avx2 avx512f avx512dq orc|</archs>
 </machine>
 
 </grammar>

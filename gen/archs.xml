@@ -22,13 +22,6 @@ at the top, as a last resort.
   <flag compiler="clang">-m64</flag>
 </arch>
 
-<arch name="popcount">
-  <check name="popcnt"></check>
-  <flag compiler="gnu">-mpopcnt</flag>
-  <flag compiler="clang">-mpopcnt</flag>
-  <flag compiler="msvc">/arch:AVX</flag>
-</arch>
-
 <arch name="mmx">
   <check name="mmx"></check>
   <flag compiler="gnu">-mmmx</flag>
