@@ -45,18 +45,30 @@ def parse_machine_c(path: Path):
     #     {<deps masks>},
     #     ...
     #
-    # We pin to the *first* {"..."} brace group after the kernel-name
-    # string. The deps mask block uses {(1 << LV_X), ...} which has no
-    # double-quotes, so the next-string-group anchor is unambiguous.
+    # The match anchor is a kernel-name string immediately followed by a
+    # {"..."} brace group. The deps mask block uses {(1 << LV_X), ...}
+    # which has no double-quotes, so a string-only brace group can only
+    # be the impl-name array.
+    #
+    # `dispatch[kernel_name] = names` assigns into a dict: if a kernel
+    # ever had multiple matching blocks (it doesn't today), only the
+    # last would survive. One block per kernel is invariant per the
+    # generator's structure -- but if that ever changes, the assertion
+    # below catches the regression.
+    #
     # The inner string-group quantifier is * (not +) so a hypothetical
     # zero-impl kernel still enters the dispatch dict with an empty set,
-    # rather than silently dropping out and masking a regression.
+    # rather than silently dropping out and masking a real regression.
     block_re = re.compile(
         r'"(volk_\w+)"\s*,\s*\{\s*((?:"[^"]+"\s*,?\s*)*)\}',
         re.M,
     )
     dispatch = {}
     for kernel_name, names_block in block_re.findall(text):
+        assert kernel_name not in dispatch, (
+            f"{path.name}: kernel {kernel_name!r} has multiple impl-name "
+            f"arrays; generator structure changed -- update this parser."
+        )
         names = set(re.findall(r'"([^"]+)"', names_block))
         dispatch[kernel_name] = names
     return defined, dispatch
@@ -109,6 +121,27 @@ def main():
         print(f"error: failed to import volk_kernel_defs: {e}", file=sys.stderr)
         sys.exit(2)
 
+    # Defensive assertions: this script depends on gen/volk_kernel_defs.py
+    # internals (kernels list, kernel._impls, impl.deps, impl.name). If any
+    # of those go away, fail fast with a clear message rather than later
+    # with a cryptic AttributeError mid-iteration.
+    if not hasattr(K, "kernels") or not K.kernels:
+        print("error: gen/volk_kernel_defs exposes no `kernels` attribute "
+              "(or it is empty)", file=sys.stderr)
+        sys.exit(2)
+    _k = K.kernels[0]
+    for attr in ("_impls", "name"):
+        if not hasattr(_k, attr):
+            print(f"error: gen/volk_kernel_defs kernel objects lack `{attr}` "
+                  f"-- generator API changed; update this check.",
+                  file=sys.stderr)
+            sys.exit(2)
+    if _k._impls and not all(hasattr(i, "deps") and hasattr(i, "name")
+                             for i in _k._impls):
+        print("error: gen/volk_kernel_defs impl objects lack `deps` or `name` "
+              "-- generator API changed; update this check.", file=sys.stderr)
+        sys.exit(2)
+
     machine_files = sorted(args.build_lib_dir.glob("volk_machine_*.c"))
     if not machine_files:
         print(f"warning: no volk_machine_*.c files in {args.build_lib_dir} "
@@ -127,6 +160,12 @@ def main():
         print("missing from the machine's per-kernel _impl_names[] dispatch", file=sys.stderr)
         print("array. The kernel will silently fall back to a lower impl at", file=sys.stderr)
         print("runtime even though the better impl is present in the .so.", file=sys.stderr)
+        print("", file=sys.stderr)
+        print("To diagnose, look at:", file=sys.stderr)
+        print("  - gen/volk_kernel_defs.py    (impl-deps extraction)", file=sys.stderr)
+        print("  - gen/volk_machine_defs.py   (per-machine arch set)", file=sys.stderr)
+        print("  - tmpl/volk_machine_xxx.tmpl.c (dispatch-array codegen)", file=sys.stderr)
+        print("  - gen/archs.xml, gen/machines.xml (arch/machine grammar)", file=sys.stderr)
         print("", file=sys.stderr)
         print("See https://github.com/mtibbits/volk/issues/58 for context.", file=sys.stderr)
         print("", file=sys.stderr)
