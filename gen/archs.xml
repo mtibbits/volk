@@ -78,10 +78,6 @@ at the top, as a last resort.
 <arch name="orc">
 </arch>
 
-<!-- it's here for overrule stuff. -->
-<arch name="norc">
-</arch>
-
 <arch name="neon">
   <flag compiler="gnu">-funsafe-math-optimizations</flag>
   <flag compiler="clang">-funsafe-math-optimizations</flag>
