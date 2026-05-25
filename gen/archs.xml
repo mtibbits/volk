@@ -9,16 +9,6 @@ at the top, as a last resort.
 <arch name="generic"> <!-- name is required-->
 </arch>
 
-<arch name="softfp">
-  <flag compiler="gnu">-mfloat-abi=softfp</flag>
-  <flag compiler="clang">-mfloat-abi=softfp</flag>
-</arch>
-
-<arch name="hardfp">
-  <flag compiler="gnu">-mfloat-abi=hard</flag>
-  <flag compiler="clang">-mfloat-abi=hard</flag>
-</arch>
-
 <arch name="32">
   <flag compiler="gnu">-m32</flag>
   <flag compiler="clang">-m32</flag>

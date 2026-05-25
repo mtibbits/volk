@@ -9,7 +9,7 @@
 </machine>
 
 <machine name="neonv7">
-<archs>generic neon neonv7 softfp|hardfp orc|</archs>
+<archs>generic neon neonv7 orc|</archs>
 </machine>
 
 <machine name="neonv8">
