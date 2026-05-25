@@ -9,11 +9,6 @@ at the top, as a last resort.
 <arch name="generic"> <!-- name is required-->
 </arch>
 
-<arch name="32">
-  <flag compiler="gnu">-m32</flag>
-  <flag compiler="clang">-m32</flag>
-</arch>
-
 <arch name="64">
   <!-- <check name="check_extended_cpuid"> -->
       <!-- <param>0x80000001</param>
