@@ -97,13 +97,6 @@ at the top, as a last resort.
   <alignment>16</alignment>
 </arch>
 
-<arch name="sse4_a">
-  <check name="sse4a"></check>
-  <flag compiler="gnu">-msse4a</flag>
-  <flag compiler="clang">-msse4a</flag>
-  <alignment>16</alignment>
-</arch>
-
 <arch name="sse4_1">
   <check name="sse4_1"></check>
   <flag compiler="gnu">-msse4.1</flag>

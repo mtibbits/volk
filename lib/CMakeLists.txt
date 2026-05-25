@@ -191,7 +191,6 @@ if(CPU_IS_x86)
         # Figure out the version of Clang
 
         if(CMAKE_C_COMPILER_VERSION VERSION_LESS "3.2")
-            overrule_arch(sse4_a "Clang >= 3.2 required for SSE4a")
         endif(CMAKE_C_COMPILER_VERSION VERSION_LESS "3.2")
     endif("${CMAKE_C_COMPILER_ID}" MATCHES "Clang")
 
@@ -212,7 +211,6 @@ if(NOT CPU_IS_x86)
     overrule_arch(sse2 "Architecture is not x86 or x86_64")
     overrule_arch(sse3 "Architecture is not x86 or x86_64")
     overrule_arch(ssse3 "Architecture is not x86 or x86_64")
-    overrule_arch(sse4_a "Architecture is not x86 or x86_64")
     overrule_arch(sse4_1 "Architecture is not x86 or x86_64")
     overrule_arch(sse4_2 "Architecture is not x86 or x86_64")
     overrule_arch(avx "Architecture is not x86 or x86_64")
