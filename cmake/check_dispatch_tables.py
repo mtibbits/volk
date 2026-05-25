@@ -7,12 +7,12 @@ verifies that every implementation whose LV_HAVE_* source-gates are all
 defined by that machine's #define section is present in the machine's
 per-kernel _impl_names[] dispatch array.
 
-Catches the bug class introduced (and later fixed) by fork PR
-mtibbits/volk#57 cd2d50d: a codegen-pipeline change that silently
-filtered impls out of production dispatch tables. ctest does not
-catch this -- VOLK's qa_<kernel> tests construct their own
-function-pointer table via lib/qa_utils.cc and bypass the per-machine
-arrays that production callers use.
+Catches a class of bug VOLK's own ctest cannot detect: a
+codegen-pipeline change that silently filters impls out of production
+dispatch tables. The qa_<kernel> tests construct their own
+function-pointer table via lib/qa_utils.cc and never exercise the
+per-machine arrays that production callers use, so ctest 254/254 can
+pass even with the dispatch broken.
 
 Invoked by lib/CMakeLists.txt as a custom target made an explicit
 dependency of volk_obj.
@@ -35,7 +35,7 @@ from pathlib import Path
 
 def parse_machine_c(path: Path):
     """Return (defined_macros: set[str], dispatch: dict[kernel_name, set[impl_name]])."""
-    text = path.read_text()
+    text = path.read_text(encoding="utf-8")
     defined = set(re.findall(r'^#define (LV_HAVE_\w+)\s+1', text, re.M))
 
     # Each kernel block in the generated machine .c has this shape:
@@ -48,8 +48,11 @@ def parse_machine_c(path: Path):
     # We pin to the *first* {"..."} brace group after the kernel-name
     # string. The deps mask block uses {(1 << LV_X), ...} which has no
     # double-quotes, so the next-string-group anchor is unambiguous.
+    # The inner string-group quantifier is * (not +) so a hypothetical
+    # zero-impl kernel still enters the dispatch dict with an empty set,
+    # rather than silently dropping out and masking a regression.
     block_re = re.compile(
-        r'"(volk_\w+)"\s*,\s*\{\s*((?:"[^"]+"\s*,?\s*)+)\}',
+        r'"(volk_\w+)"\s*,\s*\{\s*((?:"[^"]+"\s*,?\s*)*)\}',
         re.M,
     )
     dispatch = {}
@@ -84,7 +87,10 @@ def check_machine(path: Path, all_kernels):
 
 
 def main():
-    ap = argparse.ArgumentParser(description=__doc__.strip().splitlines()[0])
+    ap = argparse.ArgumentParser(
+        description="Per-machine impl dispatch-table integrity check",
+        epilog="See mtibbits/volk#58 for context.",
+    )
     ap.add_argument("--source-dir", required=True, type=Path,
                     help="Volk source root (the dir with gen/, kernels/, ...)")
     ap.add_argument("--build-lib-dir", required=True, type=Path,
