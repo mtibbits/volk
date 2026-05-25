@@ -8,7 +8,7 @@
  */
 
 <% this_machine = machine_dict[args[0]] %>
-<% arch_names = this_machine.arch_names %>
+<% arch_names = this_machine.impl_arch_names %>
 
 %for arch in this_machine.archs:
 #define LV_HAVE_${arch.name.upper()} 1

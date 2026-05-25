@@ -12,6 +12,9 @@
 
 %for i, arch in enumerate(archs):
 #define LV_${arch.name.upper()} ${i}
+%for prov in arch.provides:
+#define LV_${prov.upper()} ${i}
+%endfor
 %endfor
 
 #endif /*INCLUDED_VOLK_CONFIG_FIXED*/
