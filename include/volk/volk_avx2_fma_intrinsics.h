@@ -139,4 +139,24 @@ static inline __m256 _mm256_log2_poly_avx2_fma(const __m256 x)
     return poly;
 }
 
+/*
+ * Squared magnitude of 8 interleaved complex floats packed across two
+ * __m256 inputs. Hadd-free: extracts I and Q lanes via shuffle plus
+ * cross-lane permute and folds them with one FMA. Replaces the
+ * `_mm256_hadd_ps` pattern (vhaddps: 2c rcp tput on Skylake-X+) with a
+ * 1c-rcp-tput shuffle+FMA sequence.
+ */
+static inline __m256 _mm256_magnitudesquared_ps_avx2_fma(const __m256 cplxValue0,
+                                                         const __m256 cplxValue1)
+{
+    const __m256i permute_mask = _mm256_set_epi32(7, 6, 3, 2, 5, 4, 1, 0);
+    const __m256 i_lane =
+        _mm256_shuffle_ps(cplxValue0, cplxValue1, _MM_SHUFFLE(2, 0, 2, 0));
+    const __m256 q_lane =
+        _mm256_shuffle_ps(cplxValue0, cplxValue1, _MM_SHUFFLE(3, 1, 3, 1));
+    const __m256 i = _mm256_permutevar8x32_ps(i_lane, permute_mask);
+    const __m256 q = _mm256_permutevar8x32_ps(q_lane, permute_mask);
+    return _mm256_fmadd_ps(i, i, _mm256_mul_ps(q, q));
+}
+
 #endif /* INCLUDE_VOLK_VOLK_AVX2_FMA_INTRINSICS_H_ */
