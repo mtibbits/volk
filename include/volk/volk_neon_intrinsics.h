@@ -192,6 +192,25 @@ static inline float32x4x2_t _vmultiply_complexq_f32(float32x4x2_t a_val,
     return c_val;
 }
 
+/* FMA-fused complex multiplication for float32x4x2_t (NEONv8+).
+ * Computes c = a * b where each lane carries (real, imag).
+ * Four ops total (vs six in _vmultiply_complexq_f32): 2x vmulq + 1x vfmsq + 1x vfmaq.
+ * Each FMA does a single rounding step vs two for the mul+add pair; net precision
+ * is strictly better than the non-FMA sibling.
+ */
+static inline float32x4x2_t _vmultiply_complexq_fma_f32(float32x4x2_t a_val,
+                                                        float32x4x2_t b_val)
+{
+    float32x4x2_t c_val;
+    // c.real = a.real * b.real - a.imag * b.imag
+    c_val.val[0] = vmulq_f32(a_val.val[0], b_val.val[0]);
+    c_val.val[0] = vfmsq_f32(c_val.val[0], a_val.val[1], b_val.val[1]);
+    // c.imag = a.real * b.imag + a.imag * b.real
+    c_val.val[1] = vmulq_f32(a_val.val[0], b_val.val[1]);
+    c_val.val[1] = vfmaq_f32(c_val.val[1], a_val.val[1], b_val.val[0]);
+    return c_val;
+}
+
 /* From ARM Compute Library, MIT license */
 static inline float32x4_t _vtaylor_polyq_f32(float32x4_t x, const float32x4_t coeffs[8])
 {
