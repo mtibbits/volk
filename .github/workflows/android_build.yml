@@ -17,7 +17,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        arch: 
+        arch:
           - { name: armeabi-v7a, allow_fail: false }
           - { name: arm64-v8a, allow_fail: false }
           - { name: x86, allow_fail: false }
@@ -26,38 +26,38 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
-      with:
-        submodules: 'recursive'
+      - uses: actions/checkout@v6
+        with:
+          submodules: "recursive"
 
-    - name: Update repositories
-      run: sudo apt update 
-    
-    # All dependencies
-    - name: Install dependencies
-      run: sudo apt install -y cmake python3-mako
+      - name: Update repositories
+        run: sudo apt update
 
-    # Setup Java
-    - uses: actions/setup-java@v4
-      with:
-        distribution: 'temurin'
-        java-version: '17'
+      # All dependencies
+      - name: Install dependencies
+        run: sudo apt install -y cmake python3-mako
 
-    # Setup Android SDK, and auto-accept licenses
-    - name: Install Android SDK
-      run: wget --quiet --output-document=android-sdk.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip && mkdir android-sdk-linux && unzip -qq android-sdk.zip -d android-sdk-linux && export ANDROID_HOME=./android-sdk-linux && echo y | $ANDROID_HOME/cmdline-tools/bin/sdkmanager --sdk_root=android-sdk-linux --update && (echo y; echo y; echo y; echo y; echo y; echo y; echo y; echo y) | $ANDROID_HOME/cmdline-tools/bin/sdkmanager --sdk_root=android-sdk-linux --licenses
+      # Setup Java
+      - uses: actions/setup-java@v5
+        with:
+          distribution: "temurin"
+          java-version: "17"
 
-    # Call SDKManager to install the Android NDK
-    - name: Install Android NDK
-      run: $GITHUB_WORKSPACE/android-sdk-linux/cmdline-tools/bin/sdkmanager --sdk_root=$GITHUB_WORKSPACE/android-sdk-linux --install "ndk;27.2.12479018" --channel=3
+      # Setup Android SDK, and auto-accept licenses
+      - name: Install Android SDK
+        run: wget --quiet --output-document=android-sdk.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip && mkdir android-sdk-linux && unzip -qq android-sdk.zip -d android-sdk-linux && export ANDROID_HOME=./android-sdk-linux && echo y | $ANDROID_HOME/cmdline-tools/bin/sdkmanager --sdk_root=android-sdk-linux --update && (echo y; echo y; echo y; echo y; echo y; echo y; echo y; echo y) | $ANDROID_HOME/cmdline-tools/bin/sdkmanager --sdk_root=android-sdk-linux --licenses
 
-    # Setup build directory
-    - name: Setup ${{ matrix.arch.name }}
-      shell: bash
-      run: cd $GITHUB_WORKSPACE/ && mkdir build && cd build && cmake -DCMAKE_TOOLCHAIN_FILE=$GITHUB_WORKSPACE/android-sdk-linux/ndk/27.2.12479018/build/cmake/android.toolchain.cmake -DANDROID_ABI=${{ matrix.arch.name }} -DANDROID_PLATFORM=android-34 ..
+      # Call SDKManager to install the Android NDK
+      - name: Install Android NDK
+        run: $GITHUB_WORKSPACE/android-sdk-linux/cmdline-tools/bin/sdkmanager --sdk_root=$GITHUB_WORKSPACE/android-sdk-linux --install "ndk;27.2.12479018" --channel=3
 
-    # Build
-    - name: Build ${{ matrix.arch.name }}
-      shell: bash
-      run: cd $GITHUB_WORKSPACE/build && make
-      continue-on-error: ${{ matrix.arch.allow_fail }}
+      # Setup build directory
+      - name: Setup ${{ matrix.arch.name }}
+        shell: bash
+        run: cd $GITHUB_WORKSPACE/ && mkdir build && cd build && cmake -DCMAKE_TOOLCHAIN_FILE=$GITHUB_WORKSPACE/android-sdk-linux/ndk/27.2.12479018/build/cmake/android.toolchain.cmake -DANDROID_ABI=${{ matrix.arch.name }} -DANDROID_PLATFORM=android-34 ..
+
+      # Build
+      - name: Build ${{ matrix.arch.name }}
+        shell: bash
+        run: cd $GITHUB_WORKSPACE/build && make
+        continue-on-error: ${{ matrix.arch.allow_fail }}

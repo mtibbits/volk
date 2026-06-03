@@ -11,22 +11,21 @@ name: Check PR Formatting
 on:
   push:
     paths-ignore:
-      - 'tmpl/'
-      - 'include/volk/sse2neon.h'
+      - "tmpl/"
+      - "include/volk/sse2neon.h"
   pull_request:
     paths-ignore:
-      - 'tmpl/'
-      - 'include/volk/sse2neon.h'
+      - "tmpl/"
+      - "include/volk/sse2neon.h"
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
-    - uses: gnuradio/clang-format-lint-action@v0.5-4
-      with:
-        source: '.'
-        exclude: './tmpl,./include/volk/sse2neon.h'
-        extensions: 'c,cc,cpp,cxx,h,hh'
-
+      - uses: actions/checkout@v6
+      - uses: gnuradio/clang-format-lint-action@v0.5-4
+        with:
+          source: "."
+          exclude: "./tmpl,./include/volk/sse2neon.h"
+          extensions: "c,cc,cpp,cxx,h,hh"
