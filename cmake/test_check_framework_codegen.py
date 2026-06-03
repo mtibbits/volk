@@ -248,6 +248,25 @@ def test_gnu_objdump_continuation_lines():
         assert ok, f"GNU vs llvm byte streams differ after stitching:\n{diff}"
 
 
+def test_require_mnemonic_present_passes():
+    """A required-mnemonic assertion passes when the pattern is in the body."""
+    mod = _load_module()
+    body = [{"address": "10", "bytes": ["aa"], "mnemonic": "vaddps",
+             "operands": "%ymm0, %ymm1, %ymm2"}]
+    ok, diff = mod.check_require_mnemonic(body, "^vadd")
+    assert ok, diff
+
+
+def test_require_mnemonic_absent_fails():
+    """It fails (with the observed mnemonics) when the pattern is absent."""
+    mod = _load_module()
+    body = [{"address": "10", "bytes": ["aa"], "mnemonic": "addss",
+             "operands": "%xmm0, %xmm1"}]
+    ok, diff = mod.check_require_mnemonic(body, "^vadd")
+    assert not ok
+    assert "^vadd" in diff and "addss" in diff, diff
+
+
 # ---------------------------------------------------------------------------
 # Cross-compiler robustness (mtibbits/volk#145)
 # ---------------------------------------------------------------------------
