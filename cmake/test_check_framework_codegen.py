@@ -1,0 +1,266 @@
+#!/usr/bin/env python3
+# Copyright 2026 Free Software Foundation, Inc.
+#
+# This file is part of VOLK
+#
+# SPDX-License-Identifier: LGPL-3.0-or-later
+#
+"""
+Informal test suite for cmake/check_framework_codegen.py (mtibbits/volk#78).
+
+Not wired into ctest -- documents the script's internal contracts and is
+runnable standalone:  python3 cmake/test_check_framework_codegen.py
+
+Exercises manifest parsing, whole-function disassembly extraction, and the
+byte_identical / within_noise comparison criteria. The extraction tests
+assemble tiny fixtures with the system toolchain, so they require `cc` and
+a disassembler (llvm-objdump or objdump) on PATH.
+"""
+
+import json
+import subprocess
+import sys
+from importlib import util
+from pathlib import Path
+
+THIS_DIR = Path(__file__).parent
+SCRIPT = THIS_DIR / "check_framework_codegen.py"
+
+
+def _load_module():
+    spec = util.spec_from_file_location("cfc", str(SCRIPT))
+    mod = util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def _which_objdump():
+    for cand in ("llvm-objdump", "llvm-objdump-18", "objdump"):
+        if subprocess.run(["which", cand], capture_output=True).returncode == 0:
+            return cand
+    raise RuntimeError("no disassembler found (llvm-objdump / objdump)")
+
+
+def test_manifest_parse():
+    """Script accepts a JSON manifest and lists declared tuples via --list-only."""
+    manifest = {
+        "tuples": [
+            {
+                "kernel": "volk_32f_x2_add_32f",
+                "isa": "avx",
+                "alignment": "a",
+                "impl_a": {
+                    "symbol": "volk_32f_x2_add_32f_a_avx",
+                    "machine_o": "volk_machine_avx_64_mmx_orc.c.o",
+                },
+                "impl_b": {
+                    "symbol": "volk_32f_x2_add_32f_a_avx_ref",
+                    "machine_o": "codegen_bootstrap_ref.c.o",
+                },
+                "criterion": "byte_identical",
+            }
+        ]
+    }
+    manifest_path = Path("/tmp/cge_test_manifest.json")
+    manifest_path.write_text(json.dumps(manifest))
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT),
+         "--manifest", str(manifest_path), "--list-only"],
+        capture_output=True, text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "volk_32f_x2_add_32f.avx.a" in result.stdout, result.stdout
+
+
+def test_empty_manifest_ok():
+    """An empty manifest is a valid zero-false-positives configuration."""
+    manifest_path = Path("/tmp/cge_empty_manifest.json")
+    manifest_path.write_text('{"tuples":[]}')
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT),
+         "--manifest", str(manifest_path), "--build-lib-dir", "/tmp"],
+        capture_output=True, text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "0 tuples" in result.stdout, result.stdout
+
+
+def test_bad_criterion_rejected():
+    """A manifest tuple with an unknown criterion fails with exit 2."""
+    manifest = {"tuples": [{
+        "kernel": "k", "isa": "avx", "alignment": "a",
+        "impl_a": {"symbol": "s", "machine_o": "m.o"},
+        "impl_b": {"symbol": "s2", "machine_o": "m2.o"},
+        "criterion": "bogus",
+    }]}
+    manifest_path = Path("/tmp/cge_bad_manifest.json")
+    manifest_path.write_text(json.dumps(manifest))
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT),
+         "--manifest", str(manifest_path), "--list-only"],
+        capture_output=True, text=True,
+    )
+    assert result.returncode == 2, (result.returncode, result.stdout)
+    assert "bogus" in result.stderr
+
+
+def test_function_body_extraction():
+    """extract_function_body collects the whole function body (prologue through
+    epilogue) for the named symbol, and stops at the next symbol."""
+    objdump = _which_objdump()
+    fixture_c = Path("/tmp/cge_fixture.c")
+    fixture_c.write_text(
+        "#include <immintrin.h>\n"
+        "void fixture_fn(float* c, const float* a, const float* b, unsigned n){\n"
+        "    unsigned e = n / 8;\n"
+        "    for (unsigned i = 0; i < e; i++) {\n"
+        "        __m256 x = _mm256_load_ps(a + i*8);\n"
+        "        __m256 y = _mm256_load_ps(b + i*8);\n"
+        "        _mm256_store_ps(c + i*8, _mm256_add_ps(x, y));\n"
+        "    }\n"
+        "}\n"
+        "void other_fn(void){}\n"
+    )
+    fixture_o = Path("/tmp/cge_fixture.o")
+    subprocess.run(["cc", "-O3", "-mavx", "-c", str(fixture_c),
+                    "-o", str(fixture_o)], check=True)
+    mod = _load_module()
+    instrs = mod.extract_function_body(fixture_o, "fixture_fn", objdump=objdump)
+    mnemonics = [i["mnemonic"] for i in instrs]
+    # Whole-body extraction includes prologue (endbr64) and the SIMD loop.
+    assert any(m.startswith("vadd") for m in mnemonics), mnemonics
+    # The next function's body must NOT bleed in: fixture_fn ends before
+    # other_fn. A 1-instruction `ret`-only other_fn would be the giveaway, so
+    # assert the extracted body is the add loop, not a degenerate stub.
+    assert len(instrs) > 3, mnemonics
+
+
+def test_byte_identical_same():
+    mod = _load_module()
+    a = [{"address": "10", "bytes": ["c5", "f4", "58", "04", "02"],
+          "mnemonic": "vaddps", "operands": "(%rdx,%rax), %ymm1, %ymm0"}]
+    ok, diff = mod.compare_byte_identical(a, a)
+    assert ok, diff
+
+
+def test_byte_identical_diff():
+    mod = _load_module()
+    a = [{"address": "10", "bytes": ["c5", "f4", "58", "04", "02"],
+          "mnemonic": "vaddps", "operands": "(%rdx,%rax), %ymm1, %ymm0"}]
+    b = [{"address": "10", "bytes": ["c5", "f4", "59", "04", "02"],
+          "mnemonic": "vmulps", "operands": "(%rdx,%rax), %ymm1, %ymm0"}]
+    ok, diff = mod.compare_byte_identical(a, b)
+    assert not ok
+    assert "vaddps" in diff and "vmulps" in diff, diff
+
+
+def test_within_noise_register_swap():
+    """Register reassignment within the same operand class passes within_noise."""
+    mod = _load_module()
+    a = [{"address": "10", "bytes": ["aa"], "mnemonic": "vaddps",
+          "operands": "(%rsi,%rax), %ymm0, %ymm1"}]
+    b = [{"address": "10", "bytes": ["bb"], "mnemonic": "vaddps",
+          "operands": "(%rdx,%rcx), %ymm2, %ymm3"}]
+    ok, diff = mod.compare_within_noise(a, b)
+    assert ok, diff
+
+
+def test_within_noise_mnemonic_diff_fails():
+    mod = _load_module()
+    a = [{"address": "10", "bytes": ["aa"], "mnemonic": "vaddps",
+          "operands": "%ymm0, %ymm1, %ymm2"}]
+    b = [{"address": "10", "bytes": ["bb"], "mnemonic": "vmulps",
+          "operands": "%ymm0, %ymm1, %ymm2"}]
+    ok, diff = mod.compare_within_noise(a, b)
+    assert not ok
+    assert "vaddps" in diff and "vmulps" in diff, diff
+
+
+def test_within_noise_real_two_symbols():
+    """End-to-end within_noise over two real, differently-named compilations of
+    the same loop. Exercises the branch-target annotation path (<symbol+off>):
+    the two functions have different symbol names, so their internal jump
+    operands annotate differently -- within_noise must tolerate that. This is
+    the regression guard for the branch-operand false-failure bug."""
+    objdump = _which_objdump()
+    src = ("#include <immintrin.h>\n"
+           "void NAME(float* c, const float* a, const float* b, unsigned n){\n"
+           "    unsigned e = n / 8;\n"
+           "    for (unsigned i = 0; i < e; i++) {\n"
+           "        __m256 x = _mm256_loadu_ps(a + i*8);\n"
+           "        __m256 y = _mm256_loadu_ps(b + i*8);\n"
+           "        _mm256_storeu_ps(c + i*8, _mm256_add_ps(x, y));\n"
+           "    }\n"
+           "    for (unsigned i = e*8; i < n; i++) c[i] = a[i] + b[i];\n"
+           "}\n")
+    a_c = Path("/tmp/cge_wn_a.c"); a_c.write_text(src.replace("NAME", "wn_fn_a"))
+    b_c = Path("/tmp/cge_wn_b.c"); b_c.write_text(src.replace("NAME", "wn_fn_b"))
+    a_o = Path("/tmp/cge_wn_a.o"); b_o = Path("/tmp/cge_wn_b.o")
+    for s, o in ((a_c, a_o), (b_c, b_o)):
+        subprocess.run(["cc", "-O3", "-mavx", "-c", str(s), "-o", str(o)],
+                       check=True)
+    mod = _load_module()
+    ia = mod.extract_function_body(a_o, "wn_fn_a", objdump=objdump)
+    ib = mod.extract_function_body(b_o, "wn_fn_b", objdump=objdump)
+    # The two bodies have internal jne/je to <wn_fn_a+off> vs <wn_fn_b+off>.
+    # byte_identical would fail on the differing symbol bytes; within_noise
+    # must PASS because the operand classes match once annotations are stripped.
+    ok, diff = mod.compare_within_noise(ia, ib)
+    assert ok, f"within_noise should tolerate differing branch-target symbol "\
+               f"names but failed:\n{diff}"
+
+
+def test_gnu_objdump_continuation_lines():
+    """GNU objdump wraps instructions longer than 7 bytes onto a second,
+    mnemonic-less line (e.g. the 9-byte nopw alignment pad before a hot loop).
+    The harness must stitch those bytes onto the prior instruction, not error.
+    This guards the GNU-objdump path (the rest of the suite prefers
+    llvm-objdump). Skips cleanly if GNU objdump is unavailable."""
+    import shutil
+    gnu = shutil.which("objdump")
+    if not gnu or "llvm" in gnu:
+        print("  (skip test_gnu_objdump_continuation_lines: no GNU objdump)")
+        return
+    fixture_c = Path("/tmp/cge_gnu_fixture.c")
+    fixture_c.write_text(
+        "#include <immintrin.h>\n"
+        "void gnu_fn(float* c, const float* a, const float* b, unsigned n){\n"
+        "    unsigned e = n / 8;\n"
+        "    for (unsigned i = 0; i < e; i++) {\n"
+        "        __m256 x = _mm256_load_ps(a + i*8);\n"
+        "        __m256 y = _mm256_load_ps(b + i*8);\n"
+        "        _mm256_store_ps(c + i*8, _mm256_add_ps(x, y));\n"
+        "    }\n"
+        "}\n"
+    )
+    fixture_o = Path("/tmp/cge_gnu_fixture.o")
+    subprocess.run(["cc", "-O3", "-mavx", "-c", str(fixture_c),
+                    "-o", str(fixture_o)], check=True)
+    mod = _load_module()
+    # Must not raise on the continuation line GNU objdump emits for the nopw pad.
+    instrs = mod.extract_function_body(fixture_o, "gnu_fn", objdump=gnu)
+    # If llvm-objdump is also present, the stitched GNU byte stream must match
+    # llvm's byte-for-byte, proving the stitch reassembles the wrapped bytes.
+    llvm = shutil.which("llvm-objdump") or shutil.which("llvm-objdump-18")
+    if llvm:
+        ill = mod.extract_function_body(fixture_o, "gnu_fn", objdump=llvm)
+        ok, diff = mod.compare_byte_identical(instrs, ill)
+        assert ok, f"GNU vs llvm byte streams differ after stitching:\n{diff}"
+
+
+def main():
+    tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
+    failed = 0
+    for t in tests:
+        try:
+            t()
+            print(f"PASS {t.__name__}")
+        except Exception as e:
+            failed += 1
+            print(f"FAIL {t.__name__}: {e}")
+    print(f"\n{len(tests) - failed}/{len(tests)} passed")
+    sys.exit(1 if failed else 0)
+
+
+if __name__ == "__main__":
+    main()

@@ -538,6 +538,13 @@ if(MSVC)
     set_source_files_properties(${volk_sources} PROPERTIES LANGUAGE CXX)
 endif()
 
+# Codegen-equivalence harness (mtibbits/volk#78): define the
+# ADD_CODEGEN_EQUIVALENCE_TUPLE / FINALIZE_CODEGEN_EQUIVALENCE_HARNESS API
+# before any tuple-declaration call sites. The harness asserts
+# byte-identical-or-within-noise machine code between declared impl pairs at
+# build time. See cmake/check_framework_codegen_README.md.
+include(${PROJECT_SOURCE_DIR}/cmake/CodegenEquivalence.cmake)
+
 #Create an object to reference Volk source and object files.
 #
 #NOTE: This object cannot be used to propagate include directories or
@@ -610,6 +617,64 @@ target_include_directories(
     PRIVATE ${CMAKE_CURRENT_BINARY_DIR}
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
     PUBLIC $<INSTALL_INTERFACE:include>)
+
+# Bootstrap codegen-equivalence assertion (mtibbits/volk#78 first consumer):
+# compile a byte-for-byte copy of volk_32f_x2_add_32f_a_avx into a separate TU
+# and assert the whole function is byte_identical to the in-header impl. Proves
+# the harness extracts and compares disassembly correctly on a known-equal
+# baseline, independent of any fusion-framework code.
+#
+# The base-avx machine TU name is detected from the configured machine list,
+# NOT hardcoded: with ORC it is avx_64_mmx_orc, without it is avx_64_mmx, and
+# matching "^avx_" excludes avx2_/avx512*. If no base-avx machine is built
+# (e.g. a non-x86 target), the bootstrap tuple is skipped and the harness runs
+# with zero tuples -- still valid (no false positives on a clean tree).
+set(_cge_avx_machine "")
+foreach(_cge_m ${available_machines})
+    if(_cge_m MATCHES "^avx_")
+        set(_cge_avx_machine "${_cge_m}")
+        break()
+    endif()
+endforeach()
+if(_cge_avx_machine)
+    # Optimisation flags are INHERITED from the build config (CMAKE_C_FLAGS_<cfg>),
+    # not hardcoded, so this TU matches the avx machine TU under any build type
+    # (Release -O3, Debug -O0, ...) rather than only Release. Only the avx
+    # machine arch flags and PIC (to match the shared lib) are added here.
+    add_library(volk_codegen_bootstrap_ref OBJECT
+        ${PROJECT_SOURCE_DIR}/cmake/codegen_bootstrap_ref.c)
+    set_target_properties(volk_codegen_bootstrap_ref PROPERTIES
+        POSITION_INDEPENDENT_CODE ON)
+    target_compile_options(volk_codegen_bootstrap_ref PRIVATE
+        -fvisibility=hidden
+        -m64 -mmmx -msse -msse2 -msse3 -mssse3 -msse4.1 -msse4.2 -mpopcnt -mavx)
+
+    ADD_CODEGEN_EQUIVALENCE_TUPLE(
+        KERNEL    volk_32f_x2_add_32f
+        ISA       avx
+        ALIGNMENT a
+        CRITERION byte_identical
+        IMPL_A_SYMBOL    volk_32f_x2_add_32f_a_avx
+        IMPL_A_MACHINE_O volk_machine_${_cge_avx_machine}.c.o
+        IMPL_B_SYMBOL    volk_32f_x2_add_32f_a_avx_ref
+        IMPL_B_MACHINE_O codegen_bootstrap_ref.c.o
+    )
+else()
+    message(STATUS "codegen-equivalence: no base-avx machine built; "
+                   "bootstrap tuple skipped (harness runs with zero tuples)")
+endif()
+
+# Codegen-equivalence harness (mtibbits/volk#78): emit the manifest from the
+# ADD_CODEGEN_EQUIVALENCE_TUPLE() calls above and create the check target, then
+# make the shared lib depend on it so a regression in a framework
+# instantiation's machine code breaks the build. With zero tuples declared the
+# manifest is empty and the check is a no-op (zero false positives on
+# origin/main). Mirrors the volk_check_dispatch_tables wiring (PR #59 / B15).
+FINALIZE_CODEGEN_EQUIVALENCE_HARNESS()
+if(_cge_avx_machine)
+    add_dependencies(volk_check_framework_codegen volk_codegen_bootstrap_ref)
+endif()
+add_dependencies(volk volk_check_framework_codegen)
 
 #Configure target properties
 if(ORC_FOUND)
