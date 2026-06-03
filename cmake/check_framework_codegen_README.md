@@ -102,6 +102,27 @@ on.
   flag set introduces register-allocation churn without changing the
   instruction stream's shape.
 
+## Required-mnemonic assertion (scalar-fallback guard)
+
+Equivalence to a reference does not prove an impl emits the intended ISA — a
+scalar fallback could be byte-identical to a scalar reference and pass every
+criterion above. Declare an optional `REQUIRE_MNEMONIC <regex>` on a tuple to
+*additionally* assert the compared function contains at least one instruction
+whose mnemonic matches the regex, checked against **each** impl independently:
+
+```cmake
+ADD_CODEGEN_EQUIVALENCE_TUPLE(
+    ...
+    REQUIRE_MNEMONIC "^vaddps"   # the function MUST emit a packed vaddps
+)
+```
+
+The regex is matched against each instruction's mnemonic (pass if any matches).
+On failure the build halts, naming the tuple, the pattern, and the mnemonics
+actually present. The field is **opt-in**: tuples without it are unaffected and
+produce identical manifest JSON to before. Use it on framework-instantiation
+tuples to guarantee the instantiation didn't silently fall back to scalar code.
+
 ## How the check runs
 
 1. **CMake configure:** each `ADD_CODEGEN_EQUIVALENCE_TUPLE` appends a JSON
