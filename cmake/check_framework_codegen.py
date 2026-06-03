@@ -85,6 +85,19 @@ def parse_manifest(path: Path) -> list:
             print(f"error: unknown criterion {t['criterion']!r} (must be "
                   f"byte_identical or within_noise)", file=sys.stderr)
             sys.exit(2)
+        # Optional opt-in field: a regex the compared function must match at
+        # least one instruction mnemonic against (scalar-fallback guard).
+        if "require_mnemonic" in t:
+            if not isinstance(t["require_mnemonic"], str):
+                print(f"error: require_mnemonic must be a string regex: {t}",
+                      file=sys.stderr)
+                sys.exit(2)
+            try:
+                re.compile(t["require_mnemonic"])
+            except re.error as e:
+                print(f"error: require_mnemonic is not a valid regex "
+                      f"({t['require_mnemonic']!r}): {e}", file=sys.stderr)
+                sys.exit(2)
     return tuples
 
 
@@ -320,6 +333,21 @@ def compare_within_noise(a: list, b: list):
     return True, ""
 
 
+def check_require_mnemonic(body: list, pattern: str):
+    """Assert at least one instruction in `body` has a mnemonic matching the
+    regex `pattern`. Returns (ok, diff). Equivalence to a reference does not
+    prove an impl emits the intended ISA -- a scalar fallback could be
+    byte-identical to a scalar reference and pass; this guards against that. On
+    failure, diff names the pattern and the sorted set of mnemonics present.
+    """
+    rx = re.compile(pattern)
+    if any(rx.search(instr["mnemonic"]) for instr in body):
+        return True, ""
+    seen = sorted({instr["mnemonic"] for instr in body})
+    return False, (f"required-mnemonic assertion FAILED: no instruction "
+                   f"mnemonic matches /{pattern}/.\n  mnemonics present: {seen}")
+
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -375,6 +403,15 @@ def main():
             ok, diff = compare_byte_identical(a_instrs, b_instrs)
         else:
             ok, diff = compare_within_noise(a_instrs, b_instrs)
+        # Optional required-mnemonic assertion: only meaningful once the pair is
+        # otherwise equivalent. Checked against each impl independently.
+        if ok and "require_mnemonic" in t:
+            for label, instrs in (("impl_a", a_instrs), ("impl_b", b_instrs)):
+                mok, mdiff = check_require_mnemonic(instrs, t["require_mnemonic"])
+                if not mok:
+                    ok = False
+                    diff = f"[{label}] {mdiff}"
+                    break
         if not ok:
             failures.append((tuple_id(t), diff))
 

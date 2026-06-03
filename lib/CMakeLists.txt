@@ -658,6 +658,7 @@ if(_cge_avx_machine)
         IMPL_A_MACHINE_O volk_machine_${_cge_avx_machine}.c.o
         IMPL_B_SYMBOL    volk_32f_x2_add_32f_a_avx_ref
         IMPL_B_MACHINE_O codegen_bootstrap_ref.c.o
+        REQUIRE_MNEMONIC "^vaddps"
     )
 else()
     message(STATUS "codegen-equivalence: no base-avx machine built; "
