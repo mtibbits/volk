@@ -21,11 +21,14 @@
 #include <sys/types.h> // for int16_t, int32_t
 #include <chrono>
 #include <cmath>    // for sqrt, fabs, abs
+#include <cstdint>  // for uint8_t, uintptr_t (#89 canary)
+#include <cstdlib>  // for malloc, free (#89 canary)
 #include <cstring>  // for memcpy, memset
 #include <ctime>    // for clock
 #include <iostream> // for cerr
 #include <limits>   // for numeric_limits
 #include <map>      // for map, map<>::mappe...
+#include <memory>   // for unique_ptr (#89 canary)
 #include <random>
 #include <stdexcept> // for runtime_error (#88)
 #include <vector>    // for vector, _Bit_refe...
@@ -1764,4 +1767,304 @@ bool run_volk_reference_test(volk_func_desc_t desc,
         }
     }
     return fail_global;
+}
+
+// #89: a single output buffer bracketed by sentinel guard regions, allocated in
+// its OWN malloc (NOT the qa mem pool). The data region is EXACTLY data_bytes
+// long -- no twiddle slack -- so an over-run cannot hide in allocator padding;
+// it lands in the trailing guard (caught here) or, far enough past, in the ASan
+// redzone of this allocation. The data start is aligned to volk_get_alignment()
+// so `a_*` (aligned) impls stay valid; the leading guard is the bytes between the
+// malloc base and that aligned start (the alignment slack is absorbed there, so
+// the trailing guard is a known minimum width).
+//
+//   [ leading guard >= guard_bytes | data_bytes (aligned) | trailing guard ]
+//
+namespace {
+class guarded_output_buffer
+{
+public:
+    guarded_output_buffer(size_t data_bytes, size_t alignment, size_t guard_bytes)
+        : data_bytes_(data_bytes)
+    {
+        // Over-allocate: leading guard + alignment slack + data + trailing guard.
+        // align_up of (base + guard_bytes) consumes at most (alignment - 1) bytes,
+        // so the leading guard is >= guard_bytes and the trailing guard >= guard_bytes.
+        total_ = guard_bytes + alignment + data_bytes + guard_bytes;
+        base_ = static_cast<uint8_t*>(std::malloc(total_));
+        if (base_ == nullptr) {
+            throw std::runtime_error("canary: guarded buffer malloc failed");
+        }
+        uintptr_t raw = reinterpret_cast<uintptr_t>(base_) + guard_bytes;
+        uintptr_t aligned =
+            (raw + (alignment - 1)) & ~static_cast<uintptr_t>(alignment - 1);
+        data_ = reinterpret_cast<uint8_t*>(aligned);
+        assert(data_ >= base_ + guard_bytes);
+        assert(data_ + data_bytes_ + guard_bytes <= base_ + total_);
+    }
+    ~guarded_output_buffer() { std::free(base_); }
+    guarded_output_buffer(const guarded_output_buffer&) = delete;
+    guarded_output_buffer& operator=(const guarded_output_buffer&) = delete;
+
+    void* data() const { return data_; }
+    size_t data_bytes() const { return data_bytes_; }
+
+    // Fill the WHOLE allocation (both guards + data) with one sentinel byte.
+    void fill(uint8_t sentinel) { std::memset(base_, sentinel, total_); }
+
+    // True if any guard byte differs from `sentinel` (an over/under-write).
+    // `byte_off` is set to the offset relative to the data start: negative means
+    // a write before index 0 (leading guard), >= data_bytes() means a write past
+    // the end (trailing guard).
+    bool guard_violation(uint8_t sentinel, ptrdiff_t& byte_off) const
+    {
+        for (uint8_t* p = base_; p < data_; ++p) {
+            if (*p != sentinel) {
+                byte_off = p - data_;
+                return true;
+            }
+        }
+        uint8_t* tail_start = data_ + data_bytes_;
+        const uint8_t* tail_end = base_ + total_;
+        for (uint8_t* p = tail_start; p < tail_end; ++p) {
+            if (*p != sentinel) {
+                byte_off = p - data_;
+                return true;
+            }
+        }
+        return false;
+    }
+
+private:
+    uint8_t* base_;
+    uint8_t* data_;
+    size_t total_;
+    size_t data_bytes_;
+};
+} // namespace
+
+// #89: see the declaration in qa_utils.h. Runs every impl through its own
+// guarded output buffers with the two-sentinel protocol and reports per-impl
+// pass/fail into `results`. Supports the buffer signatures the qa harness can
+// drive (1-4 buffers, with an optional real s32f or complex s32fc scalar);
+// other shapes are skipped (reported as no failure) since the canary can only
+// guard what it can call.
+volk_canary_summary run_volk_canary_test(volk_func_desc_t desc,
+                                         void (*manual_func)(),
+                                         std::string name,
+                                         lv_32fc_t scalar,
+                                         unsigned int vlen,
+                                         std::vector<volk_test_results_t>* results,
+                                         const std::vector<float>& float_edge_cases,
+                                         const std::vector<lv_32fc_t>& complex_edge_cases)
+{
+    volk_canary_summary summary;
+
+    results->push_back(volk_test_results_t());
+    results->back().name = name;
+    results->back().vlen = vlen;
+    results->back().iter = 2; // two runs per impl (S1 then S2)
+    results->back().config_name = name;
+    fmt::print("\nRUN_VOLK_CANARY_TEST: {}(vlen={})\n", name, vlen);
+
+    volk_qa_aligned_mem_pool mem_pool;
+    // Inputs are sized exactly `vlen` (no twiddle) and drawn from the pool; the
+    // canary only guards the OUTPUT write side (input immutability / over-read is
+    // #90, best-effort via ASan). benchmark_mode=true bypasses the ">=2 arch"
+    // guard so single-impl kernels are still checked.
+    qa_test_data d = setup_test_data(
+        desc, name, vlen, true, float_edge_cases, complex_edge_cases, mem_pool);
+    if (!d.ok) {
+        return summary;
+    }
+
+    const bool s32f =
+        (d.inputsc.size() == 1) && d.inputsc[0].is_float && !d.inputsc[0].is_complex;
+    const bool s32fc =
+        (d.inputsc.size() == 1) && d.inputsc[0].is_float && d.inputsc[0].is_complex;
+    // These "cannot guard this kernel" cases leave summary.applied == false so the
+    // driver reports the kernel as skipped (NOT ok). Diagnostics go to stdout so the
+    // driver's per-(kernel,vlen) stdout muting suppresses them during the sweep,
+    // consistent with how the guard/unwritten messages below are emitted.
+    if (d.inputsc.size() != 0 && !s32f && !s32fc) {
+        std::cout << "canary mode: unsupported scalar signature for " << name
+                  << std::endl;
+        return summary;
+    }
+    if (d.outputsig.empty()) {
+        std::cout << "canary mode: kernel has no output buffer to guard: " << name
+                  << std::endl;
+        return summary;
+    }
+    if (d.both_sigs.size() > 4 || (d.both_sigs.size() == 4 && d.inputsc.size() != 0)) {
+        std::cout << "canary mode: unsupported arity for " << name << std::endl;
+        return summary;
+    }
+
+    const size_t alignment = volk_get_alignment();
+    // Guard wide enough that a one-past write of any element type lands inside the
+    // trailing guard (>= alignment + a few elements).
+    const size_t guard_bytes = alignment + 64;
+
+    const uint8_t S1 = 0xA5;
+    const uint8_t S2 = 0x3C;
+
+    for (size_t i = 0; i < d.arch_list.size(); i++) {
+        const std::string arch = d.arch_list[i];
+        summary.applied = true; // we are about to guard-check at least one impl
+
+        // One guarded own-malloc buffer per output; inputs stay in the pool.
+        std::vector<std::unique_ptr<guarded_output_buffer>> gbufs;
+        gbufs.reserve(d.outputsig.size());
+        for (size_t j = 0; j < d.outputsig.size(); j++) {
+            const size_t out_bytes = static_cast<size_t>(vlen) * d.outputsig[j].size *
+                                     (d.outputsig[j].is_complex ? 2 : 1);
+            gbufs.push_back(std::make_unique<guarded_output_buffer>(
+                out_bytes, alignment, guard_bytes));
+        }
+
+        // buffs layout matches setup_test_data: outputs first, then inputs.
+        auto build_buffs = [&]() {
+            std::vector<void*> buffs;
+            for (size_t j = 0; j < d.outputsig.size(); j++) {
+                buffs.push_back(gbufs[j]->data());
+            }
+            for (size_t k = 0; k < d.inputsig.size(); k++) {
+                buffs.push_back(d.test_data[i][d.outputsig.size() + k]);
+            }
+            return buffs;
+        };
+        auto reload_inputs = [&]() {
+            for (size_t k = 0; k < d.inputsig.size(); k++) {
+                const size_t in_bytes = static_cast<size_t>(vlen) * d.inputsig[k].size *
+                                        (d.inputsig[k].is_complex ? 2 : 1);
+                memcpy(d.test_data[i][d.outputsig.size() + k], d.inbuffs[k], in_bytes);
+            }
+        };
+        auto run_once = [&](std::vector<void*>& buffs) {
+            switch (d.both_sigs.size()) {
+            case 1:
+                if (s32fc)
+                    run_cast_test1_s32fc(
+                        (volk_fn_1arg_s32fc)(manual_func), buffs, scalar, vlen, 1, arch);
+                else if (s32f)
+                    run_cast_test1_s32f((volk_fn_1arg_s32f)(manual_func),
+                                        buffs,
+                                        scalar.real(),
+                                        vlen,
+                                        1,
+                                        arch);
+                else
+                    run_cast_test1((volk_fn_1arg)(manual_func), buffs, vlen, 1, arch);
+                break;
+            case 2:
+                if (s32fc)
+                    run_cast_test2_s32fc(
+                        (volk_fn_2arg_s32fc)(manual_func), buffs, scalar, vlen, 1, arch);
+                else if (s32f)
+                    run_cast_test2_s32f((volk_fn_2arg_s32f)(manual_func),
+                                        buffs,
+                                        scalar.real(),
+                                        vlen,
+                                        1,
+                                        arch);
+                else
+                    run_cast_test2((volk_fn_2arg)(manual_func), buffs, vlen, 1, arch);
+                break;
+            case 3:
+                if (s32fc)
+                    run_cast_test3_s32fc(
+                        (volk_fn_3arg_s32fc)(manual_func), buffs, scalar, vlen, 1, arch);
+                else if (s32f)
+                    run_cast_test3_s32f((volk_fn_3arg_s32f)(manual_func),
+                                        buffs,
+                                        scalar.real(),
+                                        vlen,
+                                        1,
+                                        arch);
+                else
+                    run_cast_test3((volk_fn_3arg)(manual_func), buffs, vlen, 1, arch);
+                break;
+            case 4:
+                run_cast_test4((volk_fn_4arg)(manual_func), buffs, vlen, 1, arch);
+                break;
+            default:
+                break;
+            }
+        };
+
+        bool arch_guard = false;
+        bool arch_unwritten = false;
+
+        // ---- Run 1: prefill the whole guarded buffer with sentinel S1 ----
+        for (auto& g : gbufs) {
+            g->fill(S1);
+        }
+        reload_inputs();
+        {
+            std::vector<void*> buffs = build_buffs();
+            run_once(buffs);
+        }
+        // Snapshot the data region after run 1 (before S2 overwrites it) and check
+        // the guards for an over/under-write. Guard violations go to std::cerr (NOT
+        // std::cout) so they survive the sweep's per-(kernel,vlen) stdout muting: a
+        // touched guard is ALWAYS a real defect (unlike the unwritten check below,
+        // which reduction kernels trip expectedly), so its arch/offset detail must
+        // stay visible and actionable on the one run where it fires.
+        std::vector<std::vector<uint8_t>> snap_s1(d.outputsig.size());
+        for (size_t j = 0; j < gbufs.size(); j++) {
+            ptrdiff_t off = 0;
+            if (gbufs[j]->guard_violation(S1, off)) {
+                arch_guard = true;
+                std::cerr << name << ": canary guard touched on arch " << arch
+                          << " (output " << j << ", byte offset " << off
+                          << " relative to data start)\n";
+            }
+            const uint8_t* p = static_cast<const uint8_t*>(gbufs[j]->data());
+            snap_s1[j].assign(p, p + gbufs[j]->data_bytes());
+        }
+
+        // ---- Run 2: prefill with the distinct sentinel S2 ----
+        for (auto& g : gbufs) {
+            g->fill(S2);
+        }
+        reload_inputs();
+        {
+            std::vector<void*> buffs = build_buffs();
+            run_once(buffs);
+        }
+        for (size_t j = 0; j < gbufs.size(); j++) {
+            ptrdiff_t off = 0;
+            if (gbufs[j]->guard_violation(S2, off)) {
+                arch_guard = true;
+                std::cerr << name << ": canary guard touched on arch " << arch
+                          << " (output " << j << ", byte offset " << off
+                          << " relative to data start)\n";
+            }
+            // In-bounds-unwritten check: a byte the kernel wrote holds the same
+            // (deterministic) value in both runs, so it cannot equal S1 after run 1
+            // AND S2 after run 2. A byte that still equals both sentinels was never
+            // written -- an in-bounds element left untouched (which ASan cannot see).
+            const uint8_t* d2 = static_cast<const uint8_t*>(gbufs[j]->data());
+            for (size_t b = 0; b < gbufs[j]->data_bytes(); b++) {
+                if (snap_s1[j][b] == S1 && d2[b] == S2) {
+                    arch_unwritten = true;
+                    std::cout << name << ": canary found unwritten output byte on arch "
+                              << arch << " (output " << j << ", byte offset " << b << ")"
+                              << std::endl;
+                    break;
+                }
+            }
+        }
+
+        volk_test_time_t result;
+        result.name = arch;
+        result.time = 0.0; // canary does not time the run; avoid an uninitialized read
+        result.units = "canary"; // populate every field, even though unread on this path
+        result.pass = !(arch_guard || arch_unwritten);
+        results->back().results[arch] = result;
+        summary.guard_violation = summary.guard_violation || arch_guard;
+        summary.unwritten = summary.unwritten || arch_unwritten;
+    }
+    return summary;
 }
