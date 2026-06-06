@@ -760,6 +760,7 @@ if(ENABLE_TESTING)
         volk_gen_test(
             volk_test_correctness SOURCES
             ${CMAKE_CURRENT_SOURCE_DIR}/test_correctness.cc
+            ${CMAKE_CURRENT_SOURCE_DIR}/volk_reference.cc
             ${CMAKE_CURRENT_SOURCE_DIR}/qa_utils.cc TARGET_DEPS volk_static)
     else()
         volk_gen_test(volk_test_all SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/testqa.cc
@@ -767,6 +768,7 @@ if(ENABLE_TESTING)
         volk_gen_test(
             volk_test_correctness SOURCES
             ${CMAKE_CURRENT_SOURCE_DIR}/test_correctness.cc
+            ${CMAKE_CURRENT_SOURCE_DIR}/volk_reference.cc
             ${CMAKE_CURRENT_SOURCE_DIR}/qa_utils.cc TARGET_DEPS volk)
     endif()
     target_link_libraries(volk_test_all fmt::fmt)

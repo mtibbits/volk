@@ -246,6 +246,21 @@ bool run_volk_tests(
     bool with_minmax = false,
     std::ofstream* csv_out = nullptr);
 
+// #88: compare every impl against an independent double-precision reference oracle
+// (catches defects all impls share). Defined in qa_utils.cc; oracle from the
+// volk_reference registry. Returns true if any impl diverges past the entry tol.
+struct volk_reference_entry;
+bool run_volk_reference_test(
+    volk_func_desc_t,
+    void (*)(),
+    std::string,
+    const volk_reference_entry&,
+    lv_32fc_t,
+    unsigned int,
+    std::vector<volk_test_results_t>* results = NULL,
+    const std::vector<float>& float_edge_cases = std::vector<float>(),
+    const std::vector<lv_32fc_t>& complex_edge_cases = std::vector<lv_32fc_t>());
+
 #define VOLK_PROFILE(func, test_params, results) \
     run_volk_tests(func##_get_func_desc(),       \
                    (void (*)())func##_manual,    \
