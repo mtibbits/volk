@@ -261,6 +261,39 @@ bool run_volk_reference_test(
     const std::vector<float>& float_edge_cases = std::vector<float>(),
     const std::vector<lv_32fc_t>& complex_edge_cases = std::vector<lv_32fc_t>());
 
+// #89: outcome of run_volk_canary_test, split so the driver can treat the two
+// defect classes differently. A guard violation (a write past the end or before
+// index 0 of a buffer) is always a defect, for any kernel. An unwritten in-bounds
+// element is a defect for a MAP kernel, but expected for a reduction/index kernel
+// whose output is a fixed-size scalar rather than num_points elements -- which the
+// signature alone cannot distinguish -- so the driver surfaces it for triage
+// rather than hard-failing.
+struct volk_canary_summary {
+    bool guard_violation = false; // over/under-write past a buffer (always a defect)
+    bool unwritten = false;       // an in-bounds output element never written
+    bool applied = false;         // false => the canary could not guard this kernel
+                                  // (no output buffer / unsupported signature): the
+                                  // driver reports such kernels as skipped, not ok
+};
+
+// #89: output-buffer canary. Allocates each output buffer with leading/trailing
+// sentinel guard regions in its OWN malloc (bypassing the qa mem pool, so the
+// data region is exactly num_points elements with no slack to hide an over-run,
+// and so ASan redzones bracket it). For every impl, runs twice with two distinct
+// sentinels: a touched guard flags an over/under-write; an in-bounds byte left at
+// both sentinels across the two runs flags a never-written element. This canary is
+// allocator-independent and authoritative; ASan is best-effort double coverage.
+// Toggle is in the driver; run_volk_tests/default qa are untouched.
+volk_canary_summary run_volk_canary_test(
+    volk_func_desc_t,
+    void (*)(),
+    std::string,
+    lv_32fc_t,
+    unsigned int,
+    std::vector<volk_test_results_t>* results = NULL,
+    const std::vector<float>& float_edge_cases = std::vector<float>(),
+    const std::vector<lv_32fc_t>& complex_edge_cases = std::vector<lv_32fc_t>());
+
 #define VOLK_PROFILE(func, test_params, results) \
     run_volk_tests(func##_get_func_desc(),       \
                    (void (*)())func##_manual,    \
