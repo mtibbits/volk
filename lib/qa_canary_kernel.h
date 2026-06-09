@@ -41,6 +41,13 @@
  *                               (HARNESS_CANARY_ASAN_DEMO); it demonstrates that
  *                               the guarded path's own-malloc buffers are
  *                               bracketed by ASan redzones (acceptance #89-2).
+ *   volk_32f_inputscribble_32f  copies [0,num_points) to the output correctly,
+ *                               then writes one element of its INPUT buffer
+ *                               (a bitwise complement of in[0]) -> MUST trip the
+ *                               input-immutability check (#90). A correct
+ *                               out-of-place kernel treats its input as const;
+ *                               this one violates that, proving the detector
+ *                               fires. Guarded by num_points > 0 (safe at vlen 0).
  */
 
 #ifndef INCLUDED_VOLK_QA_CANARY_KERNEL_H
@@ -72,6 +79,11 @@ void volk_32f_canaryunwritten_32f(void* out,
                                   unsigned int num_points,
                                   const char* arch);
 void volk_32f_canaryfarpast_32f(void* out,
+                                void* in,
+                                unsigned int num_points,
+                                const char* arch);
+// #90 input-immutability negative control: writes one element of its INPUT.
+void volk_32f_inputscribble_32f(void* out,
                                 void* in,
                                 unsigned int num_points,
                                 const char* arch);
