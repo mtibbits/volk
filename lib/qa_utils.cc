@@ -1975,6 +1975,9 @@ bool run_volk_reference_test(volk_func_desc_t desc,
         }
         volk_test_time_t result;
         result.name = d.arch_list[i];
+        result.time = 0.0; // reference mode does not time the run; avoid an
+                           // uninitialized read when the result is consumed
+        result.units = "ref";
         result.pass = !arch_fail;
         results->back().results[d.arch_list[i]] = result;
         if (arch_fail) {
@@ -2223,15 +2226,19 @@ volk_canary_summary run_volk_canary_test(volk_func_desc_t desc,
             run_once(buffs);
         }
         // Snapshot the data region after run 1 (before S2 overwrites it) and check
-        // the guards for an over/under-write.
+        // the guards for an over/under-write. Guard violations go to std::cerr (NOT
+        // std::cout) so they survive the sweep's per-(kernel,vlen) stdout muting: a
+        // touched guard is ALWAYS a real defect (unlike the unwritten check below,
+        // which reduction kernels trip expectedly), so its arch/offset detail must
+        // stay visible and actionable on the one run where it fires.
         std::vector<std::vector<uint8_t>> snap_s1(d.outputsig.size());
         for (size_t j = 0; j < gbufs.size(); j++) {
             ptrdiff_t off = 0;
             if (gbufs[j]->guard_violation(S1, off)) {
                 arch_guard = true;
-                std::cout << name << ": canary guard touched on arch " << arch
+                std::cerr << name << ": canary guard touched on arch " << arch
                           << " (output " << j << ", byte offset " << off
-                          << " relative to data start)" << std::endl;
+                          << " relative to data start)\n";
             }
             const uint8_t* p = static_cast<const uint8_t*>(gbufs[j]->data());
             snap_s1[j].assign(p, p + gbufs[j]->data_bytes());
@@ -2250,9 +2257,9 @@ volk_canary_summary run_volk_canary_test(volk_func_desc_t desc,
             ptrdiff_t off = 0;
             if (gbufs[j]->guard_violation(S2, off)) {
                 arch_guard = true;
-                std::cout << name << ": canary guard touched on arch " << arch
+                std::cerr << name << ": canary guard touched on arch " << arch
                           << " (output " << j << ", byte offset " << off
-                          << " relative to data start)" << std::endl;
+                          << " relative to data start)\n";
             }
             // In-bounds-unwritten check: a byte the kernel wrote holds the same
             // (deterministic) value in both runs, so it cannot equal S1 after run 1
