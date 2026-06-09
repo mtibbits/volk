@@ -294,6 +294,33 @@ volk_canary_summary run_volk_canary_test(
     const std::vector<float>& float_edge_cases = std::vector<float>(),
     const std::vector<lv_32fc_t>& complex_edge_cases = std::vector<lv_32fc_t>());
 
+// #90: outcome of run_volk_immutability_test. A kernel that writes any byte of an
+// input buffer (which an out-of-place kernel's contract forbids) sets `mutated`.
+// `applied` is false when the kernel has no separate input to protect: an in-place
+// kernel (no output buffer -> its single buffer is the input it legitimately
+// rewrites) or an unsupported signature -- such kernels are reported skipped, not
+// ok, so an unchecked kernel never masquerades as covered.
+struct volk_immutability_summary {
+    bool mutated = false; // an input buffer differed after the call (always a defect)
+    bool applied = false; // false => no separate input buffer to protect / unsupported
+};
+
+// #90: input-immutability canary. For every impl, byte-compares each input buffer
+// after the call against its pristine pre-image (qa_test_data::inbuffs, a separate
+// allocation the kernel never receives). An exact compare -- not a hash -- so a
+// mutation cannot hide behind a checksum collision. Delivers the one defensible
+// value of the abandoned const-input-signature sweep without touching any
+// signature. Toggle is in the driver; run_volk_tests / default qa are untouched.
+volk_immutability_summary run_volk_immutability_test(
+    volk_func_desc_t,
+    void (*)(),
+    std::string,
+    lv_32fc_t,
+    unsigned int,
+    std::vector<volk_test_results_t>* results = NULL,
+    const std::vector<float>& float_edge_cases = std::vector<float>(),
+    const std::vector<lv_32fc_t>& complex_edge_cases = std::vector<lv_32fc_t>());
+
 #define VOLK_PROFILE(func, test_params, results) \
     run_volk_tests(func##_get_func_desc(),       \
                    (void (*)())func##_manual,    \

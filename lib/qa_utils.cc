@@ -20,6 +20,7 @@
 #include <sys/time.h>  // for CLOCKS_PER_SEC
 #include <sys/types.h> // for int16_t, int32_t
 #include <algorithm>   // for std::sort, std::minmax_element
+#include <cassert>     // for assert (#90 immutability index invariant)
 #include <chrono>
 #include <cmath>    // for sqrt, fabs, abs
 #include <cstdint>  // for uint8_t, uintptr_t (#89 canary)
@@ -2286,5 +2287,164 @@ volk_canary_summary run_volk_canary_test(volk_func_desc_t desc,
         summary.guard_violation = summary.guard_violation || arch_guard;
         summary.unwritten = summary.unwritten || arch_unwritten;
     }
+    return summary;
+}
+
+volk_immutability_summary
+run_volk_immutability_test(volk_func_desc_t desc,
+                           void (*manual_func)(),
+                           std::string name,
+                           lv_32fc_t scalar,
+                           unsigned int vlen,
+                           std::vector<volk_test_results_t>* results,
+                           const std::vector<float>& float_edge_cases,
+                           const std::vector<lv_32fc_t>& complex_edge_cases)
+{
+    volk_immutability_summary summary;
+
+    results->push_back(volk_test_results_t());
+    results->back().name = name;
+    results->back().vlen = vlen;
+    results->back().iter = 1;
+    results->back().config_name = name;
+    fmt::print("\nRUN_VOLK_IMMUTABILITY_TEST: {}(vlen={})\n", name, vlen);
+
+    volk_qa_aligned_mem_pool mem_pool;
+    qa_test_data d = setup_test_data(
+        desc, name, vlen, true, float_edge_cases, complex_edge_cases, mem_pool);
+    if (!d.ok) {
+        return summary;
+    }
+
+    const bool s32f =
+        (d.inputsc.size() == 1) && d.inputsc[0].is_float && !d.inputsc[0].is_complex;
+    const bool s32fc =
+        (d.inputsc.size() == 1) && d.inputsc[0].is_float && d.inputsc[0].is_complex;
+    // These "cannot check this kernel" cases leave summary.applied == false so the
+    // driver reports the kernel as skipped (NOT ok). Diagnostics go to stdout so the
+    // driver's per-(kernel,vlen) stdout muting suppresses them during the sweep.
+    if (d.inputsc.size() != 0 && !s32f && !s32fc) {
+        std::cout << "immutability mode: unsupported scalar signature for " << name
+                  << std::endl;
+        return summary;
+    }
+    // An in-place kernel (no separate output buffer) legitimately rewrites its single
+    // buffer -- that is its contract, not a defect. Only out-of-place kernels have
+    // input buffers the contract marks read-only, so immutability applies only when
+    // there IS a distinct output buffer.
+    if (d.outputsig.empty()) {
+        std::cout << "immutability mode: in-place kernel (no separate output), input "
+                     "write is by contract: "
+                  << name << std::endl;
+        return summary;
+    }
+    if (d.inputsig.empty()) {
+        std::cout << "immutability mode: kernel has no input buffer to protect: " << name
+                  << std::endl;
+        return summary;
+    }
+    if (d.both_sigs.size() > 4 || (d.both_sigs.size() == 4 && d.inputsc.size() != 0)) {
+        std::cout << "immutability mode: unsupported arity for " << name << std::endl;
+        return summary;
+    }
+
+    // Invariant the per-input compare below relies on: scalars are erased from
+    // inputsig into inputsc by setup_test_data, so d.inbuffs (the pristine pre-image,
+    // built from the post-erasure non-scalar inputsig) is index-aligned with the
+    // input buffers in d.test_data[i] at offset d.outputsig.size(). Assert it so a
+    // future change to scalar handling fails loudly instead of comparing the wrong
+    // buffers.
+    assert(d.inbuffs.size() == d.inputsig.size());
+
+    for (size_t i = 0; i < d.arch_list.size(); i++) {
+        const std::string arch = d.arch_list[i];
+        summary.applied = true; // we are about to check at least one impl
+
+        // buffs layout matches setup_test_data: outputs first, then inputs. Inputs
+        // are arch i's own pool copy (seeded from the pristine d.inbuffs[k], which the
+        // kernel never receives).
+        std::vector<void*> buffs;
+        for (size_t j = 0; j < d.outputsig.size(); j++) {
+            buffs.push_back(d.test_data[i][j]);
+        }
+        for (size_t k = 0; k < d.inputsig.size(); k++) {
+            buffs.push_back(d.test_data[i][d.outputsig.size() + k]);
+        }
+
+        switch (d.both_sigs.size()) {
+        case 1:
+            if (s32fc)
+                run_cast_test1_s32fc(
+                    (volk_fn_1arg_s32fc)(manual_func), buffs, scalar, vlen, 1, arch);
+            else if (s32f)
+                run_cast_test1_s32f((volk_fn_1arg_s32f)(manual_func),
+                                    buffs,
+                                    scalar.real(),
+                                    vlen,
+                                    1,
+                                    arch);
+            else
+                run_cast_test1((volk_fn_1arg)(manual_func), buffs, vlen, 1, arch);
+            break;
+        case 2:
+            if (s32fc)
+                run_cast_test2_s32fc(
+                    (volk_fn_2arg_s32fc)(manual_func), buffs, scalar, vlen, 1, arch);
+            else if (s32f)
+                run_cast_test2_s32f((volk_fn_2arg_s32f)(manual_func),
+                                    buffs,
+                                    scalar.real(),
+                                    vlen,
+                                    1,
+                                    arch);
+            else
+                run_cast_test2((volk_fn_2arg)(manual_func), buffs, vlen, 1, arch);
+            break;
+        case 3:
+            if (s32fc)
+                run_cast_test3_s32fc(
+                    (volk_fn_3arg_s32fc)(manual_func), buffs, scalar, vlen, 1, arch);
+            else if (s32f)
+                run_cast_test3_s32f((volk_fn_3arg_s32f)(manual_func),
+                                    buffs,
+                                    scalar.real(),
+                                    vlen,
+                                    1,
+                                    arch);
+            else
+                run_cast_test3((volk_fn_3arg)(manual_func), buffs, vlen, 1, arch);
+            break;
+        case 4:
+            run_cast_test4((volk_fn_4arg)(manual_func), buffs, vlen, 1, arch);
+            break;
+        default:
+            break;
+        }
+
+        // Post-run compare of each input against its pristine pre-image. Exact
+        // std::memcmp (not a hash) so a mutation cannot hide behind a checksum
+        // collision (acceptance #90-1); on mismatch, locate the first differing byte
+        // for triage. The finding goes to std::cerr (NOT std::cout) so it survives the
+        // sweep's per-(kernel,vlen) stdout muting -- unlike #89's canary, which has
+        // expected reduction "partials" to suppress, immutability has no expected
+        // findings, so a real mutation should always be loud and actionable.
+        for (size_t k = 0; k < d.inputsig.size(); k++) {
+            const size_t in_bytes = static_cast<size_t>(vlen) * d.inputsig[k].size *
+                                    (d.inputsig[k].is_complex ? 2 : 1);
+            const uint8_t* pre = static_cast<const uint8_t*>(d.inbuffs[k]);
+            const uint8_t* post =
+                static_cast<const uint8_t*>(d.test_data[i][d.outputsig.size() + k]);
+            if (std::memcmp(pre, post, in_bytes) != 0) {
+                summary.mutated = true;
+                size_t off = 0;
+                while (off < in_bytes && pre[off] == post[off]) {
+                    ++off;
+                }
+                std::cerr << name << ": input mutated on arch " << arch << " (input " << k
+                          << ", byte offset " << off << ")\n";
+            }
+        }
+    }
+
     return summary;
 }

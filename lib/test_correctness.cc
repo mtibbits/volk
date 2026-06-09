@@ -181,6 +181,55 @@ static volk_canary_summary quiet_canary_run(volk_test_case_t& tc, unsigned int v
     return summary;
 }
 
+// #90: run the input-immutability check for one (kernel, vlen) with stdout muted
+// (mirrors quiet_canary_run). On an exception the run did not complete, so we cannot
+// conclude anything about input immutability -- report it skipped (applied stays
+// false) with a note, rather than mislabeling a crash as a mutation.
+static volk_immutability_summary quiet_immutability_run(volk_test_case_t& tc,
+                                                        unsigned int v)
+{
+    std::vector<volk_test_results_t> results;
+    const bool verbose = (std::getenv("HARNESS_VERBOSE") != nullptr);
+    std::fflush(stdout);
+    std::cout.flush();
+    int saved = -1, devnull = -1;
+    if (!verbose) {
+        saved = dup(STDOUT_FILENO);
+        devnull = open("/dev/null", O_WRONLY);
+        if (saved >= 0 && devnull >= 0)
+            dup2(devnull, STDOUT_FILENO);
+    }
+    volk_immutability_summary summary;
+    bool threw = false;
+    try {
+        summary = run_volk_immutability_test(tc.desc(),
+                                             tc.kernel_ptr(),
+                                             tc.name(),
+                                             tc.test_parameters().scalar(),
+                                             v /*vlen*/,
+                                             &results,
+                                             kFloatEdges,
+                                             kComplexEdges);
+    } catch (...) {
+        threw = true;
+        summary = volk_immutability_summary(); // applied=false, mutated=false -> skip
+    }
+    std::fflush(stdout);
+    std::cout.flush();
+    if (!verbose) {
+        if (saved >= 0) {
+            dup2(saved, STDOUT_FILENO);
+            close(saved);
+        }
+        if (devnull >= 0)
+            close(devnull);
+    }
+    if (threw)
+        std::cerr << "note  [immutable] " << tc.name() << " threw at vlen " << v
+                  << " (skipped; crashes are out of #90 scope)\n";
+    return summary;
+}
+
 int main(int argc, char* argv[])
 {
     const float tol = 1e-6f;
@@ -399,6 +448,127 @@ int main(int argc, char* argv[])
                   << " left in-bounds elements unwritten (reduction/index kernels — "
                      "triage)\n";
         return c_failed > 0 ? 1 : 0;
+    }
+
+    // #90 input-immutability mode (opt-in via HARNESS_IMMUTABLE). Like the #89
+    // canary it is a distinct mode that replaces the correctness sweep; the default
+    // qa suite and the toggle-off correctness sweep are entirely unaffected.
+    const bool immutable_mode = (std::getenv("HARNESS_IMMUTABLE") != nullptr);
+    if (immutable_mode) {
+        // Hard negative control (any build), exercising the SAME
+        // run_volk_immutability_test path real kernels use. Two planted kernels:
+        //   ok        -> input untouched         (must NOT be flagged)
+        //   scribble  -> writes in[0]            (must trip the mutation check)
+        // Any deviation means the detector is broken -- fail hard (exit 2), per #88.
+        const unsigned int nc_vlen = 127;
+        std::vector<volk_test_results_t> nc;
+        const volk_immutability_summary ok_sum =
+            run_volk_immutability_test(volk_canary_desc(),
+                                       (void (*)())(&volk_32f_canaryok_32f),
+                                       "volk_32f_canaryok_32f",
+                                       scalar,
+                                       nc_vlen,
+                                       &nc,
+                                       kFloatEdges,
+                                       kComplexEdges);
+        nc.clear();
+        const volk_immutability_summary scribble_sum =
+            run_volk_immutability_test(volk_canary_desc(),
+                                       (void (*)())(&volk_32f_inputscribble_32f),
+                                       "volk_32f_inputscribble_32f",
+                                       scalar,
+                                       nc_vlen,
+                                       &nc,
+                                       kFloatEdges,
+                                       kComplexEdges);
+        nc.clear();
+        const char* nc_err = nullptr;
+        if (ok_sum.mutated) {
+            nc_err = "the correct planted kernel volk_32f_canaryok_32f was flagged — "
+                     "the immutability check over-reports";
+        } else if (!scribble_sum.mutated) {
+            nc_err = "the planted kernel volk_32f_inputscribble_32f did not trip the "
+                     "immutability check — the detector is blind to input writes";
+        }
+        if (nc_err) {
+            std::cerr << "NEGATIVE CONTROL LOST: " << nc_err << ". Aborting.\n";
+            if (report)
+                std::fclose(report);
+            return 2;
+        }
+        std::cerr << "immutability negative control OK: ok-kernel clean, scribble "
+                     "trips the input-immutability check.\n";
+
+        // Best-effort per-kernel immutability sweep over the real kernels.
+        //   FAIL -> the kernel wrote a byte of an input buffer (always a defect).
+        //   skip -> in-place / unsupported signature / no impl observed (fail closed).
+        // Puppets are skipped: their buffer plumbing differs from a plain kernel call.
+        std::cout << "# input-immutability sweep: vlens 1..40, 131071, 1000003\n";
+        std::cout.flush();
+        int m_tested = 0, m_failed = 0;
+        for (auto& tc : test_cases) {
+            if (!filter.empty() && tc.name() != filter)
+                continue;
+            if (tc.puppet_master_name() != "NULL") {
+                std::cout << "skip  [immutable] " << tc.name() << " (puppet)\n";
+                if (report)
+                    std::fprintf(report, "%s,immutable,skip,\n", tc.name().c_str());
+                std::cout.flush();
+                continue;
+            }
+            std::vector<unsigned int> mutated;
+            bool any_applied = false;
+            for (unsigned int v : vlens) {
+                const volk_immutability_summary s = quiet_immutability_run(tc, v);
+                if (s.applied)
+                    any_applied = true;
+                if (s.mutated)
+                    mutated.push_back(v);
+            }
+            // A kernel no impl could check (in-place / unsupported) is SKIPPED, not ok
+            // -- an unchecked kernel must not masquerade as covered. Fail closed: skip
+            // only when nothing was observed at all.
+            if (!any_applied && mutated.empty()) {
+                std::cout << "skip  [immutable] " << tc.name()
+                          << " (no protectable input buffer)\n";
+                if (report)
+                    std::fprintf(report, "%s,immutable,skip,\n", tc.name().c_str());
+                std::cout.flush();
+                continue;
+            }
+            ++m_tested;
+            const char* status;
+            if (!mutated.empty()) {
+                ++m_failed;
+                status = "FAIL";
+                std::cout << "FAIL  [immutable] " << tc.name()
+                          << "  mutated-input vlens:";
+                for (unsigned int v : mutated)
+                    std::cout << " " << v;
+            } else {
+                status = "ok";
+                std::cout << "ok    [immutable] " << tc.name();
+            }
+            std::cout << "\n";
+            if (report) {
+                std::string vs;
+                for (unsigned int v : mutated) {
+                    vs += std::to_string(v);
+                    vs += ' ';
+                }
+                std::fprintf(report,
+                             "%s,immutable,%s,%s\n",
+                             tc.name().c_str(),
+                             status,
+                             vs.c_str());
+            }
+            std::cout.flush();
+        }
+        if (report)
+            std::fclose(report);
+        std::cerr << "\ninput-immutability sweep: " << m_failed << " / " << m_tested
+                  << " kernels wrote a byte of an input buffer\n";
+        return m_failed > 0 ? 1 : 0;
     }
 
     std::cout << "# kernel-correctness remainder sweep: vlens 1..40, 131071, 1000003\n";

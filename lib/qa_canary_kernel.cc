@@ -9,6 +9,8 @@
 
 #include "qa_canary_kernel.h"
 
+#include <cstdint> // for uint32_t (input-immutability scribble, #90)
+
 // Each planted impl first copies the in-bounds region [0,num_points) correctly,
 // so the only thing distinguishing the negative controls is the write past the
 // end -- the canary's guard/two-sentinel check is what flags it. `arch` is
@@ -48,6 +50,27 @@ void volk_32f_canaryunwritten_32f(void* out,
     // is invisible to value comparison but caught by the two-sentinel check.
     for (unsigned int n = 0; n + 1 < num_points; ++n) {
         o[n] = i[n];
+    }
+}
+
+void volk_32f_inputscribble_32f(void* out, void* in, unsigned int num_points, const char*)
+{
+    float* o = static_cast<float*>(out);
+    const float* i = static_cast<const float*>(in);
+    for (unsigned int n = 0; n < num_points; ++n) {
+        o[n] = i[n]; // copy in -> out FIRST, so out[0] keeps the original value
+    }
+    // The planted defect (#90): scribble on the INPUT buffer. A correct
+    // out-of-place kernel never writes its input; this one does, so the
+    // input-immutability check (post-run byte compare vs the pristine pre-image)
+    // must flag it. Write a bitwise complement of element 0 rather than a fixed
+    // constant: ~x != x for every uint32_t, so the input byte is GUARANTEED to
+    // change regardless of the (possibly edge-case-seeded) pristine value -- a
+    // fixed constant could coincide with the seed and let the negative control
+    // pass silently. Guarded so it is safe at num_points == 0.
+    if (num_points > 0) {
+        uint32_t* w = static_cast<uint32_t*>(in);
+        w[0] = ~w[0];
     }
 }
 
