@@ -35,13 +35,37 @@
 #include "volk_reference.h" // for the independent double-precision oracle registry (#88)
 #include <volk/volk.h>
 
-#include <fcntl.h>  // open
-#include <unistd.h> // dup, dup2, close
-#include <cstdio>   // fflush
-#include <cstdlib>  // getenv
+#include <cstdio>  // fflush
+#include <cstdlib> // getenv
 #include <iostream>
 #include <string>
 #include <vector>
+
+// The stdout-muting helper uses the POSIX fd calls dup/dup2/open/close. MSVC has
+// no <unistd.h> and spells these with a leading underscore in <io.h>; it also
+// uses "NUL" rather than "/dev/null". Map the names so the call sites stay
+// POSIX-shaped on every platform. The object-like macros are defined AFTER all
+// standard includes -- macros named open/close/dup/dup2 would otherwise rewrite
+// declarations inside subsequently included headers.
+#ifdef _MSC_VER
+#include <fcntl.h> // _O_WRONLY
+#include <io.h>    // _dup, _dup2, _open, _close
+#define dup _dup
+#define dup2 _dup2
+#define open _open
+#define close _close
+#ifndef STDOUT_FILENO
+#define STDOUT_FILENO 1
+#endif
+#ifndef O_WRONLY
+#define O_WRONLY _O_WRONLY
+#endif
+#define VOLK_DEVNULL "NUL"
+#else
+#include <fcntl.h>  // open, O_WRONLY
+#include <unistd.h> // dup, dup2, close, STDOUT_FILENO
+#define VOLK_DEVNULL "/dev/null"
+#endif
 
 // Compile-time AddressSanitizer detection: the far-past ASan demo deliberately
 // writes past the guarded allocation, which is undefined behaviour unless ASan
@@ -87,7 +111,7 @@ static bool quiet_run(volk_test_case_t& tc,
     int saved = -1, devnull = -1;
     if (!verbose) {
         saved = dup(STDOUT_FILENO);
-        devnull = open("/dev/null", O_WRONLY);
+        devnull = open(VOLK_DEVNULL, O_WRONLY);
         // Only redirect if BOTH fds are valid; otherwise we could mute stdout
         // with no way to restore it (a failed dup leaves saved == -1).
         if (saved >= 0 && devnull >= 0)
@@ -151,7 +175,7 @@ static volk_canary_summary quiet_canary_run(volk_test_case_t& tc, unsigned int v
     int saved = -1, devnull = -1;
     if (!verbose) {
         saved = dup(STDOUT_FILENO);
-        devnull = open("/dev/null", O_WRONLY);
+        devnull = open(VOLK_DEVNULL, O_WRONLY);
         if (saved >= 0 && devnull >= 0)
             dup2(devnull, STDOUT_FILENO);
     }
@@ -195,7 +219,7 @@ static volk_immutability_summary quiet_immutability_run(volk_test_case_t& tc,
     int saved = -1, devnull = -1;
     if (!verbose) {
         saved = dup(STDOUT_FILENO);
-        devnull = open("/dev/null", O_WRONLY);
+        devnull = open(VOLK_DEVNULL, O_WRONLY);
         if (saved >= 0 && devnull >= 0)
             dup2(devnull, STDOUT_FILENO);
     }
