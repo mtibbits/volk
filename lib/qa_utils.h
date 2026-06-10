@@ -280,6 +280,42 @@ volk_immutability_summary run_volk_immutability_test(
     const std::vector<float>& float_edge_cases = std::vector<float>(),
     const std::vector<lv_32fc_t>& complex_edge_cases = std::vector<lv_32fc_t>());
 
+// #91: outcome of run_volk_misaligned_test. For every impl the dispatch metadata
+// marks unaligned (impl_alignment == false), the harness runs it on deliberately
+// misaligned (element-aligned, non-volk_get_alignment()-aligned) buffers.
+// `crashed` => the impl raised SIGSEGV/SIGBUS/SIGILL (e.g. movaps on a misaligned
+// address) -- trapped and recorded, the run continues. `diverged` => the SAME
+// impl produced different output on misaligned vs aligned buffers with identical
+// inputs (beyond the kernel's own tol -- alignment is the only variable; the
+// impl-vs-generic accuracy question belongs to the #87 sweep). `applied` is false
+// when no impl could be exercised (unsupported signature / degenerate alignment)
+// -- reported skip, never ok.
+struct volk_misaligned_summary {
+    bool crashed = false;
+    bool diverged = false;
+    bool applied = false;
+};
+
+// #91: misaligned-run check. The fault path (a hardware signal, not a C++
+// exception) is trapped with a scoped SIGSEGV/SIGBUS/SIGILL handler +
+// sigsetjmp/siglongjmp so one crashing impl becomes one recorded FAIL while the
+// run continues. Toggle is in the driver; run_volk_tests / default qa untouched.
+// tol/absolute_mode are the KERNEL'S own comparison parameters (from its
+// volk_test_params_t) -- approximate kernels (log2, expfast, tan, ...) carry
+// looser tolerances than the harness default, and using anything else
+// false-positives them.
+volk_misaligned_summary run_volk_misaligned_test(
+    volk_func_desc_t,
+    void (*)(),
+    std::string,
+    lv_32fc_t,
+    float tol,
+    bool absolute_mode,
+    unsigned int,
+    std::vector<volk_test_results_t>* results = NULL,
+    const std::vector<float>& float_edge_cases = std::vector<float>(),
+    const std::vector<lv_32fc_t>& complex_edge_cases = std::vector<lv_32fc_t>());
+
 #define VOLK_PROFILE(func, test_params, results) \
     run_volk_tests(func##_get_func_desc(),       \
                    (void (*)())func##_manual,    \

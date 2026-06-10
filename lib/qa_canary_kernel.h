@@ -48,6 +48,12 @@
  *                               out-of-place kernel treats its input as const;
  *                               this one violates that, proving the detector
  *                               fires. Guarded by num_points > 0 (safe at vlen 0).
+ *   volk_32f_misalignedfault_32f copies in -> out but performs an ALIGNED 16-byte
+ *                               load on its input when num_points >= 4 -- the
+ *                               movaps-in-a-_u_-kernel defect class (#91). On a
+ *                               misaligned input it raises SIGSEGV (real aligned
+ *                               load under __SSE2__; raise(SIGSEGV) fallback
+ *                               elsewhere); on aligned input it runs correctly.
  */
 
 #ifndef INCLUDED_VOLK_QA_CANARY_KERNEL_H
@@ -87,6 +93,11 @@ void volk_32f_inputscribble_32f(void* out,
                                 void* in,
                                 unsigned int num_points,
                                 const char* arch);
+// #91 misaligned negative control: aligned load inside an "unaligned" impl.
+void volk_32f_misalignedfault_32f(void* out,
+                                  void* in,
+                                  unsigned int num_points,
+                                  const char* arch);
 
 // A synthetic single-impl ("generic") descriptor so the planted kernels flow
 // through the SAME run_volk_canary_test path as real kernels. impl_alignment is

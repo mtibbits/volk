@@ -22,6 +22,8 @@
 #include <cassert>     // for assert (#90 immutability index invariant)
 #include <chrono>
 #include <cmath>    // for sqrt, fabs, abs
+#include <csetjmp>  // for sigsetjmp/siglongjmp (#91 misaligned fault isolation)
+#include <csignal>  // for sigaction, SIGSEGV/SIGBUS/SIGILL (#91)
 #include <cstdint>  // for uint8_t, uintptr_t (#89 canary)
 #include <cstdlib>  // for malloc, free (#89 canary)
 #include <cstring>  // for memcpy, memset
@@ -2228,3 +2230,470 @@ run_volk_immutability_test(volk_func_desc_t desc,
 
     return summary;
 }
+
+// #91 is POSIX-only: MSVC has no sigaction/sigsetjmp/SIGBUS, and qa_utils.cc is
+// compiled into volk_test_all too, so an unconditional use would break the
+// Windows build of the DEFAULT qa suite. On _WIN32 the function compiles to an
+// explicit "unsupported" skip (applied=false): the driver's negative control
+// then fails closed with a clear stderr trail instead of the tree failing to
+// build.
+#ifdef _WIN32
+volk_misaligned_summary
+run_volk_misaligned_test(volk_func_desc_t /*desc*/,
+                         void (* /*manual_func*/)(),
+                         std::string name,
+                         lv_32fc_t /*scalar*/,
+                         float /*tol*/,
+                         bool /*absolute_mode*/,
+                         unsigned int /*vlen*/,
+                         std::vector<volk_test_results_t>* /*results*/,
+                         const std::vector<float>& /*float_edge_cases*/,
+                         const std::vector<lv_32fc_t>& /*complex_edge_cases*/)
+{
+    std::cerr << "misaligned mode: unsupported on this platform (POSIX signal "
+                 "isolation required): "
+              << name << "\n";
+    return volk_misaligned_summary();
+}
+#else
+
+namespace {
+// #91: SIGSEGV/SIGBUS/SIGILL isolation for misaligned-impl runs. An aligned SIMD
+// load on a misaligned address raises a hardware signal, not a C++ exception, so
+// catch(...) cannot trap it. sigsetjmp/siglongjmp is sound HERE because every
+// exercised impl is a pure computational loop over harness-owned buffers (the
+// driver skips puppets): no locks, allocations, or unwind-relevant state can be
+// in flight at the faulting instruction, and the dispatch deliberately uses
+// direct casted calls so no C++ frame with a non-trivial destructor sits between
+// the sigsetjmp and the fault.
+// Single-threaded qa binary by design: process-wide handlers + globals are safe
+// (the faults are synchronous; there is no second thread to race).
+sigjmp_buf g_misaligned_jmp;
+volatile sig_atomic_t g_misaligned_sig = 0;
+// Armed ONLY inside a sigsetjmp window. A fault while the handlers are installed
+// but no window is open (buffer setup, compare, I/O) is a HARNESS bug, not a
+// kernel defect -- jumping would misattribute it (or, before the first window,
+// longjmp through a never-set jmp_buf: UB). Re-raise with default disposition so
+// such a fault crashes loudly at its true location.
+volatile sig_atomic_t g_misaligned_window_open = 0;
+extern "C" void misaligned_fault_handler(int sig)
+{
+    if (!g_misaligned_window_open) {
+        signal(sig, SIG_DFL);
+        raise(sig);
+        return;
+    }
+    g_misaligned_window_open = 0;
+    g_misaligned_sig = sig;
+    siglongjmp(g_misaligned_jmp, 1);
+}
+// Installs the handlers on construction, restores the previous ones on scope exit.
+class scoped_fault_isolation
+{
+public:
+    scoped_fault_isolation()
+    {
+        struct sigaction sa;
+        memset(&sa, 0, sizeof(sa));
+        sa.sa_handler = misaligned_fault_handler;
+        sigemptyset(&sa.sa_mask);
+        sigaction(SIGSEGV, &sa, &old_segv_);
+        sigaction(SIGBUS, &sa, &old_bus_);
+        sigaction(SIGILL, &sa, &old_ill_);
+    }
+    ~scoped_fault_isolation()
+    {
+        sigaction(SIGSEGV, &old_segv_, nullptr);
+        sigaction(SIGBUS, &old_bus_, nullptr);
+        sigaction(SIGILL, &old_ill_, nullptr);
+    }
+    scoped_fault_isolation(const scoped_fault_isolation&) = delete;
+    scoped_fault_isolation& operator=(const scoped_fault_isolation&) = delete;
+
+private:
+    struct sigaction old_segv_, old_bus_, old_ill_;
+};
+
+// #91: an own-malloc buffer whose data pointer is element-aligned but deliberately
+// NOT volk_get_alignment()-aligned: one element past an alignment boundary --
+// exactly the shape of a GNU Radio sub-buffer slice.
+class misaligned_buffer
+{
+public:
+    misaligned_buffer(size_t data_bytes, size_t alignment, size_t elem_bytes)
+    {
+        // Tail slack (8 elements) so a small over-WRITE -- the #89 defect class --
+        // lands in our slack instead of corrupting malloc metadata mid-sweep; the
+        // canary mode, not this one, is what detects such writes.
+        raw_ = static_cast<uint8_t*>(malloc(data_bytes + alignment + elem_bytes * 9));
+        if (raw_ == nullptr) {
+            // Fail loud: continuing would fault OUTSIDE a sigsetjmp window and be
+            // misattributed by the fault handler (or jump to a stale env).
+            std::cerr << "misaligned_buffer: allocation failed\n";
+            abort();
+        }
+        const uintptr_t base =
+            (reinterpret_cast<uintptr_t>(raw_) + alignment - 1) & ~(alignment - 1);
+        ptr_ = reinterpret_cast<void*>(base + elem_bytes);
+        // Caller guarantees elem_bytes % alignment != 0 (the degenerate-platform
+        // guard in run_volk_misaligned_test), so base+elem is off-boundary.
+    }
+    ~misaligned_buffer() { free(raw_); }
+    misaligned_buffer(const misaligned_buffer&) = delete;
+    misaligned_buffer& operator=(const misaligned_buffer&) = delete;
+    void* data() const { return ptr_; }
+
+private:
+    uint8_t* raw_;
+    void* ptr_;
+};
+} // namespace
+
+volk_misaligned_summary
+run_volk_misaligned_test(volk_func_desc_t desc,
+                         void (*manual_func)(),
+                         std::string name,
+                         lv_32fc_t scalar,
+                         float tol,
+                         bool absolute_mode,
+                         unsigned int vlen,
+                         std::vector<volk_test_results_t>* results,
+                         const std::vector<float>& float_edge_cases,
+                         const std::vector<lv_32fc_t>& complex_edge_cases)
+{
+    volk_misaligned_summary summary;
+
+    results->push_back(volk_test_results_t());
+    results->back().name = name;
+    results->back().vlen = vlen;
+    results->back().iter = 1;
+    results->back().config_name = name;
+    fmt::print("\nRUN_VOLK_MISALIGNED_TEST: {}(vlen={})\n", name, vlen);
+
+    volk_qa_aligned_mem_pool mem_pool;
+    qa_test_data d = setup_test_data(
+        desc, name, vlen, true, float_edge_cases, complex_edge_cases, mem_pool);
+    if (!d.ok) {
+        return summary;
+    }
+
+    const bool s32f =
+        (d.inputsc.size() == 1) && d.inputsc[0].is_float && !d.inputsc[0].is_complex;
+    const bool s32fc =
+        (d.inputsc.size() == 1) && d.inputsc[0].is_float && d.inputsc[0].is_complex;
+    // "Cannot check" cases leave summary.applied == false so the driver reports the
+    // kernel as skipped (NOT ok). Diagnostics go to stdout so the driver's
+    // per-(kernel,vlen) stdout muting suppresses them during the sweep.
+    if (d.inputsc.size() != 0 && !s32f && !s32fc) {
+        std::cout << "misaligned mode: unsupported scalar signature for " << name
+                  << std::endl;
+        return summary;
+    }
+    if (d.both_sigs.size() > 4 || (d.both_sigs.size() == 4 && d.inputsc.size() != 0)) {
+        std::cout << "misaligned mode: unsupported arity for " << name << std::endl;
+        return summary;
+    }
+
+    const size_t alignment = volk_get_alignment();
+    // The kernel's own comparison parameters (mirrors run_volk_tests' derivation).
+    const float tol_f = tol;
+    const unsigned int tol_i = static_cast<unsigned int>(tol);
+
+    // Degenerate-platform guard: if volk_get_alignment() does not exceed an element
+    // size, an element offset can land back on an alignment boundary -- the
+    // "misaligned" pointer would be aligned and the mode would silently test
+    // nothing. Skip (applied=false -> reported skip, fail closed) instead.
+    for (size_t j = 0; j < d.both_sigs.size(); j++) {
+        const size_t elem = d.both_sigs[j].size * (d.both_sigs[j].is_complex ? 2 : 1);
+        if (elem % alignment == 0) {
+            std::cout << "misaligned mode: alignment " << alignment
+                      << " too small to misalign element size " << elem << " for " << name
+                      << std::endl;
+            return summary;
+        }
+    }
+
+    // Direct casted calls -- deliberately NOT the run_cast_testN wrappers, whose
+    // by-value std::string parameter would sit on a frame the fault path longjmps
+    // over (skipping a non-trivial destructor is UB). arch_cstr is materialized by
+    // the caller before sigsetjmp. Single iteration. NOTE the s32fc forms take the
+    // scalar BY POINTER (matching the volk_fn_*_s32fc typedefs).
+    auto run_impl_direct = [&](std::vector<void*>& buffs, const char* arch_cstr) {
+        switch (d.both_sigs.size()) {
+        case 1:
+            if (s32fc)
+                ((volk_fn_1arg_s32fc)(manual_func))(buffs[0], &scalar, vlen, arch_cstr);
+            else if (s32f)
+                ((volk_fn_1arg_s32f)(manual_func))(
+                    buffs[0], scalar.real(), vlen, arch_cstr);
+            else
+                ((volk_fn_1arg)(manual_func))(buffs[0], vlen, arch_cstr);
+            break;
+        case 2:
+            if (s32fc)
+                ((volk_fn_2arg_s32fc)(manual_func))(
+                    buffs[0], buffs[1], &scalar, vlen, arch_cstr);
+            else if (s32f)
+                ((volk_fn_2arg_s32f)(manual_func))(
+                    buffs[0], buffs[1], scalar.real(), vlen, arch_cstr);
+            else
+                ((volk_fn_2arg)(manual_func))(buffs[0], buffs[1], vlen, arch_cstr);
+            break;
+        case 3:
+            if (s32fc)
+                ((volk_fn_3arg_s32fc)(manual_func))(
+                    buffs[0], buffs[1], buffs[2], &scalar, vlen, arch_cstr);
+            else if (s32f)
+                ((volk_fn_3arg_s32f)(manual_func))(
+                    buffs[0], buffs[1], buffs[2], scalar.real(), vlen, arch_cstr);
+            else
+                ((volk_fn_3arg)(manual_func))(
+                    buffs[0], buffs[1], buffs[2], vlen, arch_cstr);
+            break;
+        case 4:
+            ((volk_fn_4arg)(manual_func))(
+                buffs[0], buffs[1], buffs[2], buffs[3], vlen, arch_cstr);
+            break;
+        default:
+            break;
+        }
+    };
+
+    // Compare one both_sigs buffer against the generic aligned baseline, the same
+    // per-type dispatch run_volk_tests uses. Comparing inputs as well as outputs is
+    // what gives IN-PLACE kernels divergence coverage (their "output" IS the mutated
+    // input buffer); for out-of-place kernels the input compare is a free no-op
+    // (#90 guarantees inputs are unmutated, so both sides equal the pre-image).
+    auto compare_buffer = [&](size_t j, void* expected, void* actual, double& max_err) {
+        std::vector<unsigned int> fail_indices;
+        max_err = 0.0;
+        bool fail = false;
+        const volk_type_t& t = d.both_sigs[j];
+        const unsigned int n_ints = vlen * (t.is_complex ? 2 : 1);
+        if (t.is_float) {
+            if (t.size == 8) {
+                if (t.is_complex)
+                    fail = ccompare((double*)expected,
+                                    (double*)actual,
+                                    vlen,
+                                    tol_f,
+                                    absolute_mode,
+                                    fail_indices,
+                                    max_err);
+                else
+                    fail = fcompare((double*)expected,
+                                    (double*)actual,
+                                    vlen,
+                                    tol_f,
+                                    absolute_mode,
+                                    fail_indices,
+                                    max_err);
+            } else {
+                if (t.is_complex)
+                    fail = ccompare((float*)expected,
+                                    (float*)actual,
+                                    vlen,
+                                    tol_f,
+                                    absolute_mode,
+                                    fail_indices,
+                                    max_err);
+                else
+                    fail = fcompare((float*)expected,
+                                    (float*)actual,
+                                    vlen,
+                                    tol_f,
+                                    absolute_mode,
+                                    fail_indices,
+                                    max_err);
+            }
+        } else {
+            switch (t.size) {
+            case 8:
+                if (t.is_signed)
+                    fail = icompare((int64_t*)expected,
+                                    (int64_t*)actual,
+                                    n_ints,
+                                    tol_i,
+                                    fail_indices,
+                                    max_err);
+                else
+                    fail = icompare((uint64_t*)expected,
+                                    (uint64_t*)actual,
+                                    n_ints,
+                                    tol_i,
+                                    fail_indices,
+                                    max_err);
+                break;
+            case 4:
+                if (t.is_complex) {
+                    // complex size-4 = pairs of 16-bit halves (run_volk_tests does
+                    // the same): compare as int16/uint16.
+                    if (t.is_signed)
+                        fail = icompare((int16_t*)expected,
+                                        (int16_t*)actual,
+                                        n_ints,
+                                        tol_i,
+                                        fail_indices,
+                                        max_err);
+                    else
+                        fail = icompare((uint16_t*)expected,
+                                        (uint16_t*)actual,
+                                        n_ints,
+                                        tol_i,
+                                        fail_indices,
+                                        max_err);
+                } else {
+                    if (t.is_signed)
+                        fail = icompare((int32_t*)expected,
+                                        (int32_t*)actual,
+                                        n_ints,
+                                        tol_i,
+                                        fail_indices,
+                                        max_err);
+                    else
+                        fail = icompare((uint32_t*)expected,
+                                        (uint32_t*)actual,
+                                        n_ints,
+                                        tol_i,
+                                        fail_indices,
+                                        max_err);
+                }
+                break;
+            case 2:
+                if (t.is_signed)
+                    fail = icompare((int16_t*)expected,
+                                    (int16_t*)actual,
+                                    n_ints,
+                                    tol_i,
+                                    fail_indices,
+                                    max_err);
+                else
+                    fail = icompare((uint16_t*)expected,
+                                    (uint16_t*)actual,
+                                    n_ints,
+                                    tol_i,
+                                    fail_indices,
+                                    max_err);
+                break;
+            case 1:
+                if (t.is_signed)
+                    fail = icompare((int8_t*)expected,
+                                    (int8_t*)actual,
+                                    n_ints,
+                                    tol_i,
+                                    fail_indices,
+                                    max_err);
+                else
+                    fail = icompare((uint8_t*)expected,
+                                    (uint8_t*)actual,
+                                    n_ints,
+                                    tol_i,
+                                    fail_indices,
+                                    max_err);
+                break;
+            default:
+                fail = true;
+            }
+        }
+        return fail;
+    };
+
+    // Comparison design: SAME impl, aligned vs misaligned. Comparing a misaligned
+    // u_impl against the generic baseline would conflate impl-vs-generic accuracy
+    // (already #87's sweep, where edge-data precision differences legitimately
+    // exceed tol for approximate kernels and large-vlen accumulations) with the
+    // #91 question -- does MISALIGNMENT change this impl's output? Running the
+    // same impl twice with identical inputs isolates alignment as the only
+    // variable; the kernel's own tol absorbs legitimate reordering by impls that
+    // peel to an alignment boundary.
+    //
+    // Output buffers on BOTH sides are zero-prefilled: reduction/index kernels
+    // write only a fixed-size scalar into out[0..k), and output cardinality
+    // cannot be derived from the signature (#89 lesson). With a common prefill,
+    // never-written regions are 0 == 0 and only kernel-written elements compare.
+    scoped_fault_isolation guard_signals;
+
+    for (size_t i = 0; i < d.arch_list.size(); i++) {
+        const std::string arch = d.arch_list[i];
+        const size_t orig_idx = d.arch_to_orig_idx[arch];
+        if (desc.impl_alignment[orig_idx]) {
+            continue; // aligned-only impl: allowed to assume alignment, not under test
+        }
+        summary.applied = true;
+
+        // ---- Reference run: this impl on its ALIGNED pool buffers ----
+        std::vector<void*> abuffs;
+        for (size_t j = 0; j < d.both_sigs.size(); j++) {
+            abuffs.push_back(d.test_data[i][j]);
+        }
+        for (size_t j = 0; j < d.outputsig.size(); j++) {
+            const size_t out_bytes = static_cast<size_t>(vlen) * d.outputsig[j].size *
+                                     (d.outputsig[j].is_complex ? 2 : 1);
+            memset(abuffs[j], 0, out_bytes);
+        }
+        const char* arch_cstr = arch.c_str(); // materialized BEFORE sigsetjmp
+        g_misaligned_sig = 0;
+        // setjmp-clobber discipline: NOTHING may be modified between a sigsetjmp
+        // and its kernel call -- locals changed inside that window are
+        // indeterminate after the longjmp. Each window holds exactly one call.
+        if (sigsetjmp(g_misaligned_jmp, 1) == 0) {
+            g_misaligned_window_open = 1; // volatile global: setjmp-clobber safe
+            run_impl_direct(abuffs, arch_cstr);
+            g_misaligned_window_open = 0;
+        } else {
+            // An "unaligned" impl crashing on ALIGNED buffers is a worse defect
+            // than the one under test -- record it the same way and move on.
+            summary.crashed = true;
+            std::cerr << name << ": impl crashed on ALIGNED buffers on arch " << arch
+                      << " (signal " << static_cast<int>(g_misaligned_sig) << ", vlen "
+                      << vlen << ")\n";
+            continue;
+        }
+
+        // ---- Test run: the SAME impl on misaligned buffers, identical inputs ----
+        std::vector<std::unique_ptr<misaligned_buffer>> mbufs;
+        std::vector<void*> buffs;
+        for (size_t j = 0; j < d.both_sigs.size(); j++) {
+            const size_t elem = d.both_sigs[j].size * (d.both_sigs[j].is_complex ? 2 : 1);
+            const size_t bytes = static_cast<size_t>(vlen) * elem;
+            mbufs.push_back(std::make_unique<misaligned_buffer>(bytes, alignment, elem));
+            buffs.push_back(mbufs.back()->data());
+        }
+        for (size_t j = 0; j < d.outputsig.size(); j++) {
+            const size_t out_bytes = static_cast<size_t>(vlen) * d.outputsig[j].size *
+                                     (d.outputsig[j].is_complex ? 2 : 1);
+            memset(buffs[j], 0, out_bytes);
+        }
+        for (size_t k = 0; k < d.inputsig.size(); k++) {
+            const size_t in_bytes = static_cast<size_t>(vlen) * d.inputsig[k].size *
+                                    (d.inputsig[k].is_complex ? 2 : 1);
+            memcpy(buffs[d.outputsig.size() + k], d.inbuffs[k], in_bytes);
+        }
+
+        g_misaligned_sig = 0;
+        if (sigsetjmp(g_misaligned_jmp, 1) == 0) {
+            g_misaligned_window_open = 1; // volatile global: setjmp-clobber safe
+            run_impl_direct(buffs, arch_cstr);
+            g_misaligned_window_open = 0;
+        } else {
+            summary.crashed = true;
+            std::cerr << name << ": impl crashed on misaligned buffers on arch " << arch
+                      << " (signal " << static_cast<int>(g_misaligned_sig) << ", vlen "
+                      << vlen << ")\n";
+            continue; // recorded FAIL; next impl runs with its own fresh buffers
+        }
+
+        for (size_t j = 0; j < d.both_sigs.size(); j++) {
+            double max_err = 0.0;
+            if (compare_buffer(j, abuffs[j], buffs[j], max_err)) {
+                summary.diverged = true;
+                std::cerr << name << ": output diverged between aligned and "
+                          << "misaligned runs on arch " << arch << " (buffer " << j
+                          << ", vlen " << vlen << ", max_err " << max_err << ")\n";
+            }
+        }
+    }
+
+    return summary;
+}
+#endif // !_WIN32 (POSIX signal isolation, #91)
