@@ -438,7 +438,7 @@ static inline void volk_32fc_s32fc_x2_rotator2_32fc_a_avx(lv_32fc_t* outVector,
     lv_32fc_t incr = lv_cmake((float)cos(delta4), (float)sin(delta4));
 
     __m256 aVal, phase_Val, z;
-    lv_32fc_t phase_Ptr[4];
+    __VOLK_ATTR_ALIGNED(32) lv_32fc_t phase_Ptr[4];
 
     const __m256 inc_Val = _mm256_set_ps(lv_cimag(incr),
                                          lv_creal(incr),
@@ -585,7 +585,7 @@ static inline void volk_32fc_s32fc_x2_rotator2_32fc_u_avx(lv_32fc_t* outVector,
     lv_32fc_t incr = lv_cmake((float)cos(delta4), (float)sin(delta4));
 
     __m256 aVal, phase_Val, z;
-    lv_32fc_t phase_Ptr[4];
+    __VOLK_ATTR_ALIGNED(32) lv_32fc_t phase_Ptr[4];
 
     const __m256 inc_Val = _mm256_set_ps(lv_cimag(incr),
                                          lv_creal(incr),
@@ -866,7 +866,7 @@ static inline void volk_32fc_s32fc_x2_rotator2_32fc_u_avx512f(lv_32fc_t* outVect
     lv_32fc_t incr = lv_cmake((float)cos(delta8), (float)sin(delta8));
 
     __m512 aVal, phase_Val, z;
-    lv_32fc_t phase_Ptr[8];
+    __VOLK_ATTR_ALIGNED(64) lv_32fc_t phase_Ptr[8];
 
     const __m512 inc_Val = _mm512_set_ps(lv_cimag(incr),
                                          lv_creal(incr),
