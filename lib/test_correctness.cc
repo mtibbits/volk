@@ -254,6 +254,57 @@ static volk_immutability_summary quiet_immutability_run(volk_test_case_t& tc,
     return summary;
 }
 
+// #91: run the misaligned check for one (kernel, vlen) with stdout muted (mirrors
+// quiet_immutability_run). Hardware faults are handled INSIDE
+// run_volk_misaligned_test by the signal path (-> summary.crashed); a C++
+// exception here is non-signal harness plumbing, out of #91 scope -- report it
+// skipped (applied stays false) with a note rather than mislabeling it.
+static volk_misaligned_summary quiet_misaligned_run(volk_test_case_t& tc, unsigned int v)
+{
+    std::vector<volk_test_results_t> results;
+    const bool verbose = (std::getenv("HARNESS_VERBOSE") != nullptr);
+    std::fflush(stdout);
+    std::cout.flush();
+    int saved = -1, devnull = -1;
+    if (!verbose) {
+        saved = dup(STDOUT_FILENO);
+        devnull = open(VOLK_DEVNULL, O_WRONLY);
+        if (saved >= 0 && devnull >= 0)
+            dup2(devnull, STDOUT_FILENO);
+    }
+    volk_misaligned_summary summary;
+    bool threw = false;
+    try {
+        summary = run_volk_misaligned_test(tc.desc(),
+                                           tc.kernel_ptr(),
+                                           tc.name(),
+                                           tc.test_parameters().scalar(),
+                                           tc.test_parameters().tol(),
+                                           tc.test_parameters().absolute_mode(),
+                                           v /*vlen*/,
+                                           &results,
+                                           kFloatEdges,
+                                           kComplexEdges);
+    } catch (...) {
+        threw = true;
+        summary = volk_misaligned_summary(); // applied=false -> skip
+    }
+    std::fflush(stdout);
+    std::cout.flush();
+    if (!verbose) {
+        if (saved >= 0) {
+            dup2(saved, STDOUT_FILENO);
+            close(saved);
+        }
+        if (devnull >= 0)
+            close(devnull);
+    }
+    if (threw)
+        std::cerr << "note  [misaligned] " << tc.name() << " threw at vlen " << v
+                  << " (skipped; non-signal exceptions are out of #91 scope)\n";
+    return summary;
+}
+
 int main(int argc, char* argv[])
 {
     const float tol = 1e-6f;
@@ -593,6 +644,157 @@ int main(int argc, char* argv[])
         std::cerr << "\ninput-immutability sweep: " << m_failed << " / " << m_tested
                   << " kernels wrote a byte of an input buffer\n";
         return m_failed > 0 ? 1 : 0;
+    }
+
+    // #91 misaligned-run mode (opt-in via HARNESS_MISALIGNED). Distinct mode like
+    // the #89/#90 siblings; default qa and the toggle-off sweep are untouched.
+    // NOTE (ASan): this mode installs its own SIGSEGV handler inside
+    // run_volk_misaligned_test; under AddressSanitizer run with
+    // ASAN_OPTIONS=handle_segv=0:handle_sigbus=0:handle_sigill=0:allow_user_segv_handler=1
+    // or ASan's handler wins and aborts the run on the first planted fault.
+    const bool misaligned_mode = (std::getenv("HARNESS_MISALIGNED") != nullptr);
+    if (misaligned_mode) {
+        // Hard negative control: ok-kernel must pass misaligned (no over-report);
+        // the planted aligned-load kernel must produce a RECORDED crash while this
+        // process continues to this very check (fault isolation works). Any
+        // deviation = broken detector, exit 2.
+        const unsigned int nc_vlen = 127;
+        std::vector<volk_test_results_t> nc;
+        const volk_misaligned_summary ok_sum =
+            run_volk_misaligned_test(volk_canary_desc(),
+                                     (void (*)())(&volk_32f_canaryok_32f),
+                                     "volk_32f_canaryok_32f",
+                                     scalar,
+                                     tol,
+                                     false /*absolute_mode*/,
+                                     nc_vlen,
+                                     &nc,
+                                     kFloatEdges,
+                                     kComplexEdges);
+        nc.clear();
+        const volk_misaligned_summary fault_sum =
+            run_volk_misaligned_test(volk_canary_desc(),
+                                     (void (*)())(&volk_32f_misalignedfault_32f),
+                                     "volk_32f_misalignedfault_32f",
+                                     scalar,
+                                     tol,
+                                     false /*absolute_mode*/,
+                                     nc_vlen,
+                                     &nc,
+                                     kFloatEdges,
+                                     kComplexEdges);
+        nc.clear();
+        const char* nc_err = nullptr;
+        if (ok_sum.crashed || ok_sum.diverged) {
+            nc_err = "the correct planted kernel volk_32f_canaryok_32f was flagged "
+                     "on misaligned buffers — the detector over-reports";
+        } else if (!fault_sum.applied) {
+            nc_err = "the misaligned mode could not run at all (unsupported "
+                     "platform — POSIX signals required — or unsupported "
+                     "signature/alignment); refusing to report coverage";
+        } else if (!fault_sum.crashed) {
+            nc_err = "the planted aligned-load kernel volk_32f_misalignedfault_32f "
+                     "did not produce a recorded crash — fault isolation is broken "
+                     "or the misalignment never reached the impl";
+        }
+        if (nc_err) {
+            std::cerr << "NEGATIVE CONTROL LOST: " << nc_err << ". Aborting.\n";
+            if (report)
+                std::fclose(report);
+            return 2;
+        }
+        std::cerr << "misaligned negative control OK: ok-kernel clean, aligned-load "
+                     "kernel crash recorded and the run continued.\n";
+
+        // Per-kernel misaligned sweep over the real kernels (unaligned impls only).
+        //   FAIL -> an impl crashed on misaligned buffers or diverged from the
+        //           the SAME impl's aligned run (both always defects).
+        //   skip -> puppet / unsupported signature / nothing observed (fail closed).
+        // Puppets are skipped -- load-bearing here: it is what keeps the longjmp
+        // safety argument airtight (no impl with internal allocation runs under the
+        // signal guard) and keeps #96's conv_k7 out of this mode.
+        std::cout << "# misaligned sweep: vlens 1..40, 131071, 1000003\n";
+        std::cout.flush();
+        int a_tested = 0, a_failed = 0, a_crashed = 0, a_diverged = 0;
+        for (auto& tc : test_cases) {
+            if (!filter.empty() && tc.name() != filter)
+                continue;
+            if (tc.puppet_master_name() != "NULL") {
+                std::cout << "skip  [misaligned] " << tc.name() << " (puppet)\n";
+                if (report)
+                    std::fprintf(report, "%s,misaligned,skip,\n", tc.name().c_str());
+                std::cout.flush();
+                continue;
+            }
+            std::vector<unsigned int> crash_vlens;
+            std::vector<unsigned int> diverge_vlens;
+            bool any_applied = false;
+            for (unsigned int v : vlens) {
+                const volk_misaligned_summary s = quiet_misaligned_run(tc, v);
+                if (s.applied)
+                    any_applied = true;
+                if (s.crashed)
+                    crash_vlens.push_back(v);
+                if (s.diverged)
+                    diverge_vlens.push_back(v);
+            }
+            if (!any_applied && crash_vlens.empty() && diverge_vlens.empty()) {
+                std::cout << "skip  [misaligned] " << tc.name()
+                          << " (no checkable unaligned impl)\n";
+                if (report)
+                    std::fprintf(report, "%s,misaligned,skip,\n", tc.name().c_str());
+                std::cout.flush();
+                continue;
+            }
+            ++a_tested;
+            const char* status;
+            if (!crash_vlens.empty() || !diverge_vlens.empty()) {
+                ++a_failed;
+                if (!crash_vlens.empty())
+                    ++a_crashed;
+                if (!diverge_vlens.empty())
+                    ++a_diverged;
+                status = "FAIL";
+                std::cout << "FAIL  [misaligned] " << tc.name();
+                if (!crash_vlens.empty()) {
+                    std::cout << "  crash vlens:";
+                    for (unsigned int v : crash_vlens)
+                        std::cout << " " << v;
+                }
+                if (!diverge_vlens.empty()) {
+                    std::cout << "  diverge vlens:";
+                    for (unsigned int v : diverge_vlens)
+                        std::cout << " " << v;
+                }
+            } else {
+                status = "ok";
+                std::cout << "ok    [misaligned] " << tc.name();
+            }
+            std::cout << "\n";
+            if (report) {
+                std::string vs;
+                for (unsigned int v : crash_vlens) {
+                    vs += std::to_string(v);
+                    vs += ' ';
+                }
+                for (unsigned int v : diverge_vlens) {
+                    vs += std::to_string(v);
+                    vs += ' ';
+                }
+                std::fprintf(report,
+                             "%s,misaligned,%s,%s\n",
+                             tc.name().c_str(),
+                             status,
+                             vs.c_str());
+            }
+            std::cout.flush();
+        }
+        if (report)
+            std::fclose(report);
+        std::cerr << "\nmisaligned sweep: " << a_crashed << " kernels crashed, "
+                  << a_diverged << " diverged, of " << a_tested
+                  << " tested (unaligned impls only)\n";
+        return a_failed > 0 ? 1 : 0;
     }
 
     std::cout << "# kernel-correctness remainder sweep: vlens 1..40, 131071, 1000003\n";
