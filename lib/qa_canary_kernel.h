@@ -99,9 +99,49 @@ void volk_32f_misalignedfault_32f(void* out,
                                   unsigned int num_points,
                                   const char* arch);
 
+// #92 combined negative control: test-only copies of the two escaped defects
+// that motivated epic #85, paired with corrected twins. The defect copies are
+// permanent reintroductions (the live kernels get fixed by the per-kernel
+// campaign; these copies do not), so the combined NC ctest stays load-bearing
+// after the fixes land.
+//
+//   volk_32fc_s32f_powerdefect_32fc  the pre-e29bc7f power defect verbatim:
+//                                    atan2f args swapped + cosine negated.
+//                                    Wrong for every non-trivial input, but a
+//                                    single impl, so impl-vs-impl CANNOT see
+//                                    it. MUST be flagged by the independent
+//                                    double-precision reference (#88).
+//   volk_32fc_s32f_powerok_32fc      the corrected formula. MUST pass
+//                                    reference mode (the "reverted
+//                                    reintroduction" proof).
+//   volk_32f_tanhstale_32f           two impls ("generic" correct tanhf;
+//                                    "u_series" the pre-e29bc7f series with
+//                                    the stale input pointer: clamp branches
+//                                    advance the output pointer only). Smooth
+//                                    data never clamps, so default-style qa
+//                                    passes it; MUST be flagged by the
+//                                    tail/edge sweep (#87).
+//   volk_32f_tanhok_32f              same two impls with the aPtr++ fix.
+//                                    MUST pass the sweep.
+void volk_32fc_s32f_powerdefect_32fc(
+    void* out, void* in, float scalar, unsigned int num_points, const char* arch);
+void volk_32fc_s32f_powerok_32fc(
+    void* out, void* in, float scalar, unsigned int num_points, const char* arch);
+void volk_32f_tanhstale_32f(void* out,
+                            void* in,
+                            unsigned int num_points,
+                            const char* arch);
+void volk_32f_tanhok_32f(void* out, void* in, unsigned int num_points, const char* arch);
+
 // A synthetic single-impl ("generic") descriptor so the planted kernels flow
 // through the SAME run_volk_canary_test path as real kernels. impl_alignment is
 // false (unaligned): the canary supplies an aligned data region regardless.
 volk_func_desc_t volk_canary_desc();
+
+// #92 descs: single-impl ("generic") for the power pair; two-impl ("generic",
+// "u_series") for the tanh pair, so run_volk_tests compares the planted series
+// impl against the planted generic.
+volk_func_desc_t volk_power_nc_desc();
+volk_func_desc_t volk_tanh_nc_desc();
 
 #endif /* INCLUDED_VOLK_QA_CANARY_KERNEL_H */
