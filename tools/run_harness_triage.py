@@ -50,8 +50,33 @@ def kernel_names(repo_root):
     return sorted(os.path.splitext(os.path.basename(p))[0] for p in glob.glob(pat))
 
 
+def signal_name(signum):
+    try:
+        return signal.Signals(signum).name
+    except ValueError:  # e.g. real-time signals have no enum entry
+        return str(signum)
+
+
+def read_report_rows(report):
+    rows = []
+    if os.path.exists(report):
+        with open(report, newline="") as f:
+            for row in csv.reader(f):
+                # Skip the header and any truncated trailing line (a crash can
+                # cut the final stdio flush mid-row).
+                if row and row[0] != "kernel" and len(row) == len(HEADER):
+                    rows.append(row)
+    return rows
+
+
 def run_one(binary, libdir, kernel, mode, timeout, tmpdir):
     report = os.path.join(tmpdir, f"{kernel}.{mode}.csv")
+    # A process killed before fopen would otherwise merge a PRIOR invocation's
+    # rows for this (kernel, mode).
+    try:
+        os.unlink(report)
+    except FileNotFoundError:
+        pass
     env = dict(os.environ)
     env["LD_LIBRARY_PATH"] = libdir + os.pathsep + env.get("LD_LIBRARY_PATH", "")
     env["HARNESS_REPORT"] = report
@@ -62,7 +87,6 @@ def run_one(binary, libdir, kernel, mode, timeout, tmpdir):
             "ASAN_OPTIONS",
             "handle_segv=0:handle_sigbus=0:handle_sigill=0:allow_user_segv_handler=1",
         )
-    rows = []
     try:
         proc = subprocess.run(
             [binary, kernel],
@@ -73,16 +97,15 @@ def run_one(binary, libdir, kernel, mode, timeout, tmpdir):
         )
         rc = proc.returncode
     except subprocess.TimeoutExpired:
-        return [[kernel, "-", mode, "abort", "timeout"]]
-    if os.path.exists(report):
-        with open(report, newline="") as f:
-            for row in csv.reader(f):
-                if row and row[0] != "kernel":  # skip header
-                    rows.append(row)
+        # Keep whatever was written before the kill, consistent with rc<0.
+        rows = read_report_rows(report)
+        rows.append([kernel, "-", mode, "abort", "timeout"])
+        return rows
+    rows = read_report_rows(report)
     # rc<0 => died on a signal; rows written before the crash are kept and the
     # abort itself becomes a finding row (tiny-vlen aborts are findings).
     if rc < 0:
-        rows.append([kernel, "-", mode, "abort", f"signal={signal.Signals(-rc).name}"])
+        rows.append([kernel, "-", mode, "abort", f"signal={signal_name(-rc)}"])
     elif rc not in (0, 1):  # 0=clean, 1=FAILs recorded in rows; else abnormal
         rows.append([kernel, "-", mode, "abort", f"exit={rc}"])
     if not rows:
@@ -129,8 +152,13 @@ def main():
             for (k, m) in jobs
         ]
         done = 0
-        for fut in cf.as_completed(futs):
-            all_rows.extend(fut.result())
+        for fut, (k, m) in zip(futs, jobs):
+            # One job's unexpected exception must not kill the snapshot —
+            # that is the whole point of per-process isolation.
+            try:
+                all_rows.extend(fut.result())
+            except Exception as e:  # noqa: BLE001 -- synthesize a finding row
+                all_rows.append([k, "-", m, "abort", f"runner-error: {e}"])
             done += 1
             if done % 50 == 0:
                 print(f"# {done}/{len(jobs)}", file=sys.stderr)

@@ -137,7 +137,10 @@ exception mid-run). `failed_vlens` is space-separated.
 `tools/run_harness_triage.py` drives the full catalog — one process per
 (kernel, mode) via the argv filter, so a kernel that hard-aborts becomes an
 `abort` finding row instead of killing the run — and merges everything into
-one CSV.
+one CSV. Runner-synthesized rows use the runner's mode label `sweep` for the
+default mode (in-binary rows say `ref`/`impl`) and carry a detail string
+instead of vlens in `failed_vlens`: `timeout`, `signal=<NAME>`, `exit=<N>`,
+`runner-error: <msg>` (result `abort`), or `no-qa-entry` (result `skip`).
 
 Checked-in snapshots (the per-kernel fix backlog):
 
