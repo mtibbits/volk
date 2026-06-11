@@ -206,6 +206,7 @@ static inline void volk_64u_byteswap_a_avx2(uint64_t* intsToSwap, unsigned int n
 
     uint32_t* inputPtr = (uint32_t*)intsToSwap;
 
+    __VOLK_ATTR_ALIGNED(32)
     const uint8_t shuffleVector[32] = { 7,  6,  5,  4,  3,  2,  1,  0,  15, 14, 13,
                                         12, 11, 10, 9,  8,  23, 22, 21, 20, 19, 18,
                                         17, 16, 31, 30, 29, 28, 27, 26, 25, 24 };
@@ -256,6 +257,7 @@ static inline void volk_64u_byteswap_a_ssse3(uint64_t* intsToSwap,
 
     uint32_t* inputPtr = (uint32_t*)intsToSwap;
 
+    __VOLK_ATTR_ALIGNED(16)
     uint8_t shuffleVector[16] = { 7, 6, 5, 4, 3, 2, 1, 0, 15, 14, 13, 12, 11, 10, 9, 8 };
 
     const __m128i myShuffle = _mm_loadu_si128((__m128i*)&shuffleVector);
@@ -362,6 +364,7 @@ static inline void volk_64u_byteswap_u_avx2(uint64_t* intsToSwap, unsigned int n
 
     uint32_t* inputPtr = (uint32_t*)intsToSwap;
 
+    __VOLK_ATTR_ALIGNED(32)
     const uint8_t shuffleVector[32] = { 7,  6,  5,  4,  3,  2,  1,  0,  15, 14, 13,
                                         12, 11, 10, 9,  8,  23, 22, 21, 20, 19, 18,
                                         17, 16, 31, 30, 29, 28, 27, 26, 25, 24 };
@@ -411,6 +414,7 @@ static inline void volk_64u_byteswap_u_ssse3(uint64_t* intsToSwap,
 
     uint32_t* inputPtr = (uint32_t*)intsToSwap;
 
+    __VOLK_ATTR_ALIGNED(16)
     uint8_t shuffleVector[16] = { 7, 6, 5, 4, 3, 2, 1, 0, 15, 14, 13, 12, 11, 10, 9, 8 };
 
     const __m128i myShuffle = _mm_loadu_si128((__m128i*)&shuffleVector);

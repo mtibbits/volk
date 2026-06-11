@@ -88,6 +88,7 @@ static inline void volk_16u_byteswap_a_avx2(uint16_t* intsToSwap, unsigned int n
 
     uint16_t* inputPtr = (uint16_t*)intsToSwap;
 
+    __VOLK_ATTR_ALIGNED(32)
     const uint8_t shuffleVector[32] = { 1,  0,  3,  2,  5,  4,  7,  6,  9,  8,  11,
                                         10, 13, 12, 15, 14, 17, 16, 19, 18, 21, 20,
                                         23, 22, 25, 24, 27, 26, 29, 28, 31, 30 };
@@ -124,6 +125,7 @@ static inline void volk_16u_byteswap_u_avx2(uint16_t* intsToSwap, unsigned int n
 
     uint16_t* inputPtr = (uint16_t*)intsToSwap;
 
+    __VOLK_ATTR_ALIGNED(32)
     const uint8_t shuffleVector[32] = { 1,  0,  3,  2,  5,  4,  7,  6,  9,  8,  11,
                                         10, 13, 12, 15, 14, 17, 16, 19, 18, 21, 20,
                                         23, 22, 25, 24, 27, 26, 29, 28, 31, 30 };

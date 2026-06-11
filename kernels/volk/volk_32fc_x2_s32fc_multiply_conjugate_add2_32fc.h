@@ -127,6 +127,7 @@ volk_32fc_x2_s32fc_multiply_conjugate_add2_32fc_u_avx(lv_32fc_t* cVector,
     unsigned int isodd = num_points & 3;
 
     __m256 x, y, s, z;
+    __VOLK_ATTR_ALIGNED(32)
     lv_32fc_t v_scalar[4] = { *scalar, *scalar, *scalar, *scalar };
 
     const lv_32fc_t* a = aVector;
@@ -170,7 +171,7 @@ volk_32fc_x2_s32fc_multiply_conjugate_add2_32fc_u_sse3(lv_32fc_t* cVector,
     const unsigned int halfPoints = num_points / 2;
 
     __m128 x, y, s, z;
-    lv_32fc_t v_scalar[2] = { *scalar, *scalar };
+    __VOLK_ATTR_ALIGNED(16) lv_32fc_t v_scalar[2] = { *scalar, *scalar };
 
     const lv_32fc_t* a = aVector;
     const lv_32fc_t* b = bVector;
@@ -215,6 +216,7 @@ volk_32fc_x2_s32fc_multiply_conjugate_add2_32fc_a_avx(lv_32fc_t* cVector,
     unsigned int isodd = num_points & 3;
 
     __m256 x, y, s, z;
+    __VOLK_ATTR_ALIGNED(32)
     lv_32fc_t v_scalar[4] = { *scalar, *scalar, *scalar, *scalar };
 
     const lv_32fc_t* a = aVector;
@@ -258,7 +260,7 @@ volk_32fc_x2_s32fc_multiply_conjugate_add2_32fc_a_sse3(lv_32fc_t* cVector,
     const unsigned int halfPoints = num_points / 2;
 
     __m128 x, y, s, z;
-    lv_32fc_t v_scalar[2] = { *scalar, *scalar };
+    __VOLK_ATTR_ALIGNED(16) lv_32fc_t v_scalar[2] = { *scalar, *scalar };
 
     const lv_32fc_t* a = aVector;
     const lv_32fc_t* b = bVector;
