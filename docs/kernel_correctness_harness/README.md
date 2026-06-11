@@ -146,9 +146,12 @@ Checked-in snapshots (the per-kernel fix backlog):
 
 - [`triage-2026-06-11.csv`](triage-2026-06-11.csv) +
   [`triage-2026-06-11-summary.md`](triage-2026-06-11-summary.md) — the epic-#85
-  closeout snapshot: 154 kernels × 4 mode legs, 2,796 rows, 113 FAIL/abort
-  finding rows across 22 kernels (headlined by the two live motivating
-  defects).
+  closeout snapshot: 154 kernels × 4 mode legs, 2,796 rows, 113 finding rows
+  (112 FAIL across 22 kernels, plus 1 abort on a 23rd), headlined by the two
+  live motivating defects.
+
+Retention: latest snapshot only — a new snapshot replaces the old files
+(history stays in git), so the directory does not accumulate dated CSVs.
 
 ## Platform notes
 

@@ -87,6 +87,10 @@
 // the boundaries where edge-case branches (clamps, saturation, zero/sign handling) live
 // — not just the smooth interior the default random data covers. Kept moderate so they
 // stress branches without provoking universal float overflow.
+// NOTE (#92): the combined negative control derives its edge list from kFloatEdges
+// (minus 4.97f). An added edge in roughly [4.5, 4.97] — past where the planted tanh
+// Padé series degrades beyond 1e-2 but not into the > 4.97 clamp — would flip the
+// tanh-ok revert-proof red with a misattributed "sweep over-reports" diagnosis.
 static const std::vector<float> kFloatEdges = { 0.0f,  -0.0f, 1.0f,  -1.0f, 4.97f, 5.0f,
                                                 -5.0f, 6.0f,  -6.0f, 8.0f,  -8.0f };
 static const std::vector<lv_32fc_t> kComplexEdges = {
@@ -1000,6 +1004,12 @@ int main(int argc, char* argv[])
               "the planted swapped-atan2 power defect passed reference mode — the "
               "independent-reference capability is blind to the defect class that "
               "motivated it" },
+            // Enforced mechanism for the blind-spot proof: with a single-impl
+            // desc, setup_test_data's "need >= 2 archs" guard makes
+            // run_volk_tests return false without executing the kernel —
+            // exactly how historical qa skipped single-impl kernels. The
+            // check is not vacuous: it pins that behavior, and flags any
+            // future change that makes impl-vs-impl claim coverage here.
             { "power-defect via impl-vs-impl (blind-spot proof)",
               sweep_nc(power_defect_tc, nullptr, 1e-4f, ncEdges, kComplexEdges),
               false,

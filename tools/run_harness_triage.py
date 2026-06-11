@@ -108,6 +108,11 @@ def run_one(binary, libdir, kernel, mode, timeout, tmpdir):
         rows.append([kernel, "-", mode, "abort", f"signal={signal_name(-rc)}"])
     elif rc not in (0, 1):  # 0=clean, 1=FAILs recorded in rows; else abnormal
         rows.append([kernel, "-", mode, "abort", f"exit={rc}"])
+    elif rc == 1 and not any(r[3] in ("FAIL", "partial") for r in rows):
+        # Fail closed: the binary reported failure but no finding row was
+        # captured (e.g. its HARNESS_REPORT fopen failed and it degraded to
+        # human output) -- record the inconsistency rather than skipping.
+        rows.append([kernel, "-", mode, "abort", "exit=1-without-finding-rows"])
     if not rows:
         rows.append([kernel, "-", mode, "skip", "no-qa-entry"])
     return rows
