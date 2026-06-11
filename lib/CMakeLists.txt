@@ -782,4 +782,13 @@ if(ENABLE_TESTING)
         volk_add_test(${kernel} volk_test_all)
     endforeach()
 
+    # Combined negative control for the kernel-correctness harness (epic #85
+    # closeout, #92): asserts the assembled harness still detects the two
+    # escaped-defect classes that motivated it, each via its intended
+    # capability. Plain ctest, every platform, no special build or env beyond
+    # the mode toggle. If a change blinds the harness to either class, CI
+    # breaks here.
+    volk_add_test(harness_negative_control volk_test_correctness ENVIRONS
+                  "HARNESS_COMBINED_NC=1")
+
 endif(ENABLE_TESTING)

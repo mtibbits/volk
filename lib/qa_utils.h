@@ -274,6 +274,11 @@ struct volk_canary_summary {
     bool applied = false;         // false => the canary could not guard this kernel
                                   // (no output buffer / unsupported signature): the
                                   // driver reports such kernels as skipped, not ok
+    // #92 triage detail: impls exercised this run, and per-category offenders
+    // (each impl name appears at most once per vector).
+    std::vector<std::string> checked_impls;
+    std::vector<std::string> guard_impls;
+    std::vector<std::string> unwritten_impls;
 };
 
 // #89: output-buffer canary. Allocates each output buffer with leading/trailing
@@ -303,6 +308,9 @@ volk_canary_summary run_volk_canary_test(
 struct volk_immutability_summary {
     bool mutated = false; // an input buffer differed after the call (always a defect)
     bool applied = false; // false => no separate input buffer to protect / unsupported
+    // #92 triage detail (same convention as volk_canary_summary).
+    std::vector<std::string> checked_impls;
+    std::vector<std::string> mutated_impls;
 };
 
 // #90: input-immutability canary. For every impl, byte-compares each input buffer
@@ -335,6 +343,10 @@ struct volk_misaligned_summary {
     bool crashed = false;
     bool diverged = false;
     bool applied = false;
+    // #92 triage detail (same convention as volk_canary_summary).
+    std::vector<std::string> checked_impls;
+    std::vector<std::string> crashed_impls;
+    std::vector<std::string> diverged_impls;
 };
 
 // #91: misaligned-run check. The fault path (a hardware signal, not a C++
