@@ -163,3 +163,24 @@ Retention: latest snapshot only — a new snapshot replaces the old files
 - **Default qa:** `volk_test_all` and the per-kernel `qa_volk_*` ctests are
   byte-for-byte unaffected by every capability here; all harness behavior is
   opt-in via the env toggles.
+
+## Reproducibility (`HARNESS_SEED`)
+
+`tools/run_harness_triage.py --seed N` (or an exported `HARNESS_SEED`)
+pins the qa input data: the runner derives a distinct deterministic
+seed per (kernel, mode) child process (`crc32`-mixed), and
+`load_random_data` then draws from one per-process seeded stream, so
+identical seeds reproduce identical rows — including the
+`failed_vlens` lists that otherwise flicker at tolerance margins.
+Unset (the default, including everything ctest runs) the data is
+re-randomized per run, exactly as before. Because `load_random_data`
+is shared, an exported `HARNESS_SEED` also pins default-qa
+(`volk_test_all`) and `volk_profile` input data — a side effect, by
+design. Snapshot summaries must record the seed used. Caveat: kernels
+that read memory outside their seeded buffers (e.g. the #98
+`sum_of_poly` defect) can still vary between identical-seed runs —
+that variance is itself evidence of an out-of-bounds read.
+(The shared `load_random_data` also serves `volk_ulp_profile` and the
+per-kernel `qa_volk_*` ctests: an exported seed pins those too, and
+in multi-kernel loops the per-process stream makes results
+deterministic but iteration-order-coupled.)
