@@ -146,7 +146,8 @@ int main(int argc, char* argv[])
 #ifndef _MSC_VER // XDG is Unix/Linux only; migration prompt cannot fire on Windows
     // Check for legacy config that should be migrated to XDG location
     if (volk_config_path == "") {
-        char xdg_path[512], legacy_path[512];
+        // Match volk_get_config_path's other callers (char path[1024] below).
+        char xdg_path[1024], legacy_path[1024];
         volk_get_config_path(legacy_path, true); // find existing config
         volk_get_config_path(xdg_path, false);   // find preferred write path
 
