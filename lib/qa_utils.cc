@@ -92,8 +92,23 @@ void load_random_data(void* data,
                       const std::vector<float>& float_edge_cases,
                       const std::vector<lv_32fc_t>& complex_edge_cases)
 {
-    std::random_device rnd_device;
-    std::default_random_engine rnd_engine(rnd_device());
+    // #134: HARNESS_SEED pins the data for reproducible triage snapshots.
+    // The triage runner exports a distinct per-(kernel,mode) value derived
+    // from the user's seed; the engine is static so successive
+    // per-(kernel,vlen) fills continue one stream instead of restarting it.
+    // Unset (the default, including all of testqa): a fresh random_device
+    // draw per call — behavior unchanged.
+    std::default_random_engine unseeded;
+    std::default_random_engine* engine_ptr = &unseeded;
+    if (const char* seed_env = std::getenv("HARNESS_SEED")) {
+        static std::default_random_engine seeded(
+            static_cast<unsigned long>(std::strtoul(seed_env, nullptr, 10)));
+        engine_ptr = &seeded;
+    } else {
+        std::random_device rnd_device;
+        unseeded.seed(rnd_device());
+    }
+    std::default_random_engine& rnd_engine = *engine_ptr;
 
     unsigned int edge_case_count = 0;
 
