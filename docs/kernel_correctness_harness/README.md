@@ -128,16 +128,30 @@ either defect class, CI breaks here.
 ## Triage report format and snapshots
 
 With `HARNESS_REPORT=path` every mode writes
-`kernel,impl,mode,result,failed_vlens` — one row per kernel × impl. `mode` is
-`ref`/`impl` (sweep), `canary`, `immutable`, or `misaligned`. `result` is
-`ok`, `FAIL`, `partial` (canary unwritten), or `skip`; rows with impl `-` are
-kernel-level (skips, or failures not attributable to one impl, e.g. an
-exception mid-run). `failed_vlens` is space-separated.
+`kernel,impl,mode,result,failed_vlens,max_err` — one row per kernel × impl,
+preceded by a `# volk-harness-report v2` version-marker line (`#`-prefixed so
+readers skip it). `mode` is `ref`/`impl` (sweep), `canary`, `immutable`, or
+`misaligned`. `result` is `ok`, `FAIL`, `partial` (canary unwritten), or `skip`;
+rows with impl `-` are kernel-level (skips, or failures not attributable to one
+impl, e.g. an exception mid-run). `failed_vlens` is space-separated.
+
+`max_err` (`#135`) is the per-impl worst-case divergence magnitude across all
+swept vlens — formatted `%.3g` (e.g. `4e+04`, `1.2e-06`, `inf`) — so a triager
+can rank `FAIL`s by severity instead of treating a `4e+04` and a `1.2e-06` error
+as the same bare `FAIL`. It is populated for the `ref`/`impl` sweep and **empty**
+for `canary`/`immutable`/`misaligned` (no numeric divergence) and for every
+kernel-level `-` row (including ref `skip`). Note: an `ok` row still carries its
+worst *within-tolerance* divergence (it is the largest observed, not zero), so
+rank on `result == FAIL` first. A literal `0` means zero observed divergence,
+not necessarily the baseline — a swept impl bit-identical to `generic` also
+reads `0` (distinct from the *empty* field on skip / non-sweep rows). In `impl`
+mode `generic` is the baseline and reads `0`; in `ref` mode `generic` is itself
+compared against the oracle, so its `max_err` is a real value.
 
 Reference mode (`ref`) reports `skip` — **not** a silent `ok` — when the oracle
 cannot evaluate a registered kernel's shape (`#133`): a
-`<kernel>,-,ref,skip,<reason>` row whose `failed_vlens` column carries the
-reason (`unsupported-scalar-signature`, `unsupported-arity`, or
+`<kernel>,-,ref,skip,<reason>,` row (empty `max_err`) whose `failed_vlens` column
+carries the reason (`unsupported-scalar-signature`, `unsupported-arity`, or
 `ref-setup-failed`) instead of vlens. This makes a kernel the oracle could not
 run distinguishable from one it ran and passed — important as the reference
 registry grows (each Class-B adjudication adds an oracle, and a newly-registered
@@ -151,6 +165,7 @@ one CSV. Runner-synthesized rows use the runner's mode label `sweep` for the
 default mode (in-binary rows say `ref`/`impl`) and carry a detail string
 instead of vlens in `failed_vlens`: `timeout`, `signal=<NAME>`, `exit=<N>`,
 `runner-error: <msg>` (result `abort`), or `no-qa-entry` (result `skip`).
+`max_err` is empty on all runner-synthesized rows.
 
 Checked-in snapshots (the per-kernel fix backlog):
 
@@ -158,7 +173,9 @@ Checked-in snapshots (the per-kernel fix backlog):
   [`triage-2026-06-11-summary.md`](triage-2026-06-11-summary.md) — the epic-#85
   closeout snapshot: 154 kernels × 4 mode legs, 2,796 rows, 113 finding rows
   (112 FAIL across 22 kernels, plus 1 abort on a 23rd), headlined by the two
-  live motivating defects.
+  live motivating defects. (This snapshot predates `#135` and is still in the
+  v1 5-column format; the next regeneration under `#106` produces the v2
+  `max_err` format.)
 
 Retention: latest snapshot only — a new snapshot replaces the old files
 (history stays in git), so the directory does not accumulate dated CSVs.

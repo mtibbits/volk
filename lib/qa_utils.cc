@@ -1552,6 +1552,16 @@ bool run_volk_tests(volk_func_desc_t desc,
         arch_results.push_back(!arch_fail);
     }
 
+    // #135: carry each arch's worst-case divergence onto its per-impl record so
+    // the driver can emit it to the HARNESS_REPORT max_err column. Done in this
+    // follow-up loop (not at the result's creation in the timing loop) because
+    // arch_max_err is only populated by the compare loop above. Generic stays 0.0
+    // (the compare loop skips it via i != generic_offset), matching the human
+    // table's "-" for generic.
+    for (size_t i = 0; i < arch_list.size(); i++) {
+        results->back().results[arch_list[i]].max_err = arch_max_err[i];
+    }
+
     double best_time_a = std::numeric_limits<double>::max();
     double best_time_u = std::numeric_limits<double>::max();
     std::string best_arch_a = "generic";
@@ -2007,6 +2017,8 @@ bool run_volk_reference_test(volk_func_desc_t desc,
                            // uninitialized read when the result is consumed
         result.units = "ref";
         result.pass = !arch_fail;
+        result.max_err = arch_max_err; // #135: per-impl oracle divergence; in ref
+                                       // mode generic IS compared (real value).
         results->back().results[d.arch_list[i]] = result;
         if (arch_fail) {
             fail_global = true;

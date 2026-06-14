@@ -121,7 +121,8 @@ quiet_run(volk_test_case_t& tc,
           std::set<std::string>* impls_seen = nullptr,
           std::map<std::string, std::vector<unsigned int>>* impl_fails = nullptr,
           bool* ref_applied = nullptr,
-          std::string* ref_skip_reason = nullptr)
+          std::string* ref_skip_reason = nullptr,
+          std::map<std::string, double>* impl_max_err = nullptr)
 {
     std::vector<volk_test_results_t> results;
     const bool verbose = (std::getenv("HARNESS_VERBOSE") != nullptr);
@@ -169,12 +170,20 @@ quiet_run(volk_test_case_t& tc,
     // #92 triage detail: both run_volk_tests and run_volk_reference_test fill
     // results.back().results with one entry per impl (generic included), each
     // carrying the impl's pass flag for this (kernel, vlen) run.
-    if ((impls_seen || impl_fails) && !results.empty()) {
+    if ((impls_seen || impl_fails || impl_max_err) && !results.empty()) {
         for (const auto& kv : results.back().results) {
             if (impls_seen)
                 impls_seen->insert(kv.first);
             if (impl_fails && !kv.second.pass)
                 (*impl_fails)[kv.first].push_back(v);
+            // #135: track the worst-case divergence per impl across all vlens
+            // (plain compare — <algorithm> is not included in this TU; max_err
+            // is always >= 0 so the value-initialised 0.0 is the correct floor).
+            if (impl_max_err) {
+                double& cur = (*impl_max_err)[kv.first];
+                if (kv.second.max_err > cur)
+                    cur = kv.second.max_err;
+            }
         }
     }
     // #133 ref-mode tri-state: surface whether the oracle could evaluate this
@@ -390,7 +399,8 @@ static void emit_impl_rows(FILE* report,
                            const std::string& kernel,
                            const char* mode,
                            const std::set<std::string>& impls_seen,
-                           const std::vector<impl_row_category>& categories)
+                           const std::vector<impl_row_category>& categories,
+                           const std::map<std::string, double>* max_err = nullptr)
 {
     for (const std::string& impl : impls_seen) {
         const char* status = nullptr;
@@ -404,13 +414,25 @@ static void emit_impl_rows(FILE* report,
             if (std::string(status) == cat.status)
                 vs += vlens_str(it->second);
         }
+        // #135: 6th column = worst-case divergence magnitude for this impl.
+        // %.3g is compact, comma-free (C locale) and magnitude-preserving
+        // (4e+04, 1.2e-06, or inf for catastrophic divergence); empty when no
+        // max_err map is supplied (canary/immutable/misaligned modes, where
+        // divergence is meaningless).
+        char eb[32] = "";
+        if (max_err) {
+            const auto me = max_err->find(impl);
+            if (me != max_err->end())
+                std::snprintf(eb, sizeof eb, "%.3g", me->second);
+        }
         std::fprintf(report,
-                     "%s,%s,%s,%s,%s\n",
+                     "%s,%s,%s,%s,%s,%s\n",
                      kernel.c_str(),
                      impl.c_str(),
                      mode,
                      status ? status : "ok",
-                     vs.c_str());
+                     vs.c_str(),
+                     eb);
     }
 }
 
@@ -442,11 +464,17 @@ int main(int argc, char* argv[])
     FILE* report = nullptr;
     if (const char* rp = std::getenv("HARNESS_REPORT")) {
         report = std::fopen(rp, "w");
-        if (report)
-            std::fprintf(report, "kernel,impl,mode,result,failed_vlens\n");
-        else
+        if (report) {
+            // #135: a version-marker comment line FIRST (lets the runner/readers
+            // detect the schema; '#'-prefixed so it is trivially skippable), then
+            // the 6-column header. Braced so the marker+header both stay under
+            // `if (report)` and the `else` does not dangle.
+            std::fprintf(report, "# volk-harness-report v2\n");
+            std::fprintf(report, "kernel,impl,mode,result,failed_vlens,max_err\n");
+        } else {
             std::cerr << "HARNESS_REPORT: cannot open '" << rp
                       << "' — human output only\n";
+        }
     }
 
     // #89 output-buffer canary mode (opt-in via HARNESS_CANARY). This is a
@@ -562,7 +590,7 @@ int main(int argc, char* argv[])
             if (tc.puppet_master_name() != "NULL") {
                 std::cout << "skip  [canary] " << tc.name() << " (puppet)\n";
                 if (report)
-                    std::fprintf(report, "%s,-,canary,skip,\n", tc.name().c_str());
+                    std::fprintf(report, "%s,-,canary,skip,,\n", tc.name().c_str());
                 std::cout.flush();
                 continue;
             }
@@ -597,7 +625,7 @@ int main(int argc, char* argv[])
                 std::cout << "skip  [canary] " << tc.name()
                           << " (no guardable output buffer)\n";
                 if (report)
-                    std::fprintf(report, "%s,-,canary,skip,\n", tc.name().c_str());
+                    std::fprintf(report, "%s,-,canary,skip,,\n", tc.name().c_str());
                 std::cout.flush();
                 continue;
             }
@@ -635,7 +663,7 @@ int main(int argc, char* argv[])
                     unattributed_vlens(over_run, guard_fails);
                 if (!unattr.empty()) {
                     std::fprintf(report,
-                                 "%s,-,canary,FAIL,%s\n",
+                                 "%s,-,canary,FAIL,%s,\n",
                                  tc.name().c_str(),
                                  vlens_str(unattr).c_str());
                 }
@@ -713,7 +741,7 @@ int main(int argc, char* argv[])
             if (tc.puppet_master_name() != "NULL") {
                 std::cout << "skip  [immutable] " << tc.name() << " (puppet)\n";
                 if (report)
-                    std::fprintf(report, "%s,-,immutable,skip,\n", tc.name().c_str());
+                    std::fprintf(report, "%s,-,immutable,skip,,\n", tc.name().c_str());
                 std::cout.flush();
                 continue;
             }
@@ -739,7 +767,7 @@ int main(int argc, char* argv[])
                 std::cout << "skip  [immutable] " << tc.name()
                           << " (no protectable input buffer)\n";
                 if (report)
-                    std::fprintf(report, "%s,-,immutable,skip,\n", tc.name().c_str());
+                    std::fprintf(report, "%s,-,immutable,skip,,\n", tc.name().c_str());
                 std::cout.flush();
                 continue;
             }
@@ -849,7 +877,7 @@ int main(int argc, char* argv[])
             if (tc.puppet_master_name() != "NULL") {
                 std::cout << "skip  [misaligned] " << tc.name() << " (puppet)\n";
                 if (report)
-                    std::fprintf(report, "%s,-,misaligned,skip,\n", tc.name().c_str());
+                    std::fprintf(report, "%s,-,misaligned,skip,,\n", tc.name().c_str());
                 std::cout.flush();
                 continue;
             }
@@ -878,7 +906,7 @@ int main(int argc, char* argv[])
                 std::cout << "skip  [misaligned] " << tc.name()
                           << " (no checkable unaligned impl)\n";
                 if (report)
-                    std::fprintf(report, "%s,-,misaligned,skip,\n", tc.name().c_str());
+                    std::fprintf(report, "%s,-,misaligned,skip,,\n", tc.name().c_str());
                 std::cout.flush();
                 continue;
             }
@@ -1146,6 +1174,7 @@ int main(int argc, char* argv[])
         std::vector<unsigned int> bad;
         std::set<std::string> impls_seen;
         std::map<std::string, std::vector<unsigned int>> impl_fails;
+        std::map<std::string, double> impl_max_err; // #135: worst divergence per impl
         bool ref_applied = true; // #133: did the oracle evaluate this kernel?
         std::string ref_skip_reason;
         for (unsigned int v : vlens) {
@@ -1163,7 +1192,8 @@ int main(int argc, char* argv[])
                           report ? &impls_seen : nullptr,
                           report ? &impl_fails : nullptr,
                           &ref_applied,
-                          &ref_skip_reason))
+                          &ref_skip_reason,
+                          report ? &impl_max_err : nullptr))
                 bad.push_back(v);
             // #133: an unsupported oracle shape is vlen-independent — detect it on
             // the first run and stop, so we emit ONE skip row (not one per vlen)
@@ -1179,7 +1209,7 @@ int main(int argc, char* argv[])
             std::cout << "skip  [ref] " << tc.name() << "  (" << ref_skip_reason << ")\n";
             if (report)
                 std::fprintf(report,
-                             "%s,-,ref,skip,%s\n",
+                             "%s,-,ref,skip,%s,\n",
                              tc.name().c_str(),
                              ref_skip_reason.c_str());
             std::cout.flush();
@@ -1205,14 +1235,18 @@ int main(int argc, char* argv[])
         }
         if (report) {
             // `mode` is ref|impl per the kernel's reference registration (#92).
-            emit_impl_rows(
-                report, tc.name(), mode, impls_seen, { { &impl_fails, "FAIL" } });
+            emit_impl_rows(report,
+                           tc.name(),
+                           mode,
+                           impls_seen,
+                           { { &impl_fails, "FAIL" } },
+                           &impl_max_err); // #135: sweep rows carry max_err
             // Failures with no impl attribution (an exception during the run,
             // or nothing observed at all) stay visible on a "-" row.
             const std::vector<unsigned int> unattr = unattributed_vlens(bad, impl_fails);
             if (!unattr.empty()) {
                 std::fprintf(report,
-                             "%s,-,%s,FAIL,%s\n",
+                             "%s,-,%s,FAIL,%s,\n",
                              tc.name().c_str(),
                              mode,
                              vlens_str(unattr).c_str());

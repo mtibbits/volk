@@ -40,7 +40,7 @@ MODES = {
     "immutable": {"HARNESS_IMMUTABLE": "1"},
     "misaligned": {"HARNESS_MISALIGNED": "1"},
 }
-HEADER = ["kernel", "impl", "mode", "result", "failed_vlens"]
+HEADER = ["kernel", "impl", "mode", "result", "failed_vlens", "max_err"]
 
 
 def kernel_names(repo_root):
@@ -63,9 +63,15 @@ def read_report_rows(report):
     if os.path.exists(report):
         with open(report, newline="") as f:
             for row in csv.reader(f):
-                # Skip the header and any truncated trailing line (a crash can
+                # Skip the version-marker/comment line (#135: '# volk-harness-report
+                # v2'), the header, and any truncated trailing line (a crash can
                 # cut the final stdio flush mid-row).
-                if row and row[0] != "kernel" and len(row) == len(HEADER):
+                if (
+                    row
+                    and not row[0].startswith("#")
+                    and row[0] != "kernel"
+                    and len(row) == len(HEADER)
+                ):
                     rows.append(row)
     return rows
 
@@ -107,22 +113,22 @@ def run_one(binary, libdir, kernel, mode, timeout, tmpdir, base_seed=None):
     except subprocess.TimeoutExpired:
         # Keep whatever was written before the kill, consistent with rc<0.
         rows = read_report_rows(report)
-        rows.append([kernel, "-", mode, "abort", "timeout"])
+        rows.append([kernel, "-", mode, "abort", "timeout", ""])
         return rows
     rows = read_report_rows(report)
     # rc<0 => died on a signal; rows written before the crash are kept and the
     # abort itself becomes a finding row (tiny-vlen aborts are findings).
     if rc < 0:
-        rows.append([kernel, "-", mode, "abort", f"signal={signal_name(-rc)}"])
+        rows.append([kernel, "-", mode, "abort", f"signal={signal_name(-rc)}", ""])
     elif rc not in (0, 1):  # 0=clean, 1=FAILs recorded in rows; else abnormal
-        rows.append([kernel, "-", mode, "abort", f"exit={rc}"])
+        rows.append([kernel, "-", mode, "abort", f"exit={rc}", ""])
     elif rc == 1 and not any(r[3] in ("FAIL", "partial") for r in rows):
         # Fail closed: the binary reported failure but no finding row was
         # captured (e.g. its HARNESS_REPORT fopen failed and it degraded to
         # human output) -- record the inconsistency rather than skipping.
-        rows.append([kernel, "-", mode, "abort", "exit=1-without-finding-rows"])
+        rows.append([kernel, "-", mode, "abort", "exit=1-without-finding-rows", ""])
     if not rows:
-        rows.append([kernel, "-", mode, "skip", "no-qa-entry"])
+        rows.append([kernel, "-", mode, "skip", "no-qa-entry", ""])
     return rows
 
 
@@ -184,12 +190,15 @@ def main():
             try:
                 all_rows.extend(fut.result())
             except Exception as e:  # noqa: BLE001 -- synthesize a finding row
-                all_rows.append([k, "-", m, "abort", f"runner-error: {e}"])
+                all_rows.append([k, "-", m, "abort", f"runner-error: {e}", ""])
             done += 1
             if done % 50 == 0:
                 print(f"# {done}/{len(jobs)}", file=sys.stderr)
     all_rows.sort(key=lambda r: (r[0], r[2], r[1]))
     with open(args.out, "w", newline="") as f:
+        # #135: self-describing version marker first (matches the in-binary child
+        # reports; read_report_rows skips '#'-prefixed lines), then the header.
+        f.write("# volk-harness-report v2\n")
         w = csv.writer(f, lineterminator="\n")
         w.writerow(HEADER)
         w.writerows(all_rows)
