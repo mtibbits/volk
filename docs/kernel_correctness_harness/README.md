@@ -134,6 +134,16 @@ With `HARNESS_REPORT=path` every mode writes
 kernel-level (skips, or failures not attributable to one impl, e.g. an
 exception mid-run). `failed_vlens` is space-separated.
 
+Reference mode (`ref`) reports `skip` — **not** a silent `ok` — when the oracle
+cannot evaluate a registered kernel's shape (`#133`): a
+`<kernel>,-,ref,skip,<reason>` row whose `failed_vlens` column carries the
+reason (`unsupported-scalar-signature`, `unsupported-arity`, or
+`ref-setup-failed`) instead of vlens. This makes a kernel the oracle could not
+run distinguishable from one it ran and passed — important as the reference
+registry grows (each Class-B adjudication adds an oracle, and a newly-registered
+unsupported shape must surface as a coverage gap, not a false `ok`). The CI
+combined negative control asserts this path stays a `skip`.
+
 `tools/run_harness_triage.py` drives the full catalog — one process per
 (kernel, mode) via the argv filter, so a kernel that hard-aborts becomes an
 `abort` finding row instead of killing the run — and merges everything into

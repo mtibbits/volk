@@ -119,7 +119,9 @@ quiet_run(volk_test_case_t& tc,
           const std::vector<float>& fedges = kFloatEdges,
           const std::vector<lv_32fc_t>& cedges = kComplexEdges,
           std::set<std::string>* impls_seen = nullptr,
-          std::map<std::string, std::vector<unsigned int>>* impl_fails = nullptr)
+          std::map<std::string, std::vector<unsigned int>>* impl_fails = nullptr,
+          bool* ref_applied = nullptr,
+          std::string* ref_skip_reason = nullptr)
 {
     std::vector<volk_test_results_t> results;
     const bool verbose = (std::getenv("HARNESS_VERBOSE") != nullptr);
@@ -174,6 +176,16 @@ quiet_run(volk_test_case_t& tc,
             if (impl_fails && !kv.second.pass)
                 (*impl_fails)[kv.first].push_back(v);
         }
+    }
+    // #133 ref-mode tri-state: surface whether the oracle could evaluate this
+    // kernel so the driver reports `skip` (not a silent `ok`) on an unsupported
+    // shape. Set unconditionally (not gated on a report) — the human skip line
+    // prints with or without HARNESS_REPORT.
+    if (!results.empty()) {
+        if (ref_applied)
+            *ref_applied = results.back().applied;
+        if (ref_skip_reason)
+            *ref_skip_reason = results.back().skip_reason;
     }
     std::fflush(stdout);
     std::cout.flush();
@@ -1051,6 +1063,53 @@ int main(int argc, char* argv[])
                 lost = true;
             }
         }
+
+        // #133: ref mode must report an oracle shape it cannot evaluate as a
+        // SKIP (applied=false), never a silent `ok [ref]` (the fail-open
+        // regression). Drive the unsupported-scalar-signature path with a real
+        // complex-scalar (s32fc) kernel name so get_signatures_from_name parses
+        // a complex scalar; the stub oracle is never reached (the guard returns
+        // first). volk_canary_desc supplies a 1-impl arch list, exactly as the
+        // power/tanh planted cases above use it with a 32fc name.
+        {
+            std::vector<volk_test_results_t> uns_results;
+            const volk_reference_entry unsupported_ref{
+                "volk_32fc_s32fc_multiply_32fc",
+                +[](const std::vector<const void*>&,
+                    const std::vector<void*>&,
+                    lv_32fc_t,
+                    unsigned int) {},
+                1e-6f,
+                false
+            };
+            const bool uns_fail =
+                run_volk_reference_test(volk_canary_desc(),
+                                        (void (*)())(&volk_32f_canaryok_32f),
+                                        "volk_32fc_s32fc_multiply_32fc",
+                                        unsupported_ref,
+                                        power_scalar,
+                                        127u,
+                                        &uns_results,
+                                        kFloatEdges,
+                                        kComplexEdges);
+            const bool uns_skipped =
+                !uns_results.empty() && !uns_results.back().applied &&
+                uns_results.back().skip_reason == "unsupported-scalar-signature";
+            if (uns_fail || !uns_skipped) {
+                std::cout << "LOST  [combined-nc] ref-mode unsupported shape "
+                             "reported "
+                          << (uns_fail ? "FAIL" : "ok") << ", expected skip\n";
+                std::cerr << "NEGATIVE CONTROL LOST: reference mode no longer "
+                             "reports an unsupported oracle shape as skip — the "
+                             "#133 fail-open regression has returned (a silent "
+                             "ok [ref] hides an unevaluated kernel).\n";
+                lost = true;
+            } else {
+                std::cout << "ok    [combined-nc] ref-mode unsupported shape → "
+                             "skip (applied=false, "
+                          << uns_results.back().skip_reason << ")\n";
+            }
+        }
         if (lost)
             return 2;
         std::cerr << "combined negative control OK: power flagged by the independent "
@@ -1062,7 +1121,7 @@ int main(int argc, char* argv[])
     std::cout << "# kernel-correctness remainder sweep: vlens 1..40, 131071, 1000003\n";
     std::cout.flush();
 
-    int tested = 0, failed = 0;
+    int tested = 0, failed = 0, skipped = 0; // #133: skipped = ref oracle couldn't run
     // Negative-control tracking: power_seen = power_32fc was in the (filtered) sweep
     // at all; power_ref_tested = it ran in reference mode. The two together detect a
     // dropped/renamed registration (the likelier regression), not just a broken oracle.
@@ -1070,7 +1129,8 @@ int main(int argc, char* argv[])
     for (auto& tc : test_cases) {
         if (!filter.empty() && tc.name() != filter)
             continue;
-        ++tested;
+        // #133: ++tested moved below the skip check — a ref kernel the oracle
+        // cannot evaluate is `skip`, not a tested kernel.
         // Registered kernels run against the independent double reference (#88);
         // the rest fall back to the impl-vs-impl comparison.
         const volk_reference_entry* ref = volk_reference_lookup(tc.name());
@@ -1086,6 +1146,8 @@ int main(int argc, char* argv[])
         std::vector<unsigned int> bad;
         std::set<std::string> impls_seen;
         std::map<std::string, std::vector<unsigned int>> impl_fails;
+        bool ref_applied = true; // #133: did the oracle evaluate this kernel?
+        std::string ref_skip_reason;
         for (unsigned int v : vlens) {
             // Per-impl collection is only consumed by the CSV report; skip the
             // per-(kernel,vlen) map building when no report was requested.
@@ -1099,9 +1161,31 @@ int main(int argc, char* argv[])
                           kFloatEdges,
                           kComplexEdges,
                           report ? &impls_seen : nullptr,
-                          report ? &impl_fails : nullptr))
+                          report ? &impl_fails : nullptr,
+                          &ref_applied,
+                          &ref_skip_reason))
                 bad.push_back(v);
+            // #133: an unsupported oracle shape is vlen-independent — detect it on
+            // the first run and stop, so we emit ONE skip row (not one per vlen)
+            // and don't waste 41 further runs.
+            if (!ref_applied)
+                break;
         }
+        // #133: a ref kernel the oracle could not evaluate (unsupported scalar
+        // signature / arity / setup failure) is `skip`, NOT a silent `ok [ref]`.
+        // Emit exactly one skip row carrying the reason; don't count it tested.
+        if (ref && !ref_applied) {
+            ++skipped;
+            std::cout << "skip  [ref] " << tc.name() << "  (" << ref_skip_reason << ")\n";
+            if (report)
+                std::fprintf(report,
+                             "%s,-,ref,skip,%s\n",
+                             tc.name().c_str(),
+                             ref_skip_reason.c_str());
+            std::cout.flush();
+            continue;
+        }
+        ++tested;
         if (tc.name() == "volk_32fc_s32f_power_32fc") {
             power_seen = true;
             // The control's signal needs a vlen >= 2: at vlen 1 the only element is
@@ -1138,8 +1222,9 @@ int main(int argc, char* argv[])
     }
     if (report)
         std::fclose(report);
-    std::cerr << "\ncorrectness remainder sweep: " << failed << " / " << tested
-              << " kernels failed\n";
+    std::cerr << "\ncorrectness remainder sweep: " << skipped
+              << " ref kernels skipped (oracle could not evaluate); " << failed << " / "
+              << tested << " kernels failed\n";
 
     // #88 negative control: the live swapped-atan2 defect in volk_32fc_s32f_power_32fc
     // makes it wrong for every input, but it has no SIMD impl so the impl-vs-impl
