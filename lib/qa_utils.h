@@ -45,6 +45,12 @@ public:
     double time;
     std::string units;
     bool pass;
+    // #135: worst-case divergence magnitude this impl showed vs the comparison
+    // baseline (impl-vs-generic in impl mode; impl-vs-oracle in ref mode),
+    // absolute or relative per the kernel's mode. Carried out to the
+    // HARNESS_REPORT max_err column. Default 0.0 so every other producer/consumer
+    // (default qa, volk_profile) is unaffected; only the sweep emit path reads it.
+    double max_err = 0.0;
 };
 
 class volk_test_results_t
