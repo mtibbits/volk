@@ -169,13 +169,15 @@ instead of vlens in `failed_vlens`: `timeout`, `signal=<NAME>`, `exit=<N>`,
 
 Checked-in snapshots (the per-kernel fix backlog):
 
-- [`triage-2026-06-11.csv`](triage-2026-06-11.csv) +
-  [`triage-2026-06-11-summary.md`](triage-2026-06-11-summary.md) — the epic-#85
-  closeout snapshot: 154 kernels × 4 mode legs, 2,796 rows, 113 finding rows
-  (112 FAIL across 22 kernels, plus 1 abort on a 23rd), headlined by the two
-  live motivating defects. (This snapshot predates `#135` and is still in the
-  v1 5-column format; the next regeneration under `#106` produces the v2
-  `max_err` format.)
+- [`triage-2026-06-14.csv`](triage-2026-06-14.csv) +
+  [`triage-2026-06-14-summary.md`](triage-2026-06-14-summary.md) — the seeded
+  (`HARNESS_SEED=20260614`), severity-ranked v2 snapshot taken after the WP 2.1
+  gate completed the harness (#106 Phase A per-kernel params, #133 ref-skip,
+  #134 seed, #135 `max_err`): 2,854 rows, **46 finding rows** (down from the old
+  113 — Phase A cleared ~67 rows of harness artifact). The summary's 10-seed
+  stability study is the load-bearing classification: 9 stable genuine findings,
+  6 reduction-family margin-flickers (→ #118), 8 harness-artifact clears. Triage
+  by that table, not the single-seed CSV.
 
 Retention: latest snapshot only — a new snapshot replaces the old files
 (history stays in git), so the directory does not accumulate dated CSVs.
