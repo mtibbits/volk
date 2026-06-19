@@ -688,6 +688,17 @@ if(ENABLE_TESTING)
     endif()
     target_link_libraries(volk_test_all fmt::fmt)
 
+    # --- overlaid kernel-correctness harness (mtibbits/volk fork, epic #85) ---
+    # minimal overlay: just the correctness-harness target; NOT the fork's #58
+    # dispatch-table check or #78 codegen-equivalence machinery. Tests UPSTREAM kernels.
+    volk_gen_test(
+        volk_test_correctness SOURCES
+        ${CMAKE_CURRENT_SOURCE_DIR}/test_correctness.cc
+        ${CMAKE_CURRENT_SOURCE_DIR}/volk_reference.cc
+        ${CMAKE_CURRENT_SOURCE_DIR}/qa_canary_kernel.cc
+        ${CMAKE_CURRENT_SOURCE_DIR}/qa_utils.cc TARGET_DEPS volk)
+    target_link_libraries(volk_test_correctness fmt::fmt)
+
     foreach(kernel ${h_files})
         get_filename_component(kernel ${kernel} NAME)
         string(REPLACE ".h" "" kernel ${kernel})

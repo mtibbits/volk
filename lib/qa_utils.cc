@@ -9,6 +9,7 @@
  */
 
 #include "qa_utils.h"
+#include "volk_reference.h" // for the independent double-precision oracle registry (#88)
 #include <volk/volk.h>
 
 #include <volk/volk.h>        // for volk_func_desc_t
@@ -18,17 +19,27 @@
 #include <stdint.h>    // for uint16_t, uint64_t
 #include <sys/time.h>  // for CLOCKS_PER_SEC
 #include <sys/types.h> // for int16_t, int32_t
+#include <algorithm>   // for std::sort, std::minmax_element
+#include <cassert>     // for assert (#90 immutability index invariant)
 #include <chrono>
 #include <cmath>    // for sqrt, fabs, abs
+#include <csetjmp>  // for sigsetjmp/siglongjmp (#91 misaligned fault isolation)
+#include <csignal>  // for sigaction, SIGSEGV/SIGBUS/SIGILL (#91)
+#include <cstdint>  // for uint8_t, uintptr_t (#89 canary)
+#include <cstdlib>  // for malloc, free (#89 canary)
 #include <cstring>  // for memcpy, memset
 #include <ctime>    // for clock
+#include <fstream>  // for std::ofstream (csv_out)
 #include <iostream> // for cerr
 #include <limits>   // for numeric_limits
 #include <map>      // for map, map<>::mappe...
+#include <memory>   // for unique_ptr (#89 canary)
 #include <random>
-#include <vector> // for vector, _Bit_refe...
+#include <stdexcept> // for runtime_error (#88)
+#include <vector>    // for vector, _Bit_refe...
 
 #include <fmt/core.h>
+#include <fmt/ostream.h>
 
 // Warmup time for CPU frequency scaling (ms)
 static double g_warmup_ms = 2000.0;
@@ -37,6 +48,33 @@ static bool g_warmup_done = false;
 double volk_test_get_warmup_ms() { return g_warmup_ms; }
 void volk_test_set_warmup_ms(double ms) { g_warmup_ms = ms; }
 void volk_test_reset_warmup() { g_warmup_done = false; }
+
+static double compute_median(std::vector<double> v)
+{
+    std::sort(v.begin(), v.end());
+    const size_t n = v.size();
+    if (n == 0) {
+        return 0.0;
+    }
+    if (n % 2 == 1) {
+        return v[n / 2];
+    }
+    return 0.5 * (v[n / 2 - 1] + v[n / 2]);
+}
+
+static double compute_mad(const std::vector<double>& v, double median)
+{
+    if (v.size() < 2) {
+        return 0.0;
+    }
+    std::vector<double> deviations;
+    deviations.reserve(v.size());
+    for (double x : v) {
+        deviations.push_back(std::fabs(x - median));
+    }
+    // 1.4826 scales MAD to a consistent estimator of σ under normality
+    return 1.4826 * compute_median(std::move(deviations));
+}
 
 template <typename T>
 void random_floats(void* buf, unsigned int n, std::default_random_engine& rnd_engine)
@@ -54,8 +92,23 @@ void load_random_data(void* data,
                       const std::vector<float>& float_edge_cases,
                       const std::vector<lv_32fc_t>& complex_edge_cases)
 {
-    std::random_device rnd_device;
-    std::default_random_engine rnd_engine(rnd_device());
+    // #134: HARNESS_SEED pins the data for reproducible triage snapshots.
+    // The triage runner exports a distinct per-(kernel,mode) value derived
+    // from the user's seed; the engine is static so successive
+    // per-(kernel,vlen) fills continue one stream instead of restarting it.
+    // Unset (the default, including all of testqa): a fresh random_device
+    // draw per call — behavior unchanged.
+    std::default_random_engine unseeded;
+    std::default_random_engine* engine_ptr = &unseeded;
+    if (const char* seed_env = std::getenv("HARNESS_SEED")) {
+        static std::default_random_engine seeded(
+            static_cast<unsigned long>(std::strtoul(seed_env, nullptr, 10)));
+        engine_ptr = &seeded;
+    } else {
+        std::random_device rnd_device;
+        unseeded.seed(rnd_device());
+    }
+    std::default_random_engine& rnd_engine = *engine_ptr;
 
     unsigned int edge_case_count = 0;
 
@@ -177,7 +230,7 @@ void load_random_data(void* data,
     }
 }
 
-static std::vector<std::string> get_arch_list(volk_func_desc_t desc)
+std::vector<std::string> get_arch_list(volk_func_desc_t desc)
 {
     std::vector<std::string> archlist;
 
@@ -275,9 +328,9 @@ std::vector<std::string> split_signature(const std::string& protokernel_signatur
     return signature_tokens;
 }
 
-static void get_signatures_from_name(std::vector<volk_type_t>& inputsig,
-                                     std::vector<volk_type_t>& outputsig,
-                                     std::string name)
+void get_signatures_from_name(std::vector<volk_type_t>& inputsig,
+                              std::vector<volk_type_t>& outputsig,
+                              std::string name)
 {
 
     std::vector<std::string> toked = split_signature(name);
@@ -333,6 +386,16 @@ static void get_signatures_from_name(std::vector<volk_type_t>& inputsig,
     assert(inputsig.size() != 0);
 }
 
+// Suppress Clang -fsanitize=function on each of the 10 run_cast_test*
+// helpers below. Conditional form avoids -Wattributes on GCC, which
+// doesn't recognize "function" as a sanitizer name.
+#if defined(__clang__)
+#define VOLK_QA_NO_SANITIZE_FUNCTION __attribute__((no_sanitize("function")))
+#else
+#define VOLK_QA_NO_SANITIZE_FUNCTION
+#endif
+
+VOLK_QA_NO_SANITIZE_FUNCTION
 inline void run_cast_test1(volk_fn_1arg func,
                            std::vector<void*>& buffs,
                            unsigned int vlen,
@@ -343,6 +406,7 @@ inline void run_cast_test1(volk_fn_1arg func,
         func(buffs[0], vlen, arch.c_str());
 }
 
+VOLK_QA_NO_SANITIZE_FUNCTION
 inline void run_cast_test2(volk_fn_2arg func,
                            std::vector<void*>& buffs,
                            unsigned int vlen,
@@ -353,6 +417,7 @@ inline void run_cast_test2(volk_fn_2arg func,
         func(buffs[0], buffs[1], vlen, arch.c_str());
 }
 
+VOLK_QA_NO_SANITIZE_FUNCTION
 inline void run_cast_test3(volk_fn_3arg func,
                            std::vector<void*>& buffs,
                            unsigned int vlen,
@@ -363,6 +428,7 @@ inline void run_cast_test3(volk_fn_3arg func,
         func(buffs[0], buffs[1], buffs[2], vlen, arch.c_str());
 }
 
+VOLK_QA_NO_SANITIZE_FUNCTION
 inline void run_cast_test4(volk_fn_4arg func,
                            std::vector<void*>& buffs,
                            unsigned int vlen,
@@ -373,6 +439,7 @@ inline void run_cast_test4(volk_fn_4arg func,
         func(buffs[0], buffs[1], buffs[2], buffs[3], vlen, arch.c_str());
 }
 
+VOLK_QA_NO_SANITIZE_FUNCTION
 inline void run_cast_test1_s32f(volk_fn_1arg_s32f func,
                                 std::vector<void*>& buffs,
                                 float scalar,
@@ -384,6 +451,7 @@ inline void run_cast_test1_s32f(volk_fn_1arg_s32f func,
         func(buffs[0], scalar, vlen, arch.c_str());
 }
 
+VOLK_QA_NO_SANITIZE_FUNCTION
 inline void run_cast_test2_s32f(volk_fn_2arg_s32f func,
                                 std::vector<void*>& buffs,
                                 float scalar,
@@ -395,6 +463,7 @@ inline void run_cast_test2_s32f(volk_fn_2arg_s32f func,
         func(buffs[0], buffs[1], scalar, vlen, arch.c_str());
 }
 
+VOLK_QA_NO_SANITIZE_FUNCTION
 inline void run_cast_test3_s32f(volk_fn_3arg_s32f func,
                                 std::vector<void*>& buffs,
                                 float scalar,
@@ -406,6 +475,7 @@ inline void run_cast_test3_s32f(volk_fn_3arg_s32f func,
         func(buffs[0], buffs[1], buffs[2], scalar, vlen, arch.c_str());
 }
 
+VOLK_QA_NO_SANITIZE_FUNCTION
 inline void run_cast_test1_s32fc(volk_fn_1arg_s32fc func,
                                  std::vector<void*>& buffs,
                                  lv_32fc_t scalar,
@@ -417,6 +487,7 @@ inline void run_cast_test1_s32fc(volk_fn_1arg_s32fc func,
         func(buffs[0], &scalar, vlen, arch.c_str());
 }
 
+VOLK_QA_NO_SANITIZE_FUNCTION
 inline void run_cast_test2_s32fc(volk_fn_2arg_s32fc func,
                                  std::vector<void*>& buffs,
                                  lv_32fc_t scalar,
@@ -428,6 +499,7 @@ inline void run_cast_test2_s32fc(volk_fn_2arg_s32fc func,
         func(buffs[0], buffs[1], &scalar, vlen, arch.c_str());
 }
 
+VOLK_QA_NO_SANITIZE_FUNCTION
 inline void run_cast_test3_s32fc(volk_fn_3arg_s32fc func,
                                  std::vector<void*>& buffs,
                                  lv_32fc_t scalar,
@@ -438,6 +510,9 @@ inline void run_cast_test3_s32fc(volk_fn_3arg_s32fc func,
     while (iter--)
         func(buffs[0], buffs[1], buffs[2], &scalar, vlen, arch.c_str());
 }
+
+// Keep the macro scoped to the helper cluster.
+#undef VOLK_QA_NO_SANITIZE_FUNCTION
 
 template <class t>
 bool fcompare(t* expected,
@@ -733,34 +808,14 @@ struct fail_info_t {
     double max_err;
 };
 
-class volk_qa_aligned_mem_pool
-{
-public:
-    void* get_new(size_t size)
-    {
-        size_t alignment = volk_get_alignment();
-        void* ptr = volk_malloc(size, alignment);
-        memset(ptr, 0x00, size);
-        _mems.push_back(ptr);
-        return ptr;
-    }
-    ~volk_qa_aligned_mem_pool()
-    {
-        for (unsigned int ii = 0; ii < _mems.size(); ++ii) {
-            volk_free(_mems[ii]);
-        }
-    }
-
-private:
-    std::vector<void*> _mems;
-};
 
 bool run_volk_tests(volk_func_desc_t desc,
                     void (*manual_func)(),
                     std::string name,
                     volk_test_params_t test_params,
                     std::vector<volk_test_results_t>* results,
-                    std::string puppet_master_name)
+                    std::string puppet_master_name,
+                    std::ofstream* csv_out)
 {
     return run_volk_tests(desc,
                           manual_func,
@@ -774,7 +829,129 @@ bool run_volk_tests(volk_func_desc_t desc,
                           test_params.absolute_mode(),
                           test_params.benchmark_mode(),
                           test_params.float_edge_cases(),
-                          test_params.complex_edge_cases());
+                          test_params.complex_edge_cases(),
+                          test_params.trials(),
+                          test_params.with_minmax(),
+                          csv_out);
+}
+
+// Shared setup for run_volk_tests and run_volk_reference_test (#88): build the
+// arch list, parse the kernel signature, generate ONE set of random inputs, and
+// build the per-arch buffer copies. `vlen` is the already-twiddled buffer length
+// (the caller owns the twiddle). Emits the same diagnostics and returns
+// ok=false on <2 archs (non-benchmark) or an unparseable signature. `mem_pool`
+// must outlive the returned buffers. This is pure setup (no kernel execution and
+// no comparison), so run_volk_tests' observable behaviour is unchanged.
+struct qa_test_data {
+    std::vector<std::string> arch_list;
+    std::map<std::string, size_t> arch_to_orig_idx;
+    std::vector<volk_type_t> inputsig;
+    std::vector<volk_type_t> outputsig;
+    std::vector<volk_type_t> inputsc;
+    std::vector<volk_type_t> both_sigs;
+    std::vector<void*> inbuffs;
+    std::vector<std::vector<void*>> test_data;
+    bool ok = true;
+};
+
+static qa_test_data setup_test_data(volk_func_desc_t desc,
+                                    const std::string& name,
+                                    unsigned int vlen,
+                                    bool benchmark_mode,
+                                    const std::vector<float>& float_edge_cases,
+                                    const std::vector<lv_32fc_t>& complex_edge_cases,
+                                    volk_qa_aligned_mem_pool& mem_pool)
+{
+    qa_test_data d;
+
+    // first let's get a list of available architectures for the test
+    d.arch_list = get_arch_list(desc);
+
+    // Build map from arch name to original index (for impl_alignment lookup)
+    for (size_t i = 0; i < d.arch_list.size(); i++) {
+        d.arch_to_orig_idx[d.arch_list[i]] = i;
+    }
+
+    // Reorder arch_list to put generic implementations first for consistent output
+    // Priority: "generic" first, then other generic_* variants, then everything else
+    std::vector<std::string> plain_generic;
+    std::vector<std::string> other_generic_impls;
+    std::vector<std::string> other_impls;
+    for (const auto& arch : d.arch_list) {
+        if (arch == "generic") {
+            plain_generic.push_back(arch);
+        } else if (arch.find("generic") == 0) { // starts with "generic"
+            other_generic_impls.push_back(arch);
+        } else {
+            other_impls.push_back(arch);
+        }
+    }
+    d.arch_list.clear();
+    d.arch_list.insert(d.arch_list.end(), plain_generic.begin(), plain_generic.end());
+    d.arch_list.insert(
+        d.arch_list.end(), other_generic_impls.begin(), other_generic_impls.end());
+    d.arch_list.insert(d.arch_list.end(), other_impls.begin(), other_impls.end());
+
+    if ((!benchmark_mode) && (d.arch_list.size() < 2)) {
+        std::cerr << "no architectures to test" << std::endl;
+        d.ok = false;
+        return d;
+    }
+
+    // now we have to get a function signature by parsing the name
+    try {
+        get_signatures_from_name(d.inputsig, d.outputsig, name);
+    } catch (std::exception& error) {
+        std::cerr << "Error: unable to get function signature from kernel name"
+                  << std::endl;
+        std::cerr << "  - " << name << std::endl;
+        d.ok = false;
+        return d;
+    }
+
+    // pull the input scalars into their own vector
+    for (size_t i = 0; i < d.inputsig.size(); i++) {
+        if (d.inputsig[i].is_scalar) {
+            d.inputsc.push_back(d.inputsig[i]);
+            d.inputsig.erase(d.inputsig.begin() + i);
+            i -= 1;
+        }
+    }
+    for (unsigned int inputsig_index = 0; inputsig_index < d.inputsig.size();
+         ++inputsig_index) {
+        volk_type_t sig = d.inputsig[inputsig_index];
+        if (!sig.is_scalar) // we don't make buffers for scalars
+            d.inbuffs.push_back(
+                mem_pool.get_new(vlen * sig.size * (sig.is_complex ? 2 : 1)));
+    }
+    for (size_t i = 0; i < d.inbuffs.size(); i++) {
+        load_random_data(
+            d.inbuffs[i], d.inputsig[i], vlen, float_edge_cases, complex_edge_cases);
+    }
+
+    // ok let's make a vector of vector of void buffers, which holds the input/output
+    // vectors for each arch
+    for (size_t i = 0; i < d.arch_list.size(); i++) {
+        std::vector<void*> arch_buffs;
+        for (size_t j = 0; j < d.outputsig.size(); j++) {
+            arch_buffs.push_back(mem_pool.get_new(vlen * d.outputsig[j].size *
+                                                  (d.outputsig[j].is_complex ? 2 : 1)));
+        }
+        for (size_t j = 0; j < d.inputsig.size(); j++) {
+            void* arch_inbuff = mem_pool.get_new(vlen * d.inputsig[j].size *
+                                                 (d.inputsig[j].is_complex ? 2 : 1));
+            memcpy(arch_inbuff,
+                   d.inbuffs[j],
+                   vlen * d.inputsig[j].size * (d.inputsig[j].is_complex ? 2 : 1));
+            arch_buffs.push_back(arch_inbuff);
+        }
+        d.test_data.push_back(arch_buffs);
+    }
+
+    d.both_sigs.insert(d.both_sigs.end(), d.outputsig.begin(), d.outputsig.end());
+    d.both_sigs.insert(d.both_sigs.end(), d.inputsig.begin(), d.inputsig.end());
+
+    return d;
 }
 
 bool run_volk_tests(volk_func_desc_t desc,
@@ -789,7 +966,10 @@ bool run_volk_tests(volk_func_desc_t desc,
                     bool absolute_mode,
                     bool benchmark_mode,
                     const std::vector<float>& float_edge_cases,
-                    const std::vector<lv_32fc_t>& complex_edge_cases)
+                    const std::vector<lv_32fc_t>& complex_edge_cases,
+                    unsigned int trials,
+                    bool with_minmax,
+                    std::ofstream* csv_out)
 {
     // Initialize this entry in results vector
     results->push_back(volk_test_results_t());
@@ -808,99 +988,24 @@ bool run_volk_tests(volk_func_desc_t desc,
     const float tol_f = tol;
     const unsigned int tol_i = static_cast<unsigned int>(tol);
 
-    // first let's get a list of available architectures for the test
-    std::vector<std::string> arch_list = get_arch_list(desc);
-
-    // Build map from arch name to original index (for impl_alignment lookup)
-    std::map<std::string, size_t> arch_to_orig_idx;
-    for (size_t i = 0; i < arch_list.size(); i++) {
-        arch_to_orig_idx[arch_list[i]] = i;
-    }
-
-    // Reorder arch_list to put generic implementations first for consistent output
-    // Priority: "generic" first, then other generic_* variants, then everything else
-    std::vector<std::string> plain_generic;
-    std::vector<std::string> other_generic_impls;
-    std::vector<std::string> other_impls;
-    for (const auto& arch : arch_list) {
-        if (arch == "generic") {
-            plain_generic.push_back(arch);
-        } else if (arch.find("generic") == 0) { // starts with "generic"
-            other_generic_impls.push_back(arch);
-        } else {
-            other_impls.push_back(arch);
-        }
-    }
-    arch_list.clear();
-    arch_list.insert(arch_list.end(), plain_generic.begin(), plain_generic.end());
-    arch_list.insert(
-        arch_list.end(), other_generic_impls.begin(), other_generic_impls.end());
-    arch_list.insert(arch_list.end(), other_impls.begin(), other_impls.end());
-
-    if ((!benchmark_mode) && (arch_list.size() < 2)) {
-        std::cout << "no architectures to test" << std::endl;
-        return false;
-    }
-
     // something that can hang onto memory and cleanup when this function exits
     volk_qa_aligned_mem_pool mem_pool;
 
-    // now we have to get a function signature by parsing the name
-    std::vector<volk_type_t> inputsig, outputsig;
-    try {
-        get_signatures_from_name(inputsig, outputsig, name);
-    } catch (std::exception& error) {
-        std::cerr << "Error: unable to get function signature from kernel name"
-                  << std::endl;
-        std::cerr << "  - " << name << std::endl;
+    // Build arch list, parse the signature, generate inputs, and per-arch buffer
+    // copies (shared with run_volk_reference_test; #88). `vlen` is twiddled here.
+    qa_test_data test_setup = setup_test_data(
+        desc, name, vlen, benchmark_mode, float_edge_cases, complex_edge_cases, mem_pool);
+    if (!test_setup.ok) {
         return false;
     }
-
-    // pull the input scalars into their own vector
-    std::vector<volk_type_t> inputsc;
-    for (size_t i = 0; i < inputsig.size(); i++) {
-        if (inputsig[i].is_scalar) {
-            inputsc.push_back(inputsig[i]);
-            inputsig.erase(inputsig.begin() + i);
-            i -= 1;
-        }
-    }
-    std::vector<void*> inbuffs;
-    for (unsigned int inputsig_index = 0; inputsig_index < inputsig.size();
-         ++inputsig_index) {
-        volk_type_t sig = inputsig[inputsig_index];
-        if (!sig.is_scalar) // we don't make buffers for scalars
-            inbuffs.push_back(
-                mem_pool.get_new(vlen * sig.size * (sig.is_complex ? 2 : 1)));
-    }
-    for (size_t i = 0; i < inbuffs.size(); i++) {
-        load_random_data(
-            inbuffs[i], inputsig[i], vlen, float_edge_cases, complex_edge_cases);
-    }
-
-    // ok let's make a vector of vector of void buffers, which holds the input/output
-    // vectors for each arch
-    std::vector<std::vector<void*>> test_data;
-    for (size_t i = 0; i < arch_list.size(); i++) {
-        std::vector<void*> arch_buffs;
-        for (size_t j = 0; j < outputsig.size(); j++) {
-            arch_buffs.push_back(mem_pool.get_new(vlen * outputsig[j].size *
-                                                  (outputsig[j].is_complex ? 2 : 1)));
-        }
-        for (size_t j = 0; j < inputsig.size(); j++) {
-            void* arch_inbuff = mem_pool.get_new(vlen * inputsig[j].size *
-                                                 (inputsig[j].is_complex ? 2 : 1));
-            memcpy(arch_inbuff,
-                   inbuffs[j],
-                   vlen * inputsig[j].size * (inputsig[j].is_complex ? 2 : 1));
-            arch_buffs.push_back(arch_inbuff);
-        }
-        test_data.push_back(arch_buffs);
-    }
-
-    std::vector<volk_type_t> both_sigs;
-    both_sigs.insert(both_sigs.end(), outputsig.begin(), outputsig.end());
-    both_sigs.insert(both_sigs.end(), inputsig.begin(), inputsig.end());
+    std::vector<std::string>& arch_list = test_setup.arch_list;
+    std::map<std::string, size_t>& arch_to_orig_idx = test_setup.arch_to_orig_idx;
+    std::vector<volk_type_t>& inputsig = test_setup.inputsig;
+    std::vector<volk_type_t>& outputsig = test_setup.outputsig;
+    std::vector<volk_type_t>& inputsc = test_setup.inputsc;
+    std::vector<volk_type_t>& both_sigs = test_setup.both_sigs;
+    std::vector<void*>& inbuffs = test_setup.inbuffs;
+    std::vector<std::vector<void*>>& test_data = test_setup.test_data;
 
     // now run the test
     vlen = vlen - vlen_twiddle;
@@ -1088,43 +1193,50 @@ bool run_volk_tests(volk_func_desc_t desc,
         g_warmup_done = true;
     }
 
-    // Reset all test buffers after warmup
-    for (size_t i = 0; i < arch_list.size(); i++) {
-        for (size_t j = 0; j < outputsig.size(); j++) {
-            memset(test_data[i][j],
-                   0,
-                   vlen * outputsig[j].size * (outputsig[j].is_complex ? 2 : 1));
+    // Zero output buffers and reload input buffers from the original data
+    // for every arch. Used between warmup and timed runs.
+    auto reset_test_buffers = [&]() {
+        for (size_t i = 0; i < arch_list.size(); i++) {
+            for (size_t j = 0; j < outputsig.size(); j++) {
+                memset(test_data[i][j],
+                       0,
+                       vlen * outputsig[j].size * (outputsig[j].is_complex ? 2 : 1));
+            }
+            for (size_t j = 0; j < inputsig.size(); j++) {
+                memcpy(test_data[i][outputsig.size() + j],
+                       inbuffs[j],
+                       vlen * inputsig[j].size * (inputsig[j].is_complex ? 2 : 1));
+            }
         }
-        // Reload input buffers from original data
-        for (size_t j = 0; j < inputsig.size(); j++) {
-            memcpy(test_data[i][outputsig.size() + j],
-                   inbuffs[j],
-                   vlen * inputsig[j].size * (inputsig[j].is_complex ? 2 : 1));
-        }
-    }
+    };
 
-    for (size_t i = 0; i < arch_list.size(); i++) {
-        start = std::chrono::system_clock::now();
+    // Reset all test buffers after the global CPU-frequency warmup.
+    reset_test_buffers();
 
+    // Dispatch one timed run of arch index `i` with `n_iter` iterations.
+    auto run_one_arch = [&](size_t i, unsigned int n_iter) {
         switch (both_sigs.size()) {
         case 1:
             if (inputsc.size() == 0) {
-                run_cast_test1(
-                    (volk_fn_1arg)(manual_func), test_data[i], vlen, iter, arch_list[i]);
+                run_cast_test1((volk_fn_1arg)(manual_func),
+                               test_data[i],
+                               vlen,
+                               n_iter,
+                               arch_list[i]);
             } else if (inputsc.size() == 1 && inputsc[0].is_float) {
                 if (inputsc[0].is_complex) {
                     run_cast_test1_s32fc((volk_fn_1arg_s32fc)(manual_func),
                                          test_data[i],
                                          scalar,
                                          vlen,
-                                         iter,
+                                         n_iter,
                                          arch_list[i]);
                 } else {
                     run_cast_test1_s32f((volk_fn_1arg_s32f)(manual_func),
                                         test_data[i],
                                         scalar.real(),
                                         vlen,
-                                        iter,
+                                        n_iter,
                                         arch_list[i]);
                 }
             } else
@@ -1132,22 +1244,25 @@ bool run_volk_tests(volk_func_desc_t desc,
             break;
         case 2:
             if (inputsc.size() == 0) {
-                run_cast_test2(
-                    (volk_fn_2arg)(manual_func), test_data[i], vlen, iter, arch_list[i]);
+                run_cast_test2((volk_fn_2arg)(manual_func),
+                               test_data[i],
+                               vlen,
+                               n_iter,
+                               arch_list[i]);
             } else if (inputsc.size() == 1 && inputsc[0].is_float) {
                 if (inputsc[0].is_complex) {
                     run_cast_test2_s32fc((volk_fn_2arg_s32fc)(manual_func),
                                          test_data[i],
                                          scalar,
                                          vlen,
-                                         iter,
+                                         n_iter,
                                          arch_list[i]);
                 } else {
                     run_cast_test2_s32f((volk_fn_2arg_s32f)(manual_func),
                                         test_data[i],
                                         scalar.real(),
                                         vlen,
-                                        iter,
+                                        n_iter,
                                         arch_list[i]);
                 }
             } else
@@ -1155,22 +1270,25 @@ bool run_volk_tests(volk_func_desc_t desc,
             break;
         case 3:
             if (inputsc.size() == 0) {
-                run_cast_test3(
-                    (volk_fn_3arg)(manual_func), test_data[i], vlen, iter, arch_list[i]);
+                run_cast_test3((volk_fn_3arg)(manual_func),
+                               test_data[i],
+                               vlen,
+                               n_iter,
+                               arch_list[i]);
             } else if (inputsc.size() == 1 && inputsc[0].is_float) {
                 if (inputsc[0].is_complex) {
                     run_cast_test3_s32fc((volk_fn_3arg_s32fc)(manual_func),
                                          test_data[i],
                                          scalar,
                                          vlen,
-                                         iter,
+                                         n_iter,
                                          arch_list[i]);
                 } else {
                     run_cast_test3_s32f((volk_fn_3arg_s32f)(manual_func),
                                         test_data[i],
                                         scalar.real(),
                                         vlen,
-                                        iter,
+                                        n_iter,
                                         arch_list[i]);
                 }
             } else
@@ -1178,16 +1296,50 @@ bool run_volk_tests(volk_func_desc_t desc,
             break;
         case 4:
             run_cast_test4(
-                (volk_fn_4arg)(manual_func), test_data[i], vlen, iter, arch_list[i]);
+                (volk_fn_4arg)(manual_func), test_data[i], vlen, n_iter, arch_list[i]);
             break;
         default:
             throw "no function handler for this signature";
             break;
         }
+    };
 
-        end = std::chrono::system_clock::now();
-        std::chrono::duration<double> elapsed_seconds = end - start;
-        double arch_time = 1000.0 * elapsed_seconds.count();
+    // Per-arch warmup pass: run each arch once with iter=1 so ORC JIT
+    // compilation, instruction caches, and branch predictors are warm
+    // before the timed measurement. The generic arch is intentionally
+    // included even though g_warmup_done covers it; the cost is one
+    // extra single-iteration call. Fixes gnuradio/volk#203.
+    for (size_t i = 0; i < arch_list.size(); i++) {
+        run_one_arch(i, 1);
+    }
+
+    // Reset all test buffers after the per-arch warmup pass.
+    reset_test_buffers();
+
+    // Timed measurement pass.
+    std::vector<double> profile_mads(arch_list.size(), 0.0);
+    std::vector<double> profile_mins(arch_list.size(), 0.0);
+    std::vector<double> profile_maxes(arch_list.size(), 0.0);
+
+    for (size_t i = 0; i < arch_list.size(); i++) {
+        std::vector<double> arch_samples;
+        arch_samples.reserve(trials);
+
+        for (unsigned int t = 0; t < trials; t++) {
+            start = std::chrono::system_clock::now();
+            run_one_arch(i, iter);
+            end = std::chrono::system_clock::now();
+
+            std::chrono::duration<double> elapsed_seconds = end - start;
+            arch_samples.push_back(1000.0 * elapsed_seconds.count());
+        }
+
+        double arch_time = compute_median(arch_samples);
+        profile_mads[i] = compute_mad(arch_samples, arch_time);
+        auto [min_it, max_it] =
+            std::minmax_element(arch_samples.begin(), arch_samples.end());
+        profile_mins[i] = *min_it;
+        profile_maxes[i] = *max_it;
 
         volk_test_time_t result;
         result.name = arch_list[i];
@@ -1197,6 +1349,18 @@ bool run_volk_tests(volk_func_desc_t desc,
         results->back().results[result.name] = result;
 
         profile_times.push_back(arch_time);
+
+        // Write per-trial CSV rows if csv_out is active
+        if (csv_out) {
+            for (unsigned int t = 0; t < trials; t++) {
+                fmt::print(*csv_out,
+                           "{},{},{},{:.6g}\n",
+                           name,
+                           arch_list[i],
+                           t,
+                           arch_samples[t]);
+            }
+        }
     }
 
     // and now compare each output to the generic output
@@ -1228,6 +1392,7 @@ bool run_volk_tests(volk_func_desc_t desc,
 
     for (size_t i = 0; i < arch_list.size(); i++) {
         fail = false;
+        bool arch_fail = false;
         if (i != generic_offset) {
             for (size_t j = 0; j < outputsig.size(); j++) {
                 std::vector<unsigned int> fail_indices;
@@ -1369,6 +1534,7 @@ bool run_volk_tests(volk_func_desc_t desc,
                     arch_max_err[i] = max_err;
                 }
                 if (fail) {
+                    arch_fail = true;
                     volk_test_time_t* result = &results->back().results[arch_list[i]];
                     result->pass = false;
                     fail_global = true;
@@ -1383,7 +1549,17 @@ bool run_volk_tests(volk_func_desc_t desc,
                 }
             }
         }
-        arch_results.push_back(!fail);
+        arch_results.push_back(!arch_fail);
+    }
+
+    // #135: carry each arch's worst-case divergence onto its per-impl record so
+    // the driver can emit it to the HARNESS_REPORT max_err column. Done in this
+    // follow-up loop (not at the result's creation in the timing loop) because
+    // arch_max_err is only populated by the compare loop above. Generic stays 0.0
+    // (the compare loop skips it via i != generic_offset), matching the human
+    // table's "-" for generic.
+    for (size_t i = 0; i < arch_list.size(); i++) {
+        results->back().results[arch_list[i]].max_err = arch_max_err[i];
     }
 
     double best_time_a = std::numeric_limits<double>::max();
@@ -1437,6 +1613,7 @@ bool run_volk_tests(volk_func_desc_t desc,
     constexpr int w_tput = 14;
     constexpr int w_speedup = 8;
     constexpr int w_err = 10;
+    constexpr int w_mad = 6;
 
     // Column header depends on error mode
     // Integer outputs always use absolute comparison, so show "max_abs" for them
@@ -1458,31 +1635,98 @@ bool run_volk_tests(volk_func_desc_t desc,
         return fmt::format("{:.1f} MB/s", mbps);
     };
 
-    // Print table header
-    fmt::print("{:<{}} | {:>{}} | {:>{}} | {:>{}} | {:>{}} |\n",
-               "arch",
-               w_arch,
-               "time",
-               w_time,
-               "throughput",
-               w_tput,
-               "speedup",
-               w_speedup,
-               err_col,
-               w_err);
-    fmt::print("{:-<{}}-+-{:-<{}}-+-{:-<{}}-+-{:-<{}}-+-{:-<{}}-+\n",
-               "",
-               w_arch,
-               "",
-               w_time,
-               "",
-               w_tput,
-               "",
-               w_speedup,
-               "",
-               w_err);
+    // Print table header — Mode A, B, or C.
+    if (trials > 1 && with_minmax) {
+        fmt::print("{:<{}} | {:>{}} | {:>{}} | {:>{}} | {:>{}} "
+                   "| {:>{}} | {:>{}} | {:>{}} |\n",
+                   "arch",
+                   w_arch,
+                   "median",
+                   w_time,
+                   "MAD%",
+                   w_mad,
+                   "min",
+                   w_time,
+                   "max",
+                   w_time,
+                   "throughput",
+                   w_tput,
+                   "speedup",
+                   w_speedup,
+                   err_col,
+                   w_err);
+        fmt::print("{:-<{}}-+-{:-<{}}-+-{:-<{}}-+-{:-<{}}-+-{:-<{}}"
+                   "-+-{:-<{}}-+-{:-<{}}-+-{:-<{}}-+\n",
+                   "",
+                   w_arch,
+                   "",
+                   w_time,
+                   "",
+                   w_mad,
+                   "",
+                   w_time,
+                   "",
+                   w_time,
+                   "",
+                   w_tput,
+                   "",
+                   w_speedup,
+                   "",
+                   w_err);
+    } else if (trials > 1) {
+        fmt::print("{:<{}} | {:>{}} | {:>{}} | {:>{}} | {:>{}} | {:>{}} |\n",
+                   "arch",
+                   w_arch,
+                   "median",
+                   w_time,
+                   "MAD%",
+                   w_mad,
+                   "throughput",
+                   w_tput,
+                   "speedup",
+                   w_speedup,
+                   err_col,
+                   w_err);
+        fmt::print("{:-<{}}-+-{:-<{}}-+-{:-<{}}-+-{:-<{}}-+-{:-<{}}-+-{:-<{}}-+\n",
+                   "",
+                   w_arch,
+                   "",
+                   w_time,
+                   "",
+                   w_mad,
+                   "",
+                   w_tput,
+                   "",
+                   w_speedup,
+                   "",
+                   w_err);
+    } else {
+        fmt::print("{:<{}} | {:>{}} | {:>{}} | {:>{}} | {:>{}} |\n",
+                   "arch",
+                   w_arch,
+                   "time",
+                   w_time,
+                   "throughput",
+                   w_tput,
+                   "speedup",
+                   w_speedup,
+                   err_col,
+                   w_err);
+        fmt::print("{:-<{}}-+-{:-<{}}-+-{:-<{}}-+-{:-<{}}-+-{:-<{}}-+\n",
+                   "",
+                   w_arch,
+                   "",
+                   w_time,
+                   "",
+                   w_tput,
+                   "",
+                   w_speedup,
+                   "",
+                   w_err);
+    }
 
-    // Print each architecture row
+    // Print each architecture row — per-row computation is shared; only
+    // the fmt::print call differs (Mode B inserts the MAD% column).
     for (size_t i = 0; i < arch_list.size(); i++) {
         double time_seconds = profile_times[i] / 1000.0;
         double throughput_mbps = total_mb / time_seconds;
@@ -1501,18 +1745,65 @@ bool run_volk_tests(volk_func_desc_t desc,
         std::string win_str =
             (arch_list[i] == best_arch_a || arch_list[i] == best_arch_u) ? " *" : "";
 
-        fmt::print("{:<{}} | {:>{}} | {:>{}} | {:>{}} | {:>{}} |{}\n",
-                   arch_list[i],
-                   w_arch,
-                   time_str,
-                   w_time,
-                   tput_str,
-                   w_tput,
-                   speedup_str,
-                   w_speedup,
-                   err_str,
-                   w_err,
-                   win_str);
+        if (trials > 1 && with_minmax) {
+            std::string mad_str =
+                (profile_times[i] > 0.0)
+                    ? fmt::format("{:.1f}%", 100.0 * profile_mads[i] / profile_times[i])
+                    : std::string("-");
+            std::string min_str = format_time(profile_mins[i]);
+            std::string max_str = format_time(profile_maxes[i]);
+            fmt::print("{:<{}} | {:>{}} | {:>{}} | {:>{}} | {:>{}} "
+                       "| {:>{}} | {:>{}} | {:>{}} |{}\n",
+                       arch_list[i],
+                       w_arch,
+                       time_str,
+                       w_time,
+                       mad_str,
+                       w_mad,
+                       min_str,
+                       w_time,
+                       max_str,
+                       w_time,
+                       tput_str,
+                       w_tput,
+                       speedup_str,
+                       w_speedup,
+                       err_str,
+                       w_err,
+                       win_str);
+        } else if (trials > 1) {
+            std::string mad_str =
+                (profile_times[i] > 0.0)
+                    ? fmt::format("{:.1f}%", 100.0 * profile_mads[i] / profile_times[i])
+                    : std::string("-");
+            fmt::print("{:<{}} | {:>{}} | {:>{}} | {:>{}} | {:>{}} | {:>{}} |{}\n",
+                       arch_list[i],
+                       w_arch,
+                       time_str,
+                       w_time,
+                       mad_str,
+                       w_mad,
+                       tput_str,
+                       w_tput,
+                       speedup_str,
+                       w_speedup,
+                       err_str,
+                       w_err,
+                       win_str);
+        } else {
+            fmt::print("{:<{}} | {:>{}} | {:>{}} | {:>{}} | {:>{}} |{}\n",
+                       arch_list[i],
+                       w_arch,
+                       time_str,
+                       w_time,
+                       tput_str,
+                       w_tput,
+                       speedup_str,
+                       w_speedup,
+                       err_str,
+                       w_err,
+                       win_str);
+        }
     }
 
     // Print best arch summary (left-aligned, ":" at arch column width)
@@ -1539,7 +1830,13 @@ bool run_volk_tests(volk_func_desc_t desc,
                           tol_f);
     }
 
-    fmt::print("{:-<88}\n", "");
+    if (trials > 1 && with_minmax) {
+        fmt::print("{:-<131}\n", "");
+    } else if (trials > 1) {
+        fmt::print("{:-<97}\n", "");
+    } else {
+        fmt::print("{:-<88}\n", "");
+    }
 
     if (puppet_master_name == "NULL") {
         results->back().config_name = name;
@@ -1551,3 +1848,1132 @@ bool run_volk_tests(volk_func_desc_t desc,
 
     return fail_global;
 }
+
+// #88: run every impl (generic included) and compare each against an INDEPENDENT
+// double-precision reference (the registry oracle), instead of impl-vs-generic.
+// This catches defects all impls share. run_volk_tests is untouched; default qa
+// is unaffected. Returns true if ANY impl diverges from the oracle past tol.
+// Supported signatures: 1-3 buffers with an optional real (s32f) scalar and a
+// float/complex-float output — covers the registered reference kernels.
+bool run_volk_reference_test(volk_func_desc_t desc,
+                             void (*manual_func)(),
+                             std::string name,
+                             const volk_reference_entry& ref,
+                             lv_32fc_t scalar,
+                             unsigned int vlen,
+                             std::vector<volk_test_results_t>* results,
+                             const std::vector<float>& float_edge_cases,
+                             const std::vector<lv_32fc_t>& complex_edge_cases)
+{
+    results->push_back(volk_test_results_t());
+    results->back().name = name;
+    results->back().vlen = vlen;
+    results->back().iter = 1;
+    fmt::print("\nRUN_VOLK_REFERENCE_TEST: {}(vlen={}, tol={:.0e}, {})\n",
+               name,
+               vlen,
+               ref.tol,
+               ref.absolute ? "abs" : "rel");
+
+    const unsigned int vlen_twiddle = 5;
+    const unsigned int vlen_alloc = vlen + vlen_twiddle;
+
+    volk_qa_aligned_mem_pool mem_pool;
+    // Pass benchmark_mode=true to setup_test_data ONLY to bypass its "need >=2
+    // archs" guard: reference mode compares a single impl (e.g. power_32fc's
+    // generic-only) against the oracle — that single-impl case is exactly the
+    // blind spot #88 exists to cover, so it must NOT be skipped.
+    qa_test_data d = setup_test_data(
+        desc, name, vlen_alloc, true, float_edge_cases, complex_edge_cases, mem_pool);
+    if (!d.ok) {
+        // #133: tri-state skip, not a silent ok. setup couldn't produce data for
+        // this kernel — a coverage gap to surface, not a defect and not a pass.
+        results->back().applied = false;
+        results->back().skip_reason = "ref-setup-failed";
+        return false;
+    }
+
+    const bool s32f =
+        (d.inputsc.size() == 1) && d.inputsc[0].is_float && !d.inputsc[0].is_complex;
+    if (d.inputsc.size() != 0 && !s32f) {
+        std::cerr << "reference mode: unsupported scalar signature for " << name
+                  << std::endl;
+        // #133: report skip — the oracle path can't drive this scalar shape.
+        results->back().applied = false;
+        results->back().skip_reason = "unsupported-scalar-signature";
+        return false;
+    }
+
+    // Run every impl ONCE into its own buffer set, at the user vlen.
+    for (size_t i = 0; i < d.arch_list.size(); i++) {
+        const std::string arch = d.arch_list[i];
+        switch (d.both_sigs.size()) {
+        case 1:
+            if (s32f)
+                run_cast_test1_s32f((volk_fn_1arg_s32f)(manual_func),
+                                    d.test_data[i],
+                                    scalar.real(),
+                                    vlen,
+                                    1,
+                                    arch);
+            else
+                run_cast_test1(
+                    (volk_fn_1arg)(manual_func), d.test_data[i], vlen, 1, arch);
+            break;
+        case 2:
+            if (s32f)
+                run_cast_test2_s32f((volk_fn_2arg_s32f)(manual_func),
+                                    d.test_data[i],
+                                    scalar.real(),
+                                    vlen,
+                                    1,
+                                    arch);
+            else
+                run_cast_test2(
+                    (volk_fn_2arg)(manual_func), d.test_data[i], vlen, 1, arch);
+            break;
+        case 3:
+            if (s32f)
+                run_cast_test3_s32f((volk_fn_3arg_s32f)(manual_func),
+                                    d.test_data[i],
+                                    scalar.real(),
+                                    vlen,
+                                    1,
+                                    arch);
+            else
+                run_cast_test3(
+                    (volk_fn_3arg)(manual_func), d.test_data[i], vlen, 1, arch);
+            break;
+        default:
+            std::cerr << "reference mode: unsupported arity for " << name << std::endl;
+            // #133: report skip — the oracle path has no caster for this arity.
+            results->back().applied = false;
+            results->back().skip_reason = "unsupported-arity";
+            return false;
+        }
+    }
+
+    // Independent double-precision golden, computed from the PRISTINE inputs
+    // (d.inbuffs is the original fill; impls run on per-arch memcpy copies, so
+    // inbuffs is never mutated by a kernel).
+    std::vector<const void*> oracle_in;
+    for (size_t k = 0; k < d.inbuffs.size(); k++) {
+        oracle_in.push_back(d.inbuffs[k]);
+    }
+    std::vector<void*> oracle_out;
+    for (size_t j = 0; j < d.outputsig.size(); j++) {
+        oracle_out.push_back(mem_pool.get_new(vlen_alloc * d.outputsig[j].size *
+                                              (d.outputsig[j].is_complex ? 2 : 1)));
+    }
+    ref.fn(oracle_in, oracle_out, scalar, vlen);
+
+    // Output type is a signature property — validate once up front and fail
+    // LOUDLY (throw; the driver catches and reports a failure) on an unsupported
+    // registration, rather than silently reporting ok.
+    if (d.outputsig.empty()) {
+        throw std::runtime_error("reference mode: kernel has no output: " + name);
+    }
+    for (size_t j = 0; j < d.outputsig.size(); j++) {
+        if (!d.outputsig[j].is_float) {
+            throw std::runtime_error("reference mode: non-float output unsupported for " +
+                                     name);
+        }
+    }
+
+    // Compare EVERY impl (generic included) against the golden.
+    bool fail_global = false;
+    for (size_t i = 0; i < d.arch_list.size(); i++) {
+        bool arch_fail = false;
+        double arch_max_err = 0.0;
+        for (size_t j = 0; j < d.outputsig.size(); j++) {
+            std::vector<unsigned int> fail_indices;
+            double max_err = 0.0;
+            bool fail;
+            if (d.outputsig[j].is_complex) {
+                fail = ccompare((float*)oracle_out[j],
+                                (float*)d.test_data[i][j],
+                                vlen,
+                                ref.tol,
+                                ref.absolute,
+                                fail_indices,
+                                max_err);
+            } else {
+                fail = fcompare((float*)oracle_out[j],
+                                (float*)d.test_data[i][j],
+                                vlen,
+                                ref.tol,
+                                ref.absolute,
+                                fail_indices,
+                                max_err);
+            }
+            arch_fail = arch_fail || fail;
+            if (max_err > arch_max_err) {
+                arch_max_err = max_err;
+            }
+        }
+        volk_test_time_t result;
+        result.name = d.arch_list[i];
+        result.time = 0.0; // reference mode does not time the run; avoid an
+                           // uninitialized read when the result is consumed
+        result.units = "ref";
+        result.pass = !arch_fail;
+        result.max_err = arch_max_err; // #135: per-impl oracle divergence; in ref
+                                       // mode generic IS compared (real value).
+        results->back().results[d.arch_list[i]] = result;
+        if (arch_fail) {
+            fail_global = true;
+            std::cout << "reference mismatch on arch: " << d.arch_list[i]
+                      << " (max_err=" << arch_max_err << ")" << std::endl;
+        }
+    }
+    return fail_global;
+}
+
+// #89: a single output buffer bracketed by sentinel guard regions, allocated in
+// its OWN malloc (NOT the qa mem pool). The data region is EXACTLY data_bytes
+// long -- no twiddle slack -- so an over-run cannot hide in allocator padding;
+// it lands in the trailing guard (caught here) or, far enough past, in the ASan
+// redzone of this allocation. The data start is aligned to volk_get_alignment()
+// so `a_*` (aligned) impls stay valid; the leading guard is the bytes between the
+// malloc base and that aligned start (the alignment slack is absorbed there, so
+// the trailing guard is a known minimum width).
+//
+//   [ leading guard >= guard_bytes | data_bytes (aligned) | trailing guard ]
+//
+namespace {
+class guarded_output_buffer
+{
+public:
+    guarded_output_buffer(size_t data_bytes, size_t alignment, size_t guard_bytes)
+        : data_bytes_(data_bytes)
+    {
+        // Over-allocate: leading guard + alignment slack + data + trailing guard.
+        // align_up of (base + guard_bytes) consumes at most (alignment - 1) bytes,
+        // so the leading guard is >= guard_bytes and the trailing guard >= guard_bytes.
+        total_ = guard_bytes + alignment + data_bytes + guard_bytes;
+        base_ = static_cast<uint8_t*>(std::malloc(total_));
+        if (base_ == nullptr) {
+            throw std::runtime_error("canary: guarded buffer malloc failed");
+        }
+        uintptr_t raw = reinterpret_cast<uintptr_t>(base_) + guard_bytes;
+        uintptr_t aligned =
+            (raw + (alignment - 1)) & ~static_cast<uintptr_t>(alignment - 1);
+        data_ = reinterpret_cast<uint8_t*>(aligned);
+        assert(data_ >= base_ + guard_bytes);
+        assert(data_ + data_bytes_ + guard_bytes <= base_ + total_);
+    }
+    ~guarded_output_buffer() { std::free(base_); }
+    guarded_output_buffer(const guarded_output_buffer&) = delete;
+    guarded_output_buffer& operator=(const guarded_output_buffer&) = delete;
+
+    void* data() const { return data_; }
+    size_t data_bytes() const { return data_bytes_; }
+
+    // Fill the WHOLE allocation (both guards + data) with one sentinel byte.
+    void fill(uint8_t sentinel) { std::memset(base_, sentinel, total_); }
+
+    // True if any guard byte differs from `sentinel` (an over/under-write).
+    // `byte_off` is set to the offset relative to the data start: negative means
+    // a write before index 0 (leading guard), >= data_bytes() means a write past
+    // the end (trailing guard).
+    bool guard_violation(uint8_t sentinel, ptrdiff_t& byte_off) const
+    {
+        for (uint8_t* p = base_; p < data_; ++p) {
+            if (*p != sentinel) {
+                byte_off = p - data_;
+                return true;
+            }
+        }
+        uint8_t* tail_start = data_ + data_bytes_;
+        const uint8_t* tail_end = base_ + total_;
+        for (uint8_t* p = tail_start; p < tail_end; ++p) {
+            if (*p != sentinel) {
+                byte_off = p - data_;
+                return true;
+            }
+        }
+        return false;
+    }
+
+private:
+    uint8_t* base_;
+    uint8_t* data_;
+    size_t total_;
+    size_t data_bytes_;
+};
+} // namespace
+
+// #89: see the declaration in qa_utils.h. Runs every impl through its own
+// guarded output buffers with the two-sentinel protocol and reports per-impl
+// pass/fail into `results`. Supports the buffer signatures the qa harness can
+// drive (1-4 buffers, with an optional real s32f or complex s32fc scalar);
+// other shapes are skipped (reported as no failure) since the canary can only
+// guard what it can call.
+volk_canary_summary run_volk_canary_test(volk_func_desc_t desc,
+                                         void (*manual_func)(),
+                                         std::string name,
+                                         lv_32fc_t scalar,
+                                         unsigned int vlen,
+                                         std::vector<volk_test_results_t>* results,
+                                         const std::vector<float>& float_edge_cases,
+                                         const std::vector<lv_32fc_t>& complex_edge_cases)
+{
+    volk_canary_summary summary;
+
+    results->push_back(volk_test_results_t());
+    results->back().name = name;
+    results->back().vlen = vlen;
+    results->back().iter = 2; // two runs per impl (S1 then S2)
+    results->back().config_name = name;
+    fmt::print("\nRUN_VOLK_CANARY_TEST: {}(vlen={})\n", name, vlen);
+
+    volk_qa_aligned_mem_pool mem_pool;
+    // Inputs are sized exactly `vlen` (no twiddle) and drawn from the pool; the
+    // canary only guards the OUTPUT write side (input immutability / over-read is
+    // #90, best-effort via ASan). benchmark_mode=true bypasses the ">=2 arch"
+    // guard so single-impl kernels are still checked.
+    qa_test_data d = setup_test_data(
+        desc, name, vlen, true, float_edge_cases, complex_edge_cases, mem_pool);
+    if (!d.ok) {
+        return summary;
+    }
+
+    const bool s32f =
+        (d.inputsc.size() == 1) && d.inputsc[0].is_float && !d.inputsc[0].is_complex;
+    const bool s32fc =
+        (d.inputsc.size() == 1) && d.inputsc[0].is_float && d.inputsc[0].is_complex;
+    // These "cannot guard this kernel" cases leave summary.applied == false so the
+    // driver reports the kernel as skipped (NOT ok). Diagnostics go to stdout so the
+    // driver's per-(kernel,vlen) stdout muting suppresses them during the sweep,
+    // consistent with how the guard/unwritten messages below are emitted.
+    if (d.inputsc.size() != 0 && !s32f && !s32fc) {
+        std::cout << "canary mode: unsupported scalar signature for " << name
+                  << std::endl;
+        return summary;
+    }
+    if (d.outputsig.empty()) {
+        std::cout << "canary mode: kernel has no output buffer to guard: " << name
+                  << std::endl;
+        return summary;
+    }
+    if (d.both_sigs.size() > 4 || (d.both_sigs.size() == 4 && d.inputsc.size() != 0)) {
+        std::cout << "canary mode: unsupported arity for " << name << std::endl;
+        return summary;
+    }
+
+    const size_t alignment = volk_get_alignment();
+    // Guard wide enough that a one-past write of any element type lands inside the
+    // trailing guard (>= alignment + a few elements).
+    const size_t guard_bytes = alignment + 64;
+
+    const uint8_t S1 = 0xA5;
+    const uint8_t S2 = 0x3C;
+
+    for (size_t i = 0; i < d.arch_list.size(); i++) {
+        const std::string arch = d.arch_list[i];
+        summary.applied = true; // we are about to guard-check at least one impl
+        summary.checked_impls.push_back(arch); // #92 triage detail
+
+        // One guarded own-malloc buffer per output; inputs stay in the pool.
+        std::vector<std::unique_ptr<guarded_output_buffer>> gbufs;
+        gbufs.reserve(d.outputsig.size());
+        for (size_t j = 0; j < d.outputsig.size(); j++) {
+            const size_t out_bytes = static_cast<size_t>(vlen) * d.outputsig[j].size *
+                                     (d.outputsig[j].is_complex ? 2 : 1);
+            gbufs.push_back(std::make_unique<guarded_output_buffer>(
+                out_bytes, alignment, guard_bytes));
+        }
+
+        // buffs layout matches setup_test_data: outputs first, then inputs.
+        auto build_buffs = [&]() {
+            std::vector<void*> buffs;
+            for (size_t j = 0; j < d.outputsig.size(); j++) {
+                buffs.push_back(gbufs[j]->data());
+            }
+            for (size_t k = 0; k < d.inputsig.size(); k++) {
+                buffs.push_back(d.test_data[i][d.outputsig.size() + k]);
+            }
+            return buffs;
+        };
+        auto reload_inputs = [&]() {
+            for (size_t k = 0; k < d.inputsig.size(); k++) {
+                const size_t in_bytes = static_cast<size_t>(vlen) * d.inputsig[k].size *
+                                        (d.inputsig[k].is_complex ? 2 : 1);
+                memcpy(d.test_data[i][d.outputsig.size() + k], d.inbuffs[k], in_bytes);
+            }
+        };
+        auto run_once = [&](std::vector<void*>& buffs) {
+            switch (d.both_sigs.size()) {
+            case 1:
+                if (s32fc)
+                    run_cast_test1_s32fc(
+                        (volk_fn_1arg_s32fc)(manual_func), buffs, scalar, vlen, 1, arch);
+                else if (s32f)
+                    run_cast_test1_s32f((volk_fn_1arg_s32f)(manual_func),
+                                        buffs,
+                                        scalar.real(),
+                                        vlen,
+                                        1,
+                                        arch);
+                else
+                    run_cast_test1((volk_fn_1arg)(manual_func), buffs, vlen, 1, arch);
+                break;
+            case 2:
+                if (s32fc)
+                    run_cast_test2_s32fc(
+                        (volk_fn_2arg_s32fc)(manual_func), buffs, scalar, vlen, 1, arch);
+                else if (s32f)
+                    run_cast_test2_s32f((volk_fn_2arg_s32f)(manual_func),
+                                        buffs,
+                                        scalar.real(),
+                                        vlen,
+                                        1,
+                                        arch);
+                else
+                    run_cast_test2((volk_fn_2arg)(manual_func), buffs, vlen, 1, arch);
+                break;
+            case 3:
+                if (s32fc)
+                    run_cast_test3_s32fc(
+                        (volk_fn_3arg_s32fc)(manual_func), buffs, scalar, vlen, 1, arch);
+                else if (s32f)
+                    run_cast_test3_s32f((volk_fn_3arg_s32f)(manual_func),
+                                        buffs,
+                                        scalar.real(),
+                                        vlen,
+                                        1,
+                                        arch);
+                else
+                    run_cast_test3((volk_fn_3arg)(manual_func), buffs, vlen, 1, arch);
+                break;
+            case 4:
+                run_cast_test4((volk_fn_4arg)(manual_func), buffs, vlen, 1, arch);
+                break;
+            default:
+                break;
+            }
+        };
+
+        bool arch_guard = false;
+        bool arch_unwritten = false;
+
+        // ---- Run 1: prefill the whole guarded buffer with sentinel S1 ----
+        for (auto& g : gbufs) {
+            g->fill(S1);
+        }
+        reload_inputs();
+        {
+            std::vector<void*> buffs = build_buffs();
+            run_once(buffs);
+        }
+        // Snapshot the data region after run 1 (before S2 overwrites it) and check
+        // the guards for an over/under-write. Guard violations go to std::cerr (NOT
+        // std::cout) so they survive the sweep's per-(kernel,vlen) stdout muting: a
+        // touched guard is ALWAYS a real defect (unlike the unwritten check below,
+        // which reduction kernels trip expectedly), so its arch/offset detail must
+        // stay visible and actionable on the one run where it fires.
+        std::vector<std::vector<uint8_t>> snap_s1(d.outputsig.size());
+        for (size_t j = 0; j < gbufs.size(); j++) {
+            ptrdiff_t off = 0;
+            if (gbufs[j]->guard_violation(S1, off)) {
+                arch_guard = true;
+                std::cerr << name << ": canary guard touched on arch " << arch
+                          << " (output " << j << ", byte offset " << off
+                          << " relative to data start)\n";
+            }
+            const uint8_t* p = static_cast<const uint8_t*>(gbufs[j]->data());
+            snap_s1[j].assign(p, p + gbufs[j]->data_bytes());
+        }
+
+        // ---- Run 2: prefill with the distinct sentinel S2 ----
+        for (auto& g : gbufs) {
+            g->fill(S2);
+        }
+        reload_inputs();
+        {
+            std::vector<void*> buffs = build_buffs();
+            run_once(buffs);
+        }
+        for (size_t j = 0; j < gbufs.size(); j++) {
+            ptrdiff_t off = 0;
+            if (gbufs[j]->guard_violation(S2, off)) {
+                arch_guard = true;
+                std::cerr << name << ": canary guard touched on arch " << arch
+                          << " (output " << j << ", byte offset " << off
+                          << " relative to data start)\n";
+            }
+            // In-bounds-unwritten check: a byte the kernel wrote holds the same
+            // (deterministic) value in both runs, so it cannot equal S1 after run 1
+            // AND S2 after run 2. A byte that still equals both sentinels was never
+            // written -- an in-bounds element left untouched (which ASan cannot see).
+            const uint8_t* d2 = static_cast<const uint8_t*>(gbufs[j]->data());
+            for (size_t b = 0; b < gbufs[j]->data_bytes(); b++) {
+                if (snap_s1[j][b] == S1 && d2[b] == S2) {
+                    arch_unwritten = true;
+                    std::cout << name << ": canary found unwritten output byte on arch "
+                              << arch << " (output " << j << ", byte offset " << b << ")"
+                              << std::endl;
+                    break;
+                }
+            }
+        }
+
+        volk_test_time_t result;
+        result.name = arch;
+        result.time = 0.0; // canary does not time the run; avoid an uninitialized read
+        result.units = "canary"; // populate every field, even though unread on this path
+        result.pass = !(arch_guard || arch_unwritten);
+        results->back().results[arch] = result;
+        summary.guard_violation = summary.guard_violation || arch_guard;
+        summary.unwritten = summary.unwritten || arch_unwritten;
+        // #92 triage detail: record offenders once per arch, from the per-arch
+        // flags (never at the per-byte detection sites).
+        if (arch_guard)
+            summary.guard_impls.push_back(arch);
+        if (arch_unwritten)
+            summary.unwritten_impls.push_back(arch);
+    }
+    return summary;
+}
+
+volk_immutability_summary
+run_volk_immutability_test(volk_func_desc_t desc,
+                           void (*manual_func)(),
+                           std::string name,
+                           lv_32fc_t scalar,
+                           unsigned int vlen,
+                           std::vector<volk_test_results_t>* results,
+                           const std::vector<float>& float_edge_cases,
+                           const std::vector<lv_32fc_t>& complex_edge_cases)
+{
+    volk_immutability_summary summary;
+
+    results->push_back(volk_test_results_t());
+    results->back().name = name;
+    results->back().vlen = vlen;
+    results->back().iter = 1;
+    results->back().config_name = name;
+    fmt::print("\nRUN_VOLK_IMMUTABILITY_TEST: {}(vlen={})\n", name, vlen);
+
+    volk_qa_aligned_mem_pool mem_pool;
+    qa_test_data d = setup_test_data(
+        desc, name, vlen, true, float_edge_cases, complex_edge_cases, mem_pool);
+    if (!d.ok) {
+        return summary;
+    }
+
+    const bool s32f =
+        (d.inputsc.size() == 1) && d.inputsc[0].is_float && !d.inputsc[0].is_complex;
+    const bool s32fc =
+        (d.inputsc.size() == 1) && d.inputsc[0].is_float && d.inputsc[0].is_complex;
+    // These "cannot check this kernel" cases leave summary.applied == false so the
+    // driver reports the kernel as skipped (NOT ok). Diagnostics go to stdout so the
+    // driver's per-(kernel,vlen) stdout muting suppresses them during the sweep.
+    if (d.inputsc.size() != 0 && !s32f && !s32fc) {
+        std::cout << "immutability mode: unsupported scalar signature for " << name
+                  << std::endl;
+        return summary;
+    }
+    // An in-place kernel (no separate output buffer) legitimately rewrites its single
+    // buffer -- that is its contract, not a defect. Only out-of-place kernels have
+    // input buffers the contract marks read-only, so immutability applies only when
+    // there IS a distinct output buffer.
+    if (d.outputsig.empty()) {
+        std::cout << "immutability mode: in-place kernel (no separate output), input "
+                     "write is by contract: "
+                  << name << std::endl;
+        return summary;
+    }
+    if (d.inputsig.empty()) {
+        std::cout << "immutability mode: kernel has no input buffer to protect: " << name
+                  << std::endl;
+        return summary;
+    }
+    if (d.both_sigs.size() > 4 || (d.both_sigs.size() == 4 && d.inputsc.size() != 0)) {
+        std::cout << "immutability mode: unsupported arity for " << name << std::endl;
+        return summary;
+    }
+
+    // Invariant the per-input compare below relies on: scalars are erased from
+    // inputsig into inputsc by setup_test_data, so d.inbuffs (the pristine pre-image,
+    // built from the post-erasure non-scalar inputsig) is index-aligned with the
+    // input buffers in d.test_data[i] at offset d.outputsig.size(). Assert it so a
+    // future change to scalar handling fails loudly instead of comparing the wrong
+    // buffers.
+    assert(d.inbuffs.size() == d.inputsig.size());
+
+    for (size_t i = 0; i < d.arch_list.size(); i++) {
+        const std::string arch = d.arch_list[i];
+        summary.applied = true; // we are about to check at least one impl
+        summary.checked_impls.push_back(arch); // #92 triage detail
+        bool arch_mutated = false;
+
+        // buffs layout matches setup_test_data: outputs first, then inputs. Inputs
+        // are arch i's own pool copy (seeded from the pristine d.inbuffs[k], which the
+        // kernel never receives).
+        std::vector<void*> buffs;
+        for (size_t j = 0; j < d.outputsig.size(); j++) {
+            buffs.push_back(d.test_data[i][j]);
+        }
+        for (size_t k = 0; k < d.inputsig.size(); k++) {
+            buffs.push_back(d.test_data[i][d.outputsig.size() + k]);
+        }
+
+        switch (d.both_sigs.size()) {
+        case 1:
+            if (s32fc)
+                run_cast_test1_s32fc(
+                    (volk_fn_1arg_s32fc)(manual_func), buffs, scalar, vlen, 1, arch);
+            else if (s32f)
+                run_cast_test1_s32f((volk_fn_1arg_s32f)(manual_func),
+                                    buffs,
+                                    scalar.real(),
+                                    vlen,
+                                    1,
+                                    arch);
+            else
+                run_cast_test1((volk_fn_1arg)(manual_func), buffs, vlen, 1, arch);
+            break;
+        case 2:
+            if (s32fc)
+                run_cast_test2_s32fc(
+                    (volk_fn_2arg_s32fc)(manual_func), buffs, scalar, vlen, 1, arch);
+            else if (s32f)
+                run_cast_test2_s32f((volk_fn_2arg_s32f)(manual_func),
+                                    buffs,
+                                    scalar.real(),
+                                    vlen,
+                                    1,
+                                    arch);
+            else
+                run_cast_test2((volk_fn_2arg)(manual_func), buffs, vlen, 1, arch);
+            break;
+        case 3:
+            if (s32fc)
+                run_cast_test3_s32fc(
+                    (volk_fn_3arg_s32fc)(manual_func), buffs, scalar, vlen, 1, arch);
+            else if (s32f)
+                run_cast_test3_s32f((volk_fn_3arg_s32f)(manual_func),
+                                    buffs,
+                                    scalar.real(),
+                                    vlen,
+                                    1,
+                                    arch);
+            else
+                run_cast_test3((volk_fn_3arg)(manual_func), buffs, vlen, 1, arch);
+            break;
+        case 4:
+            run_cast_test4((volk_fn_4arg)(manual_func), buffs, vlen, 1, arch);
+            break;
+        default:
+            break;
+        }
+
+        // Post-run compare of each input against its pristine pre-image. Exact
+        // std::memcmp (not a hash) so a mutation cannot hide behind a checksum
+        // collision (acceptance #90-1); on mismatch, locate the first differing byte
+        // for triage. The finding goes to std::cerr (NOT std::cout) so it survives the
+        // sweep's per-(kernel,vlen) stdout muting -- unlike #89's canary, which has
+        // expected reduction "partials" to suppress, immutability has no expected
+        // findings, so a real mutation should always be loud and actionable.
+        for (size_t k = 0; k < d.inputsig.size(); k++) {
+            const size_t in_bytes = static_cast<size_t>(vlen) * d.inputsig[k].size *
+                                    (d.inputsig[k].is_complex ? 2 : 1);
+            const uint8_t* pre = static_cast<const uint8_t*>(d.inbuffs[k]);
+            const uint8_t* post =
+                static_cast<const uint8_t*>(d.test_data[i][d.outputsig.size() + k]);
+            if (std::memcmp(pre, post, in_bytes) != 0) {
+                summary.mutated = true;
+                arch_mutated = true;
+                size_t off = 0;
+                while (off < in_bytes && pre[off] == post[off]) {
+                    ++off;
+                }
+                std::cerr << name << ": input mutated on arch " << arch << " (input " << k
+                          << ", byte offset " << off << ")\n";
+            }
+        }
+        // #92 triage detail: record the offender once per arch, from the
+        // per-arch flag (never at the per-input detection sites).
+        if (arch_mutated)
+            summary.mutated_impls.push_back(arch);
+    }
+
+    return summary;
+}
+
+// #91 is POSIX-only: MSVC has no sigaction/sigsetjmp/SIGBUS, and qa_utils.cc is
+// compiled into volk_test_all too, so an unconditional use would break the
+// Windows build of the DEFAULT qa suite. On _WIN32 the function compiles to an
+// explicit "unsupported" skip (applied=false): the driver's negative control
+// then fails closed with a clear stderr trail instead of the tree failing to
+// build.
+#ifdef _WIN32
+volk_misaligned_summary
+run_volk_misaligned_test(volk_func_desc_t /*desc*/,
+                         void (* /*manual_func*/)(),
+                         std::string name,
+                         lv_32fc_t /*scalar*/,
+                         float /*tol*/,
+                         bool /*absolute_mode*/,
+                         unsigned int /*vlen*/,
+                         std::vector<volk_test_results_t>* /*results*/,
+                         const std::vector<float>& /*float_edge_cases*/,
+                         const std::vector<lv_32fc_t>& /*complex_edge_cases*/)
+{
+    std::cerr << "misaligned mode: unsupported on this platform (POSIX signal "
+                 "isolation required): "
+              << name << "\n";
+    return volk_misaligned_summary();
+}
+#else
+
+namespace {
+// #91: SIGSEGV/SIGBUS/SIGILL isolation for misaligned-impl runs. An aligned SIMD
+// load on a misaligned address raises a hardware signal, not a C++ exception, so
+// catch(...) cannot trap it. sigsetjmp/siglongjmp is sound HERE because every
+// exercised impl is a pure computational loop over harness-owned buffers (the
+// driver skips puppets): no locks, allocations, or unwind-relevant state can be
+// in flight at the faulting instruction, and the dispatch deliberately uses
+// direct casted calls so no C++ frame with a non-trivial destructor sits between
+// the sigsetjmp and the fault.
+// Single-threaded qa binary by design: process-wide handlers + globals are safe
+// (the faults are synchronous; there is no second thread to race).
+sigjmp_buf g_misaligned_jmp;
+volatile sig_atomic_t g_misaligned_sig = 0;
+// Armed ONLY inside a sigsetjmp window. A fault while the handlers are installed
+// but no window is open (buffer setup, compare, I/O) is a HARNESS bug, not a
+// kernel defect -- jumping would misattribute it (or, before the first window,
+// longjmp through a never-set jmp_buf: UB). Re-raise with default disposition so
+// such a fault crashes loudly at its true location.
+volatile sig_atomic_t g_misaligned_window_open = 0;
+extern "C" void misaligned_fault_handler(int sig)
+{
+    if (!g_misaligned_window_open) {
+        signal(sig, SIG_DFL);
+        raise(sig);
+        return;
+    }
+    g_misaligned_window_open = 0;
+    g_misaligned_sig = sig;
+    siglongjmp(g_misaligned_jmp, 1);
+}
+// Installs the handlers on construction, restores the previous ones on scope exit.
+class scoped_fault_isolation
+{
+public:
+    scoped_fault_isolation()
+    {
+        struct sigaction sa;
+        memset(&sa, 0, sizeof(sa));
+        sa.sa_handler = misaligned_fault_handler;
+        sigemptyset(&sa.sa_mask);
+        sigaction(SIGSEGV, &sa, &old_segv_);
+        sigaction(SIGBUS, &sa, &old_bus_);
+        sigaction(SIGILL, &sa, &old_ill_);
+    }
+    ~scoped_fault_isolation()
+    {
+        sigaction(SIGSEGV, &old_segv_, nullptr);
+        sigaction(SIGBUS, &old_bus_, nullptr);
+        sigaction(SIGILL, &old_ill_, nullptr);
+    }
+    scoped_fault_isolation(const scoped_fault_isolation&) = delete;
+    scoped_fault_isolation& operator=(const scoped_fault_isolation&) = delete;
+
+private:
+    struct sigaction old_segv_, old_bus_, old_ill_;
+};
+
+// #91: an own-malloc buffer whose data pointer is element-aligned but deliberately
+// NOT volk_get_alignment()-aligned: one element past an alignment boundary --
+// exactly the shape of a GNU Radio sub-buffer slice.
+class misaligned_buffer
+{
+public:
+    misaligned_buffer(size_t data_bytes, size_t alignment, size_t elem_bytes)
+    {
+        // Tail slack (8 elements) so a small over-WRITE -- the #89 defect class --
+        // lands in our slack instead of corrupting malloc metadata mid-sweep; the
+        // canary mode, not this one, is what detects such writes.
+        raw_ = static_cast<uint8_t*>(malloc(data_bytes + alignment + elem_bytes * 9));
+        if (raw_ == nullptr) {
+            // Fail loud: continuing would fault OUTSIDE a sigsetjmp window and be
+            // misattributed by the fault handler (or jump to a stale env).
+            std::cerr << "misaligned_buffer: allocation failed\n";
+            abort();
+        }
+        const uintptr_t base =
+            (reinterpret_cast<uintptr_t>(raw_) + alignment - 1) & ~(alignment - 1);
+        ptr_ = reinterpret_cast<void*>(base + elem_bytes);
+        // Caller guarantees elem_bytes % alignment != 0 (the degenerate-platform
+        // guard in run_volk_misaligned_test), so base+elem is off-boundary.
+    }
+    ~misaligned_buffer() { free(raw_); }
+    misaligned_buffer(const misaligned_buffer&) = delete;
+    misaligned_buffer& operator=(const misaligned_buffer&) = delete;
+    void* data() const { return ptr_; }
+
+private:
+    uint8_t* raw_;
+    void* ptr_;
+};
+} // namespace
+
+volk_misaligned_summary
+run_volk_misaligned_test(volk_func_desc_t desc,
+                         void (*manual_func)(),
+                         std::string name,
+                         lv_32fc_t scalar,
+                         float tol,
+                         bool absolute_mode,
+                         unsigned int vlen,
+                         std::vector<volk_test_results_t>* results,
+                         const std::vector<float>& float_edge_cases,
+                         const std::vector<lv_32fc_t>& complex_edge_cases)
+{
+    volk_misaligned_summary summary;
+
+    results->push_back(volk_test_results_t());
+    results->back().name = name;
+    results->back().vlen = vlen;
+    results->back().iter = 1;
+    results->back().config_name = name;
+    fmt::print("\nRUN_VOLK_MISALIGNED_TEST: {}(vlen={})\n", name, vlen);
+
+    volk_qa_aligned_mem_pool mem_pool;
+    qa_test_data d = setup_test_data(
+        desc, name, vlen, true, float_edge_cases, complex_edge_cases, mem_pool);
+    if (!d.ok) {
+        return summary;
+    }
+
+    const bool s32f =
+        (d.inputsc.size() == 1) && d.inputsc[0].is_float && !d.inputsc[0].is_complex;
+    const bool s32fc =
+        (d.inputsc.size() == 1) && d.inputsc[0].is_float && d.inputsc[0].is_complex;
+    // "Cannot check" cases leave summary.applied == false so the driver reports the
+    // kernel as skipped (NOT ok). Diagnostics go to stdout so the driver's
+    // per-(kernel,vlen) stdout muting suppresses them during the sweep.
+    if (d.inputsc.size() != 0 && !s32f && !s32fc) {
+        std::cout << "misaligned mode: unsupported scalar signature for " << name
+                  << std::endl;
+        return summary;
+    }
+    if (d.both_sigs.size() > 4 || (d.both_sigs.size() == 4 && d.inputsc.size() != 0)) {
+        std::cout << "misaligned mode: unsupported arity for " << name << std::endl;
+        return summary;
+    }
+
+    const size_t alignment = volk_get_alignment();
+    // The kernel's own comparison parameters (mirrors run_volk_tests' derivation).
+    const float tol_f = tol;
+    const unsigned int tol_i = static_cast<unsigned int>(tol);
+
+    // Degenerate-platform guard: if volk_get_alignment() does not exceed an element
+    // size, an element offset can land back on an alignment boundary -- the
+    // "misaligned" pointer would be aligned and the mode would silently test
+    // nothing. Skip (applied=false -> reported skip, fail closed) instead.
+    for (size_t j = 0; j < d.both_sigs.size(); j++) {
+        const size_t elem = d.both_sigs[j].size * (d.both_sigs[j].is_complex ? 2 : 1);
+        if (elem % alignment == 0) {
+            std::cout << "misaligned mode: alignment " << alignment
+                      << " too small to misalign element size " << elem << " for " << name
+                      << std::endl;
+            return summary;
+        }
+    }
+
+    // Direct casted calls -- deliberately NOT the run_cast_testN wrappers, whose
+    // by-value std::string parameter would sit on a frame the fault path longjmps
+    // over (skipping a non-trivial destructor is UB). arch_cstr is materialized by
+    // the caller before sigsetjmp. Single iteration. NOTE the s32fc forms take the
+    // scalar BY POINTER (matching the volk_fn_*_s32fc typedefs).
+    auto run_impl_direct = [&](std::vector<void*>& buffs, const char* arch_cstr) {
+        switch (d.both_sigs.size()) {
+        case 1:
+            if (s32fc)
+                ((volk_fn_1arg_s32fc)(manual_func))(buffs[0], &scalar, vlen, arch_cstr);
+            else if (s32f)
+                ((volk_fn_1arg_s32f)(manual_func))(
+                    buffs[0], scalar.real(), vlen, arch_cstr);
+            else
+                ((volk_fn_1arg)(manual_func))(buffs[0], vlen, arch_cstr);
+            break;
+        case 2:
+            if (s32fc)
+                ((volk_fn_2arg_s32fc)(manual_func))(
+                    buffs[0], buffs[1], &scalar, vlen, arch_cstr);
+            else if (s32f)
+                ((volk_fn_2arg_s32f)(manual_func))(
+                    buffs[0], buffs[1], scalar.real(), vlen, arch_cstr);
+            else
+                ((volk_fn_2arg)(manual_func))(buffs[0], buffs[1], vlen, arch_cstr);
+            break;
+        case 3:
+            if (s32fc)
+                ((volk_fn_3arg_s32fc)(manual_func))(
+                    buffs[0], buffs[1], buffs[2], &scalar, vlen, arch_cstr);
+            else if (s32f)
+                ((volk_fn_3arg_s32f)(manual_func))(
+                    buffs[0], buffs[1], buffs[2], scalar.real(), vlen, arch_cstr);
+            else
+                ((volk_fn_3arg)(manual_func))(
+                    buffs[0], buffs[1], buffs[2], vlen, arch_cstr);
+            break;
+        case 4:
+            ((volk_fn_4arg)(manual_func))(
+                buffs[0], buffs[1], buffs[2], buffs[3], vlen, arch_cstr);
+            break;
+        default:
+            break;
+        }
+    };
+
+    // Compare one both_sigs buffer against the generic aligned baseline, the same
+    // per-type dispatch run_volk_tests uses. Comparing inputs as well as outputs is
+    // what gives IN-PLACE kernels divergence coverage (their "output" IS the mutated
+    // input buffer); for out-of-place kernels the input compare is a free no-op
+    // (#90 guarantees inputs are unmutated, so both sides equal the pre-image).
+    auto compare_buffer = [&](size_t j, void* expected, void* actual, double& max_err) {
+        std::vector<unsigned int> fail_indices;
+        max_err = 0.0;
+        bool fail = false;
+        const volk_type_t& t = d.both_sigs[j];
+        const unsigned int n_ints = vlen * (t.is_complex ? 2 : 1);
+        if (t.is_float) {
+            if (t.size == 8) {
+                if (t.is_complex)
+                    fail = ccompare((double*)expected,
+                                    (double*)actual,
+                                    vlen,
+                                    tol_f,
+                                    absolute_mode,
+                                    fail_indices,
+                                    max_err);
+                else
+                    fail = fcompare((double*)expected,
+                                    (double*)actual,
+                                    vlen,
+                                    tol_f,
+                                    absolute_mode,
+                                    fail_indices,
+                                    max_err);
+            } else {
+                if (t.is_complex)
+                    fail = ccompare((float*)expected,
+                                    (float*)actual,
+                                    vlen,
+                                    tol_f,
+                                    absolute_mode,
+                                    fail_indices,
+                                    max_err);
+                else
+                    fail = fcompare((float*)expected,
+                                    (float*)actual,
+                                    vlen,
+                                    tol_f,
+                                    absolute_mode,
+                                    fail_indices,
+                                    max_err);
+            }
+        } else {
+            switch (t.size) {
+            case 8:
+                if (t.is_signed)
+                    fail = icompare((int64_t*)expected,
+                                    (int64_t*)actual,
+                                    n_ints,
+                                    tol_i,
+                                    fail_indices,
+                                    max_err);
+                else
+                    fail = icompare((uint64_t*)expected,
+                                    (uint64_t*)actual,
+                                    n_ints,
+                                    tol_i,
+                                    fail_indices,
+                                    max_err);
+                break;
+            case 4:
+                if (t.is_complex) {
+                    // complex size-4 = pairs of 16-bit halves (run_volk_tests does
+                    // the same): compare as int16/uint16.
+                    if (t.is_signed)
+                        fail = icompare((int16_t*)expected,
+                                        (int16_t*)actual,
+                                        n_ints,
+                                        tol_i,
+                                        fail_indices,
+                                        max_err);
+                    else
+                        fail = icompare((uint16_t*)expected,
+                                        (uint16_t*)actual,
+                                        n_ints,
+                                        tol_i,
+                                        fail_indices,
+                                        max_err);
+                } else {
+                    if (t.is_signed)
+                        fail = icompare((int32_t*)expected,
+                                        (int32_t*)actual,
+                                        n_ints,
+                                        tol_i,
+                                        fail_indices,
+                                        max_err);
+                    else
+                        fail = icompare((uint32_t*)expected,
+                                        (uint32_t*)actual,
+                                        n_ints,
+                                        tol_i,
+                                        fail_indices,
+                                        max_err);
+                }
+                break;
+            case 2:
+                if (t.is_signed)
+                    fail = icompare((int16_t*)expected,
+                                    (int16_t*)actual,
+                                    n_ints,
+                                    tol_i,
+                                    fail_indices,
+                                    max_err);
+                else
+                    fail = icompare((uint16_t*)expected,
+                                    (uint16_t*)actual,
+                                    n_ints,
+                                    tol_i,
+                                    fail_indices,
+                                    max_err);
+                break;
+            case 1:
+                if (t.is_signed)
+                    fail = icompare((int8_t*)expected,
+                                    (int8_t*)actual,
+                                    n_ints,
+                                    tol_i,
+                                    fail_indices,
+                                    max_err);
+                else
+                    fail = icompare((uint8_t*)expected,
+                                    (uint8_t*)actual,
+                                    n_ints,
+                                    tol_i,
+                                    fail_indices,
+                                    max_err);
+                break;
+            default:
+                fail = true;
+            }
+        }
+        return fail;
+    };
+
+    // Comparison design: SAME impl, aligned vs misaligned. Comparing a misaligned
+    // u_impl against the generic baseline would conflate impl-vs-generic accuracy
+    // (already #87's sweep, where edge-data precision differences legitimately
+    // exceed tol for approximate kernels and large-vlen accumulations) with the
+    // #91 question -- does MISALIGNMENT change this impl's output? Running the
+    // same impl twice with identical inputs isolates alignment as the only
+    // variable; the kernel's own tol absorbs legitimate reordering by impls that
+    // peel to an alignment boundary.
+    //
+    // Output buffers on BOTH sides are zero-prefilled: reduction/index kernels
+    // write only a fixed-size scalar into out[0..k), and output cardinality
+    // cannot be derived from the signature (#89 lesson). With a common prefill,
+    // never-written regions are 0 == 0 and only kernel-written elements compare.
+    scoped_fault_isolation guard_signals;
+
+    for (size_t i = 0; i < d.arch_list.size(); i++) {
+        const std::string arch = d.arch_list[i];
+        const size_t orig_idx = d.arch_to_orig_idx[arch];
+        if (desc.impl_alignment[orig_idx]) {
+            continue; // aligned-only impl: allowed to assume alignment, not under test
+        }
+        summary.applied = true;
+        summary.checked_impls.push_back(arch); // #92 triage detail
+
+        // ---- Reference run: this impl on its ALIGNED pool buffers ----
+        std::vector<void*> abuffs;
+        for (size_t j = 0; j < d.both_sigs.size(); j++) {
+            abuffs.push_back(d.test_data[i][j]);
+        }
+        for (size_t j = 0; j < d.outputsig.size(); j++) {
+            const size_t out_bytes = static_cast<size_t>(vlen) * d.outputsig[j].size *
+                                     (d.outputsig[j].is_complex ? 2 : 1);
+            memset(abuffs[j], 0, out_bytes);
+        }
+        const char* arch_cstr = arch.c_str(); // materialized BEFORE sigsetjmp
+        g_misaligned_sig = 0;
+        // setjmp-clobber discipline: NOTHING may be modified between a sigsetjmp
+        // and its kernel call -- locals changed inside that window are
+        // indeterminate after the longjmp. Each window holds exactly one call.
+        if (sigsetjmp(g_misaligned_jmp, 1) == 0) {
+            g_misaligned_window_open = 1; // volatile global: setjmp-clobber safe
+            run_impl_direct(abuffs, arch_cstr);
+            g_misaligned_window_open = 0;
+        } else {
+            // An "unaligned" impl crashing on ALIGNED buffers is a worse defect
+            // than the one under test -- record it the same way and move on.
+            summary.crashed = true;
+            summary.crashed_impls.push_back(arch); // #92: once per arch (continues)
+            std::cerr << name << ": impl crashed on ALIGNED buffers on arch " << arch
+                      << " (signal " << static_cast<int>(g_misaligned_sig) << ", vlen "
+                      << vlen << ")\n";
+            continue;
+        }
+
+        // ---- Test run: the SAME impl on misaligned buffers, identical inputs ----
+        std::vector<std::unique_ptr<misaligned_buffer>> mbufs;
+        std::vector<void*> buffs;
+        for (size_t j = 0; j < d.both_sigs.size(); j++) {
+            const size_t elem = d.both_sigs[j].size * (d.both_sigs[j].is_complex ? 2 : 1);
+            const size_t bytes = static_cast<size_t>(vlen) * elem;
+            mbufs.push_back(std::make_unique<misaligned_buffer>(bytes, alignment, elem));
+            buffs.push_back(mbufs.back()->data());
+        }
+        for (size_t j = 0; j < d.outputsig.size(); j++) {
+            const size_t out_bytes = static_cast<size_t>(vlen) * d.outputsig[j].size *
+                                     (d.outputsig[j].is_complex ? 2 : 1);
+            memset(buffs[j], 0, out_bytes);
+        }
+        for (size_t k = 0; k < d.inputsig.size(); k++) {
+            const size_t in_bytes = static_cast<size_t>(vlen) * d.inputsig[k].size *
+                                    (d.inputsig[k].is_complex ? 2 : 1);
+            memcpy(buffs[d.outputsig.size() + k], d.inbuffs[k], in_bytes);
+        }
+
+        g_misaligned_sig = 0;
+        if (sigsetjmp(g_misaligned_jmp, 1) == 0) {
+            g_misaligned_window_open = 1; // volatile global: setjmp-clobber safe
+            run_impl_direct(buffs, arch_cstr);
+            g_misaligned_window_open = 0;
+        } else {
+            summary.crashed = true;
+            summary.crashed_impls.push_back(arch); // #92: once per arch (continues)
+            std::cerr << name << ": impl crashed on misaligned buffers on arch " << arch
+                      << " (signal " << static_cast<int>(g_misaligned_sig) << ", vlen "
+                      << vlen << ")\n";
+            continue; // recorded FAIL; next impl runs with its own fresh buffers
+        }
+
+        bool arch_diverged = false;
+        for (size_t j = 0; j < d.both_sigs.size(); j++) {
+            double max_err = 0.0;
+            if (compare_buffer(j, abuffs[j], buffs[j], max_err)) {
+                summary.diverged = true;
+                arch_diverged = true;
+                std::cerr << name << ": output diverged between aligned and "
+                          << "misaligned runs on arch " << arch << " (buffer " << j
+                          << ", vlen " << vlen << ", max_err " << max_err << ")\n";
+            }
+        }
+        // #92 triage detail: record the offender once per arch, from the
+        // per-arch flag (never at the per-buffer detection sites).
+        if (arch_diverged)
+            summary.diverged_impls.push_back(arch);
+    }
+
+    return summary;
+}
+#endif // !_WIN32 (POSIX signal isolation, #91)
