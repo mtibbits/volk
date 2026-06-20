@@ -94,8 +94,8 @@ volk_32f_tanh_32f_series(float* cVector, const float* aVector, unsigned int num_
             float a = (*aPtr) * (135135.0f + x2 * (17325.0f + x2 * (378.0f + x2)));
             float b = 135135.0f + x2 * (62370.0f + x2 * (3150.0f + x2 * 28.0f));
             *cPtr++ = a / b;
-            aPtr++;
         }
+        aPtr++; /* #108: advance every iteration, not only in the else branch */
     }
 }
 
