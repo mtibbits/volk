@@ -1260,21 +1260,22 @@ int main(int argc, char* argv[])
               << " ref kernels skipped (oracle could not evaluate); " << failed << " / "
               << tested << " kernels failed\n";
 
-    // #88 negative control: the live swapped-atan2 defect in volk_32fc_s32f_power_32fc
-    // makes it wrong for every input, but it has no SIMD impl so the impl-vs-impl
-    // harness reports `ok`. In reference mode the double oracle MUST fail it. If it
-    // passes, the reference machinery is broken — fail hard (exit 2). Bug-gated: when
-    // the e29bc7f power fix lands on this branch, flip this to expect-pass.
+    // #88 -> #107: the swapped-atan2 defect in volk_32fc_s32f_power_32fc has been
+    // FIXED (#107). The kernel has no SIMD impl, so the impl-vs-impl harness can't see
+    // it either way — the double oracle in reference mode is the only guard. Post-fix
+    // this becomes a regression control: power MUST stay reference-registered and MUST
+    // now PASS. Fail hard (exit 2) if either invariant breaks, so the fix can't
+    // silently rot and the coverage can't quietly disappear.
     if (power_seen && !power_ref_tested) {
         std::cerr << "NEGATIVE CONTROL LOST: volk_32fc_s32f_power_32fc ran but is NOT "
-                     "reference-registered (dropped/renamed registration) — the "
-                     "swapped-atan2 defect would go undetected.\n";
+                     "reference-registered (dropped/renamed registration) — a future "
+                     "power regression would go undetected.\n";
         return 2;
     }
-    if (power_ref_tested && !power_ref_failed) {
-        std::cerr << "NEGATIVE CONTROL LOST: volk_32fc_s32f_power_32fc passed in "
-                     "reference mode but its swapped-atan2 defect is present — the "
-                     "reference harness is broken.\n";
+    if (power_ref_tested && power_ref_failed) {
+        std::cerr << "REGRESSION: volk_32fc_s32f_power_32fc failed in reference mode, "
+                     "but the #107 atan2/cos fix should make it pass — the fix is "
+                     "missing or has regressed.\n";
         return 2;
     }
 
