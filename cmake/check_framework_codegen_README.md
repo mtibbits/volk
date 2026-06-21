@@ -193,6 +193,36 @@ tuple ids without disassembling, useful for inspecting a generated manifest.
   another architecture requires extending the register table in
   `_operand_class`.
 
+## Cross-compiler robustness (mtibbits/volk#145)
+
+The harness runs across the full CI compiler matrix (gcc-11..14, clang-14..19,
+macOS clang, static builds, with either `llvm-objdump` or GNU `objdump`). It
+normalizes away codegen *noise* that differs by compiler but is not a real
+equivalence violation, while still hard-failing on a genuine divergence.
+
+**Stripped / tolerated (not a failure):**
+
+- **Trailing alignment NOPs** of any encoding, including the multi-byte forms
+  clang-15+ and gcc-11/14 emit after the function's final terminator
+  (`66 2e 0f 1f 84 00 00 00 00 00  nopw %cs:(%rax,%rax)`). These pad the *next*
+  function's alignment and belong to no function. Some objdump variants render
+  such a line with only a single tab between the byte column and the mnemonic,
+  which the primary line regex cannot parse; a padding-only fallback regex
+  (`_padding_line`) handles that form. **Mid-body** alignment NOPs (e.g. before
+  a hot loop) are *preserved* — only the trailing run is stripped.
+- **Trailing `data16` padding** — how GNU objdump renders a multi-byte NOP pad
+  (`data16 cs nopw …`); treated as padding like the NOP family.
+- **Symbol not emitted standalone** (e.g. macOS clang inlines the impl): there
+  is nothing to compare, so the tuple is **skipped with a warning** and the
+  build stays green. The summary line reports `N skipped`.
+
+**Still a hard failure:**
+
+- A genuine post-normalization divergence (differing mnemonic sequence or
+  operand class) → `CHECK FAILED`, exit 1.
+- A missing/ambiguous `.o`, malformed manifest, an unparsable *non-padding*
+  in-body line, or an empty function body → `CHECK ERROR`, exit 2.
+
 ## See also
 
 - the dispatch-table integrity check (mtibbits/volk#58, PR #59) — the
