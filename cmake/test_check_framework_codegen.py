@@ -400,6 +400,33 @@ def test_end_to_end_divergent_pair_fails_build():
     assert "CHECK FAILED" in result.stderr, result.stderr
 
 
+def test_padding_fallback_data16_single_tab():
+    """Exercises the _padding_line fallback's `data16` arm specifically: a
+    single-tab `data16` pad line (which _disasm_line cannot parse) must be
+    caught by the fallback and then stripped. A space-padded `data16` line would
+    not reach the fallback -- it matches the primary _disasm_line -- so without
+    this case the fallback's data16 branch is untested (red-team Nit G2)."""
+    mod = _load_module()
+    text = (
+        "0000000000000000 <f>:\n"
+        "       0: c3                           \tretq\n"
+        "       1: 66 66 2e 0f 1f 84 00 00 00\tdata16\tcs nopw 0x0(%rax,%rax,1)\n"
+    )
+    instrs = mod.extract_function_body_from_text(text, "f")
+    assert [i["mnemonic"] for i in instrs] == ["retq"], instrs
+
+
+def test_padding_line_mnemonics_are_strippable():
+    """Invariant (red-team Nit J): every mnemonic the _padding_line fallback
+    accepts must also be removed by _is_trailing_padding -- otherwise a
+    fallback-absorbed pad would survive into the comparison and silently change
+    it. Pin representative members of the accepted set so the invariant is
+    self-defending if someone extends one side without the other."""
+    mod = _load_module()
+    for m in ("nop", "nopw", "nopl", "nopq", "data16"):
+        assert mod._is_trailing_padding(m), m
+
+
 def main():
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     failed = 0
