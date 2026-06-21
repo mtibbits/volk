@@ -206,18 +206,33 @@ def _disassemble(o_file: Path, objdump: str, symbol: str = None) -> str:
     return result.stdout
 
 
-def _is_trailing_padding(mnemonic: str) -> bool:
-    """Mnemonics that, when trailing the final control-flow terminator, are
-    inter-function alignment padding (belong to no function): the NOP family
-    and the lone `data16` prefix some toolchains/disassemblers emit as a pad
-    filler (e.g. GNU objdump renders a multi-byte NOP as `data16 cs nopw ...`).
-    Mid-body alignment NOPs are NOT stripped here -- only the trailing run.
+def _is_trailing_padding(instr: dict) -> bool:
+    """True if `instr`, sitting after the function's final control-flow
+    terminator, is inter-function alignment padding (belongs to no function).
+    Covers every x86 inter-function pad filler observed across the CI matrix:
+
+      - the NOP family (`nop`, `nopw`, `nopl`, `nopq`, ...),
+      - the lone `data16` prefix some disassemblers print for a multi-byte NOP
+        (GNU objdump renders it `data16 cs nopw ...`),
+      - `int3` (0xcc) gap fill,
+      - the legacy `xchg %ax,%ax` (0x66 0x90) two-byte NOP -- but ONLY the
+        self-exchange idiom (same src/dst); a real register `xchg` is never
+        stripped.
+
+    Mid-body alignment NOPs are NOT stripped -- only the trailing run.
 
     Invariant: this set MUST stay a superset of the mnemonics `_padding_line`
     accepts, so any pad the fallback absorbs is guaranteed to be stripped here
     and never reaches the comparison.
     """
-    return mnemonic.startswith("nop") or mnemonic == "data16"
+    m = instr["mnemonic"]
+    if m.startswith("nop") or m == "data16" or m == "int3":
+        return True
+    if m == "xchg":
+        # Strip only `xchg %reg,%reg` (the NOP idiom), never a real exchange.
+        ops = [o for o in instr["operands"].replace(" ", "").split(",") if o]
+        return len(ops) == 2 and ops[0] == ops[1]
+    return False
 
 
 def _instr_from_match(m) -> dict:
@@ -311,7 +326,7 @@ def extract_function_body_from_text(text: str, symbol: str,
     # belong to no function and vary with inter-function layout, so they are not
     # part of this function's codegen. Internal alignment nops (e.g. before a
     # hot loop) are mid-body and are preserved.
-    while instrs and _is_trailing_padding(instrs[-1]["mnemonic"]):
+    while instrs and _is_trailing_padding(instrs[-1]):
         instrs.pop()
     if not instrs:
         raise RuntimeError(

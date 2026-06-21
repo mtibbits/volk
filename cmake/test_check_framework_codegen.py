@@ -405,7 +405,46 @@ def test_padding_line_mnemonics_are_strippable():
     self-defending if someone extends one side without the other."""
     mod = _load_module()
     for m in ("nop", "nopw", "nopl", "nopq", "data16"):
-        assert mod._is_trailing_padding(m), m
+        assert mod._is_trailing_padding({"mnemonic": m, "operands": ""}), m
+
+
+def test_trailing_xchg_and_int3_padding_stripped():
+    """Trailing `xchg %ax,%ax` (0x66 0x90, the legacy 2-byte NOP) and `int3`
+    (0xcc gap fill) are inter-function alignment padding and must be stripped.
+    Real-world: clang-15 on ubuntu-22.04 emits a trailing `xchg %ax,%ax` after
+    the function's final jmp, which failed byte_identical before this
+    (mtibbits/volk#145)."""
+    mod = _load_module()
+    xchg_pad = (
+        "0000000000000000 <f>:\n"
+        "       0: eb 00                        \tjmp\t0x2 <f+0x2>\n"
+        "       2: 66 90                        \txchg\t%ax, %ax\n"
+    )
+    int3_pad = (
+        "0000000000000000 <f>:\n"
+        "       0: c3                           \tretq\n"
+        "       1: cc                           \tint3\n"
+    )
+    plain = (
+        "0000000000000000 <f>:\n"
+        "       0: c3                           \tretq\n"
+    )
+    a = mod.extract_function_body_from_text(xchg_pad, "f")
+    b = mod.extract_function_body_from_text(int3_pad, "f")
+    c = mod.extract_function_body_from_text(plain, "f")
+    assert [i["mnemonic"] for i in a] == ["jmp"], a
+    assert [i["mnemonic"] for i in b] == ["retq"], b
+    assert mod.compare_byte_identical(b, c)[0]
+
+
+def test_real_xchg_is_not_stripped():
+    """Safety: a genuine register exchange `xchg %rax,%rbx` (different operands)
+    must NOT be treated as padding -- only the self-exchange NOP idiom is."""
+    mod = _load_module()
+    assert not mod._is_trailing_padding(
+        {"mnemonic": "xchg", "operands": "%rax, %rbx"})
+    assert mod._is_trailing_padding(
+        {"mnemonic": "xchg", "operands": "%ax, %ax"})
 
 
 def main():
