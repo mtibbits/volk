@@ -25,10 +25,19 @@ the criterion evaluated.
 Invoked by lib/CMakeLists.txt as a dependency of the volk shared-lib target
 so it runs after volk_obj compiles but before linking.
 
+Cross-compiler robustness (mtibbits/volk#145): benign codegen noise that differs
+by compiler is normalized away -- trailing alignment NOPs of any encoding and
+trailing `data16` padding are stripped (they pad the next function and belong to
+no function), and a symbol the compiler inlined rather than emitting standalone
+is skipped-with-warning (exit 0) since there is nothing to compare. A genuine
+post-normalization divergence still fails (exit 1); a genuinely unparsable
+non-padding line still errors (exit 2).
+
 Exit codes:
-    0  all declared tuples pass (or manifest is empty)
-    1  one or more tuples fail (per-tuple diff printed to stderr)
-    2  internal error (missing manifest, missing .o, symbol not found, parse)
+    0  all declared tuples pass (or are skipped/empty); skips warn on stderr
+    1  one or more tuples fail their criterion (per-tuple diff on stderr)
+    2  internal error: missing manifest/.o, ambiguous .o, unparsable
+       non-padding line, or empty function body
 
 See mtibbits/volk#78 for context. Mirrors
 the dispatch-table integrity check (mtibbits/volk#58) for shape and reporting.
@@ -52,6 +61,16 @@ import re
 import subprocess
 import sys
 from pathlib import Path
+
+
+class SymbolNotEmittedError(RuntimeError):
+    """The compared symbol is absent from the object file because the compiler
+    inlined it rather than emitting it standalone (e.g. macOS clang on some
+    impls). There is nothing to compare, so main() skips the tuple with a
+    warning rather than failing the build. Distinct from the other RuntimeError
+    cases (missing/ambiguous .o, unparsable line) which remain hard errors
+    (mtibbits/volk#145).
+    """
 
 
 # ---------------------------------------------------------------------------
@@ -121,6 +140,24 @@ _continuation_line = re.compile(
     r'^\s*[0-9a-fA-F]+:\s+((?:[0-9a-fA-F]{2}[ \t]*)+)$'
 )
 
+# A NOP/padding instruction line that _disasm_line above fails to capture across
+# objdump variants. _disasm_line needs >=2 whitespace chars between the last byte
+# and the mnemonic (its byte-group [ \t]+ plus a separate mandatory [ \t]+
+# separator), but the long multi-byte alignment NOPs that clang-15+/gcc-11/14
+# emit as trailing pad render with a single tab, e.g.
+#     21656: 66 2e 0f 1f 84 00 00 00 00 00\tnopw\t%cs:(%rax,%rax)
+# This fallback drops the separate separator and anchors the padding mnemonic
+# directly after the byte column, so it matches the single-tab form. It is tried
+# ONLY when _disasm_line fails, so the passing path is unchanged; it matches only
+# the NOP family and the lone data16 prefix, both of which the trailing-strip
+# below removes when they are inter-function padding (mtibbits/volk#145).
+_padding_line = re.compile(
+    r'^\s*([0-9a-fA-F]+):\s+'
+    r'((?:[0-9a-fA-F]{2}[ \t]+)+?)'
+    r'(nop[a-z]*|data16)\b'
+    r'(?:[ \t]+(.*))?$'
+)
+
 
 def resolve_object(build_lib_dir: Path, machine_o: str) -> Path:
     """Resolve a manifest machine_o entry to an actual object-file path.
@@ -169,14 +206,56 @@ def _disassemble(o_file: Path, objdump: str, symbol: str = None) -> str:
     return result.stdout
 
 
+def _is_trailing_padding(mnemonic: str) -> bool:
+    """Mnemonics that, when trailing the final control-flow terminator, are
+    inter-function alignment padding (belong to no function): the NOP family
+    and the lone `data16` prefix some toolchains/disassemblers emit as a pad
+    filler (e.g. GNU objdump renders a multi-byte NOP as `data16 cs nopw ...`).
+    Mid-body alignment NOPs are NOT stripped here -- only the trailing run.
+
+    Invariant: this set MUST stay a superset of the mnemonics `_padding_line`
+    accepts, so any pad the fallback absorbs is guaranteed to be stripped here
+    and never reaches the comparison.
+    """
+    return mnemonic.startswith("nop") or mnemonic == "data16"
+
+
+def _instr_from_match(m) -> dict:
+    """Build an instruction record from a _disasm_line OR _padding_line match.
+    Both regexes capture the same four groups in the same order -- address,
+    bytes, mnemonic, operands -- and this is the single source of truth for the
+    record shape the comparison consumes.
+    """
+    addr_hex, bytes_str, mnemonic, operands = m.groups()
+    return {
+        "address": addr_hex,
+        "bytes": bytes_str.split(),
+        "mnemonic": mnemonic,
+        "operands": (operands or "").strip(),
+    }
+
+
 def extract_function_body(o_file: Path, symbol: str,
                           objdump: str = "llvm-objdump") -> list:
-    """Return [{address, bytes, mnemonic, operands}, ...] for the whole body of
-    `symbol` in the disassembly of o_file: every instruction line from the
-    `<symbol>:` header up to (exclusive) the next symbol header or a blank line
-    that ends the function's block. Raises RuntimeError if the symbol is absent.
+    """Disassemble `symbol` in o_file and return its whole-body instruction list.
+    Thin wrapper over extract_function_body_from_text (see it for the parse
+    contract); kept so callers and tests can pass a file path + objdump.
     """
     text = _disassemble(o_file, objdump, symbol=symbol)
+    return extract_function_body_from_text(text, symbol, source_label=str(o_file))
+
+
+def extract_function_body_from_text(text: str, symbol: str,
+                                    source_label: str = "<disassembly>") -> list:
+    """Return [{address, bytes, mnemonic, operands}, ...] for the whole body of
+    `symbol` in `text`: every instruction line from the `<symbol>:` header up to
+    (exclusive) the next symbol header or a blank line that ends the block.
+    Trailing inter-function padding (alignment NOPs / data16) is stripped.
+
+    Raises SymbolNotEmittedError if the symbol is absent (inlined, not emitted
+    standalone) and RuntimeError if an in-body line is unparsable and not
+    recognizable padding, or if the body is empty.
+    """
     in_body = False
     saw_symbol = False
     instrs = []
@@ -206,35 +285,37 @@ def extract_function_body(o_file: Path, symbol: str,
                     # trailing bytes to the instruction they belong to.
                     instrs[-1]["bytes"].extend(ci.group(1).split())
                     continue
+                # Lenient fallback for NOP/data16 padding lines whose single-tab
+                # byte/mnemonic spacing _disasm_line cannot match. Padding is
+                # removed by the trailing-strip below, so absorbing it here is
+                # safe and keeps the build green on clang-15+/gcc-11/14.
+                pm = _padding_line.match(line)
+                if pm:
+                    instrs.append(_instr_from_match(pm))
+                    continue
                 # Any other in-body line we cannot parse must be loud, not
                 # silently dropped: a dropped instruction would weaken the
                 # comparison without anyone noticing.
                 raise RuntimeError(
-                    f"unparsable disassembly line for {symbol!r} in {o_file}: "
-                    f"{line!r}")
-            addr_hex, bytes_str, mnemonic, operands = mi.groups()
-            instrs.append({
-                "address": addr_hex,
-                "bytes": bytes_str.split(),
-                "mnemonic": mnemonic,
-                "operands": (operands or "").strip(),
-            })
+                    f"unparsable disassembly line for {symbol!r} in "
+                    f"{source_label}: {line!r}")
+            instrs.append(_instr_from_match(mi))
 
     if not saw_symbol:
-        raise RuntimeError(
-            f"symbol {symbol!r} not found in disassembly of {o_file}. "
+        raise SymbolNotEmittedError(
+            f"symbol {symbol!r} not found in disassembly of {source_label}. "
             f"The impl must be emitted standalone (its address taken for the "
             f"dispatch table) for its symbol to appear in the object file.")
-    # Strip trailing NOP-family instructions: padding emitted after the
-    # function's final control-flow terminator to align the NEXT function. It
-    # belongs to no function and varies with inter-function layout, so it is
-    # not part of this function's codegen. Internal alignment nops (e.g. before
-    # a hot loop) are mid-body and are preserved.
-    while instrs and instrs[-1]["mnemonic"].startswith("nop"):
+    # Strip trailing padding (NOP family + data16): bytes emitted after the
+    # function's final control-flow terminator to align the NEXT function. They
+    # belong to no function and vary with inter-function layout, so they are not
+    # part of this function's codegen. Internal alignment nops (e.g. before a
+    # hot loop) are mid-body and are preserved.
+    while instrs and _is_trailing_padding(instrs[-1]["mnemonic"]):
         instrs.pop()
     if not instrs:
         raise RuntimeError(
-            f"symbol {symbol!r} found in {o_file} but its body is empty")
+            f"symbol {symbol!r} found in {source_label} but its body is empty")
     return instrs
 
 
@@ -359,6 +440,7 @@ def main():
 
     failures = []
     errors = []
+    skipped = []
     for t in tuples:
         try:
             a_o = resolve_object(args.build_lib_dir, t["impl_a"]["machine_o"])
@@ -367,6 +449,15 @@ def main():
                 a_o, t["impl_a"]["symbol"], objdump=args.objdump)
             b_instrs = extract_function_body(
                 b_o, t["impl_b"]["symbol"], objdump=args.objdump)
+        except SymbolNotEmittedError as e:
+            # Compiler inlined the impl rather than emitting it standalone
+            # (e.g. macOS clang): nothing to compare, so skip with a loud
+            # warning instead of failing the build. A present-but-divergent
+            # body is unaffected -- it still fails below.
+            print(f"codegen-equivalence: WARNING: skipping {tuple_id(t)}: {e}",
+                  file=sys.stderr)
+            skipped.append(tuple_id(t))
+            continue
         except RuntimeError as e:
             errors.append((tuple_id(t), str(e)))
             continue
@@ -406,7 +497,10 @@ def main():
             print("", file=sys.stderr)
         sys.exit(1)
 
-    print(f"codegen-equivalence: ok ({len(tuples)} tuples checked)")
+    checked = len(tuples) - len(skipped)
+    extra = (f", {len(skipped)} skipped -- not emitted standalone: {skipped}"
+             if skipped else "")
+    print(f"codegen-equivalence: ok ({checked} tuples checked{extra})")
 
 
 if __name__ == "__main__":

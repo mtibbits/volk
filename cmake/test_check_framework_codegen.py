@@ -248,6 +248,166 @@ def test_gnu_objdump_continuation_lines():
         assert ok, f"GNU vs llvm byte streams differ after stitching:\n{diff}"
 
 
+# ---------------------------------------------------------------------------
+# Cross-compiler robustness (mtibbits/volk#145)
+# ---------------------------------------------------------------------------
+
+def test_extract_from_text_seam_basic():
+    """The text seam parses a literal disassembly block: collects the body of
+    the named symbol, stops at the next symbol, strips the trailing NOP."""
+    mod = _load_module()
+    text = (
+        "0000000000000000 <fixture>:\n"
+        "       0: c5 fc 58 04 06               \tvaddps\t(%rsi,%rax), %ymm0, %ymm0\n"
+        "       5: c3                           \tretq\n"
+        "       6: 90                           \tnop\n"
+        "0000000000000010 <other>:\n"
+        "      10: c3                           \tretq\n"
+    )
+    instrs = mod.extract_function_body_from_text(text, "fixture")
+    assert [i["mnemonic"] for i in instrs] == ["vaddps", "retq"], instrs
+
+
+def test_trailing_multibyte_nop_does_not_raise():
+    """The multi-byte alignment NOP clang-15+/gcc-11/14 emit as trailing pad
+    renders with a SINGLE tab between the last byte and the mnemonic, which
+    _disasm_line cannot match. The padding fallback must parse it so the
+    trailing-strip drops it -- not raise 'unparsable'. The line below is the
+    real rendering captured from `llvm-objdump` on a clang-18 build of
+    volk_machine_avx_*.o (mtibbits/volk#145)."""
+    mod = _load_module()
+    # Normal short instructions render space-padded (>=2 ws before the tab);
+    # only the full-width 10-byte NOP renders with a lone tab -- the real
+    # captured failing form from llvm-objdump on a clang-18 machine .o.
+    text = (
+        "0000000000000000 <f1>:\n"
+        "       0: c5 fc 58 c1                  \tvaddps\t%ymm1, %ymm0, %ymm0\n"
+        "       4: c3                           \tretq\n"
+        "       5: 66 2e 0f 1f 84 00 00 00 00 00\tnopw\t%cs:(%rax,%rax)\n"
+        "0000000000000020 <f2>:\n"
+        "      20: c3                           \tretq\n"
+    )
+    instrs = mod.extract_function_body_from_text(text, "f1")
+    assert [i["mnemonic"] for i in instrs] == ["vaddps", "retq"], instrs
+
+
+def test_trailing_data16_padding_stripped():
+    """A trailing `data16` padding instruction (how GNU objdump renders the
+    multi-byte NOP pad) is not part of the function body and must be stripped,
+    so a data16-vs-none pad does not fail byte_identical."""
+    mod = _load_module()
+    with_pad = (
+        "0000000000000000 <f>:\n"
+        "       0: c3                           \tretq\n"
+        "       1: 66 66 2e 0f 1f 84 00 \tdata16\tcs nopw 0x0(%rax,%rax,1)\n"
+    )
+    without_pad = (
+        "0000000000000000 <f>:\n"
+        "       0: c3                           \tretq\n"
+    )
+    a = mod.extract_function_body_from_text(with_pad, "f")
+    b = mod.extract_function_body_from_text(without_pad, "f")
+    assert [i["mnemonic"] for i in a] == ["retq"], a
+    ok, diff = mod.compare_byte_identical(a, b)
+    assert ok, diff
+
+
+def test_symbol_not_standalone_raises_typed():
+    """When a symbol is absent (inlined, not emitted standalone) the parser
+    raises the typed SymbolNotEmittedError so main() can skip-with-warning,
+    not the bare RuntimeError that aggregates into a build-failing CHECK ERROR."""
+    mod = _load_module()
+    text = ("0000000000000000 <other>:\n"
+            "       0: c3\tretq\n")
+    try:
+        mod.extract_function_body_from_text(text, "inlined_away")
+        assert False, "expected SymbolNotEmittedError"
+    except mod.SymbolNotEmittedError as e:
+        assert "inlined_away" in str(e), str(e)
+    # It must be a RuntimeError subclass so existing `except RuntimeError`
+    # callers still see it if they do not special-case it.
+    assert issubclass(mod.SymbolNotEmittedError, RuntimeError)
+
+
+def test_padding_strip_does_not_swallow_real_instruction():
+    """Negative control: a trailing NON-padding instruction (an extra vaddps)
+    must remain and still cause a divergence -- the strip is padding-only."""
+    mod = _load_module()
+    longer = ("0000000000000000 <f>:\n"
+              "       0: c5 fc 58 c1                  \tvaddps\t%ymm1, %ymm0, %ymm0\n"
+              "       4: c5 fc 58 c1                  \tvaddps\t%ymm1, %ymm0, %ymm0\n"
+              "       8: c3                           \tretq\n")
+    shorter = ("0000000000000000 <f>:\n"
+               "       0: c5 fc 58 c1                  \tvaddps\t%ymm1, %ymm0, %ymm0\n"
+               "       4: c3                           \tretq\n")
+    a = mod.extract_function_body_from_text(longer, "f")
+    b = mod.extract_function_body_from_text(shorter, "f")
+    ok, diff = mod.compare_byte_identical(a, b)
+    assert not ok and "count differs" in diff, (ok, diff)
+
+
+def test_end_to_end_divergent_pair_fails_build():
+    """Negative control (end-to-end): a manifest comparing two genuinely
+    divergent impls (add vs mul) exits 1 with CHECK FAILED -- proving the
+    hardened parser still breaks the build on a real codegen divergence."""
+    import shutil
+    cc = shutil.which("cc")
+    objdump = _which_objdump()
+    if not cc:
+        print("  (skip test_end_to_end_divergent_pair_fails_build: no cc)")
+        return
+    add = ("#include <immintrin.h>\n"
+           "__m256 nc_fn(__m256 a,__m256 b){return _mm256_add_ps(a,b);}\n")
+    mul = ("#include <immintrin.h>\n"
+           "__m256 nc_fn(__m256 a,__m256 b){return _mm256_mul_ps(a,b);}\n")
+    a_c = Path("/tmp/cge_nc_a.c"); a_c.write_text(add)
+    b_c = Path("/tmp/cge_nc_b.c"); b_c.write_text(mul)
+    a_o = Path("/tmp/cge_nc_a.o"); b_o = Path("/tmp/cge_nc_b.o")
+    for s, o in ((a_c, a_o), (b_c, b_o)):
+        subprocess.run([cc, "-O3", "-mavx", "-c", str(s), "-o", str(o)],
+                       check=True)
+    manifest = {"tuples": [{
+        "kernel": "nc", "isa": "avx", "alignment": "a",
+        "impl_a": {"symbol": "nc_fn", "machine_o": str(a_o)},
+        "impl_b": {"symbol": "nc_fn", "machine_o": str(b_o)},
+        "criterion": "byte_identical",
+    }]}
+    mpath = Path("/tmp/cge_nc_manifest.json"); mpath.write_text(json.dumps(manifest))
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), "--manifest", str(mpath),
+         "--build-lib-dir", "/tmp", "--objdump", objdump],
+        capture_output=True, text=True)
+    assert result.returncode == 1, (result.returncode, result.stdout, result.stderr)
+    assert "CHECK FAILED" in result.stderr, result.stderr
+
+
+def test_padding_fallback_data16_single_tab():
+    """Exercises the _padding_line fallback's `data16` arm specifically: a
+    single-tab `data16` pad line (which _disasm_line cannot parse) must be
+    caught by the fallback and then stripped. A space-padded `data16` line would
+    not reach the fallback -- it matches the primary _disasm_line -- so without
+    this case the fallback's data16 branch is untested (red-team Nit G2)."""
+    mod = _load_module()
+    text = (
+        "0000000000000000 <f>:\n"
+        "       0: c3                           \tretq\n"
+        "       1: 66 66 2e 0f 1f 84 00 00 00\tdata16\tcs nopw 0x0(%rax,%rax,1)\n"
+    )
+    instrs = mod.extract_function_body_from_text(text, "f")
+    assert [i["mnemonic"] for i in instrs] == ["retq"], instrs
+
+
+def test_padding_line_mnemonics_are_strippable():
+    """Invariant (red-team Nit J): every mnemonic the _padding_line fallback
+    accepts must also be removed by _is_trailing_padding -- otherwise a
+    fallback-absorbed pad would survive into the comparison and silently change
+    it. Pin representative members of the accepted set so the invariant is
+    self-defending if someone extends one side without the other."""
+    mod = _load_module()
+    for m in ("nop", "nopw", "nopl", "nopq", "data16"):
+        assert mod._is_trailing_padding(m), m
+
+
 def main():
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     failed = 0
