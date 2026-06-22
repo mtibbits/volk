@@ -7,8 +7,8 @@
  * SPDX-License-Identifier: LGPL-3.0-or-later
  */
 
-#include <stddef.h>          // for size_t
-#include <sys/stat.h>        // for stat
+#include <stddef.h>   // for size_t
+#include <sys/stat.h> // for stat
 #ifndef _MSC_VER
 #include <unistd.h> // for isatty, fileno
 #endif
