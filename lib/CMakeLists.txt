@@ -645,7 +645,19 @@ foreach(_cge_m ${available_machines})
         break()
     endif()
 endforeach()
-if(_cge_avx_machine)
+# Gate the bootstrap tuple to native 64-bit builds. The reference TU hardcodes
+# -m64 (below) to mirror the 64-bit host machine TU, but a 32-bit / cross target
+# that still builds an avx machine -- notably Android NDK "x86" (i686, 32-bit) --
+# compiles the machine TU 32-bit while the reference TU is forced 64-bit, so the
+# two genuinely diverge (addl/movl vs addq) and byte_identical fails on benign
+# bitness, not a real codegen regression. The reference TU cannot faithfully
+# mirror a 32-bit/cross machine TU, so skip the tuple there (zero tuples is a
+# valid, false-positive-free configuration). mtibbits/volk#145.
+set(_cge_bootstrap_enabled FALSE)
+if(_cge_avx_machine AND (CMAKE_SIZEOF_VOID_P EQUAL 8))
+    set(_cge_bootstrap_enabled TRUE)
+endif()
+if(_cge_bootstrap_enabled)
     # Optimisation flags are INHERITED from the build config (CMAKE_C_FLAGS_<cfg>),
     # not hardcoded, so this TU matches the avx machine TU under any build type
     # (Release -O3, Debug -O0, ...) rather than only Release. Only the avx
@@ -669,6 +681,11 @@ if(_cge_avx_machine)
         IMPL_B_MACHINE_O codegen_bootstrap_ref.c.o
         REQUIRE_MNEMONIC "^vaddps"
     )
+elseif(_cge_avx_machine)
+    message(STATUS "codegen-equivalence: base-avx machine present but build is "
+                   "not 64-bit (sizeof(void*)=${CMAKE_SIZEOF_VOID_P}); bootstrap "
+                   "tuple skipped -- the 64-bit reference TU cannot match a "
+                   "32-bit/cross machine TU (e.g. Android NDK x86)")
 else()
     message(STATUS "codegen-equivalence: no base-avx machine built; "
                    "bootstrap tuple skipped (harness runs with zero tuples)")
@@ -681,7 +698,7 @@ endif()
 # manifest is empty and the check is a no-op (zero false positives on
 # origin/main). Mirrors the volk_check_dispatch_tables wiring (PR #59 / B15).
 FINALIZE_CODEGEN_EQUIVALENCE_HARNESS()
-if(_cge_avx_machine)
+if(_cge_bootstrap_enabled)
     add_dependencies(volk_check_framework_codegen volk_codegen_bootstrap_ref)
 endif()
 add_dependencies(volk volk_check_framework_codegen)
