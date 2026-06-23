@@ -12,6 +12,7 @@
 
 #include <limits.h>  // IWYU pragma: keep
 #include <cerrno>    // IWYU pragma: keep
+#include <cmath>     // for std::isfinite
 #include <cstdlib>   // IWYU pragma: keep
 #include <cstring>   // IWYU pragma: keep
 #include <exception> // for exception
@@ -165,8 +166,11 @@ void option_list::parse(int argc, char** argv)
                         }
                         {
                             char* endptr = nullptr;
+                            errno = 0;
                             double double_val = strtod(argv[++arg_number], &endptr);
-                            if (endptr == argv[arg_number] || *endptr != '\0') {
+                            if (endptr == argv[arg_number] || *endptr != '\0' ||
+                                errno == ERANGE ||
+                                !std::isfinite(static_cast<float>(double_val))) {
                                 std::cerr << "Error: option '" << argv[arg_number - 1]
                                           << "' requires a numeric value, got '"
                                           << argv[arg_number] << "'" << std::endl;
