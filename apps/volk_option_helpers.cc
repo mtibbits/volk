@@ -168,15 +168,15 @@ void option_list::parse(int argc, char** argv)
                             char* endptr = nullptr;
                             errno = 0;
                             double double_val = strtod(argv[++arg_number], &endptr);
+                            float float_val = (float)double_val;
                             if (endptr == argv[arg_number] || *endptr != '\0' ||
-                                errno == ERANGE ||
-                                !std::isfinite(static_cast<float>(double_val))) {
+                                errno == ERANGE || !std::isfinite(float_val)) {
                                 std::cerr << "Error: option '" << argv[arg_number - 1]
                                           << "' requires a numeric value, got '"
                                           << argv[arg_number] << "'" << std::endl;
                                 exit(1);
                             }
-                            ((void (*)(float))this_option->callback)(double_val);
+                            ((void (*)(float))this_option->callback)(float_val);
                         }
                     } catch (std::exception& exc) {
                         std::cerr << "A float option can only receive a number"
