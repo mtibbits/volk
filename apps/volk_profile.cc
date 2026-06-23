@@ -18,6 +18,7 @@
 #include <iomanip>  // for setprecision, fixed
 #include <iostream> // for operator<<, basic_ostream
 #include <map>      // for map, map<>::iterator
+#include <sstream>  // for istringstream
 #include <utility>  // for pair
 #include <vector>   // for vector, vector<>::const_...
 
@@ -354,32 +355,16 @@ void read_results(std::vector<volk_test_results_t>* results, std::string path)
     if (config_status) {
         // a config exists and we are reading results from it
         std::ifstream config(path.c_str());
-        char config_line[256];
-        while (config.getline(config_line, 255)) {
+        std::string config_line;
+        while (std::getline(config, config_line)) {
             // tokenize the input line by kernel_name unaligned aligned
             // then push back in the results vector with fields filled in
 
+            std::istringstream iss(config_line);
             std::vector<std::string> single_kernel_result;
-            std::string config_str(config_line);
-            std::size_t str_size = config_str.size();
-            std::size_t found = config_str.find(' ');
-
-            // Split line by spaces
-            while (found && found < str_size) {
-                found = config_str.find(' ');
-                // kernel names MUST be less than 128 chars, which is
-                // a length restricted by volk/volk_prefs.c
-                // on the last token in the parsed string we won't find a space
-                // so make sure we copy at most 128 chars.
-                if (found > 127) {
-                    found = 127;
-                }
-                str_size = config_str.size();
-                char line_buffer[128] = { '\0' };
-                config_str.copy(line_buffer, found + 1, 0);
-                line_buffer[found] = '\0';
-                single_kernel_result.push_back(std::string(line_buffer));
-                config_str.erase(0, found + 1);
+            std::string token;
+            while (iss >> token) {
+                single_kernel_result.push_back(token);
             }
 
             if (single_kernel_result.size() == 3) {
