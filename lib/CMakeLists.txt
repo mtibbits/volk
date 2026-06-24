@@ -534,7 +534,7 @@ if(MSVC)
 endif()
 
 # Verify per-machine dispatch-table integrity after codegen, before
-# compiling any machine .c file. See gnuradio/volk issue mtibbits/volk#58
+# compiling any machine .c file. See mtibbits/volk#58
 # for the bug class this catches.
 add_custom_target(volk_check_dispatch_tables
     COMMAND ${PYTHON_EXECUTABLE} ${PYTHON_DASH_B}

@@ -24,7 +24,7 @@ Exit codes:
        (prints each violation with machine name, kernel, impl, gates)
     2  internal error (parse failure, missing inputs)
 
-See gnuradio/volk issue mtibbits/volk#58 for context.
+See mtibbits/volk#58 for context.
 """
 
 import argparse
@@ -101,7 +101,7 @@ def check_machine(path: Path, all_kernels):
 def main():
     ap = argparse.ArgumentParser(
         description="Per-machine impl dispatch-table integrity check",
-        epilog="See gnuradio/volk issue mtibbits/volk#58 for context.",
+        epilog="See mtibbits/volk#58 for context.",
     )
     ap.add_argument("--source-dir", required=True, type=Path,
                     help="Volk source root (the dir with gen/, kernels/, ...)")
