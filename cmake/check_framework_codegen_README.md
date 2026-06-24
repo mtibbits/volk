@@ -7,7 +7,7 @@ that check verifies the right impls are *wired into dispatch*; this one
 verifies a framework-instantiated impl *emits the machine code its hand-written
 reference emits*.
 
-Context: gnuradio/volk issue mtibbits/volk#78.
+Context: mtibbits/volk#78.
 
 ## Why this exists
 

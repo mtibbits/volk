@@ -39,7 +39,7 @@ Exit codes:
     2  internal error: missing manifest/.o, ambiguous .o, unparsable
        non-padding line, or empty function body
 
-See gnuradio/volk issue mtibbits/volk#78 for context. Mirrors
+See mtibbits/volk#78 for context. Mirrors
 the dispatch-table integrity check (mtibbits/volk#58) for shape and reporting.
 
 DESIGN NOTE (whole-function comparison): an earlier design bracketed just the
@@ -451,7 +451,7 @@ def check_require_mnemonic(body: list, pattern: str):
 def main():
     ap = argparse.ArgumentParser(
         description="Codegen-equivalence test harness for volk fusion impls",
-        epilog="See gnuradio/volk issue mtibbits/volk#78 for context.",
+        epilog="See mtibbits/volk#78 for context.",
     )
     ap.add_argument("--manifest", required=True, type=Path,
                     help="JSON manifest of equivalence tuples")
