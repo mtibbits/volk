@@ -99,10 +99,42 @@ void volk_get_config_path(char* path, bool read)
     return;
 }
 
+// Reads one full line into *buf (caller-owned, must be free()d), returning its
+// length or -1 at EOF/alloc-failure. Hand-rolled rather than POSIX getline()
+// because this TU is compiled as C++ under MSVC, where getline() is absent. The
+// 128 below is a growth seed, not a line-length cap: the buffer grows without
+// limit, so a long line is parsed as one record instead of split (cf. line[512]).
+static long read_config_line(char** buf, size_t* cap, FILE* f)
+{
+    size_t len = 0;
+    int c;
+    while ((c = getc(f)) != EOF) {
+        if (len + 1 >= *cap) { // reserve one byte for the NUL terminator
+            size_t ncap = *cap ? *cap * 2 : 128;
+            char* new_buf = (char*)realloc(*buf, ncap);
+            if (!new_buf) {
+                printf("volk_load_preferences: bad malloc\n");
+                return -1; // *buf still points at the valid old block
+            }
+            *buf = new_buf;
+            *cap = ncap;
+        }
+        (*buf)[len++] = (char)c;
+        if (c == '\n')
+            break;
+    }
+    if (len == 0) // EOF with no bytes read
+        return -1;
+    (*buf)[len] = '\0';
+    return (long)len;
+}
+
 size_t volk_load_preferences(volk_arch_pref_t** prefs_res)
 {
     FILE* config_file;
-    char path[CONFIG_PATH_MAX], line[512];
+    char path[CONFIG_PATH_MAX];
+    char* line = NULL;
+    size_t line_cap = 0;
     size_t n_arch_prefs = 0;
     volk_arch_pref_t* prefs = NULL;
 
@@ -115,7 +147,7 @@ size_t volk_load_preferences(volk_arch_pref_t** prefs_res)
         return n_arch_prefs; // no prefs found
 
     // reset the file pointer and write the prefs into volk_arch_prefs
-    while (fgets(line, sizeof(line), config_file) != NULL) {
+    while (read_config_line(&line, &line_cap, config_file) != -1) {
         void* new_prefs = realloc(prefs, (n_arch_prefs + 1) * sizeof(*prefs));
         if (!new_prefs) {
             printf("volk_load_preferences: bad malloc\n");
@@ -128,6 +160,7 @@ size_t volk_load_preferences(volk_arch_pref_t** prefs_res)
             n_arch_prefs++;
         }
     }
+    free(line);
     fclose(config_file);
     *prefs_res = prefs;
     return n_arch_prefs;
