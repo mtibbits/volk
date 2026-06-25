@@ -11,9 +11,9 @@
 
 #include "volk/volk_complex.h" // lv_32fc_t/lv_cmake (planted power pair, #92)
 #include <cmath>               // atan2f/powf/cosf/sinf/tanhf (planted defect pairs, #92)
-#include <csignal> // for raise (misaligned-fault portable fallback, #91)
-#include <cstdint> // for uint32_t (input-immutability scribble, #90)
-#include <cstring> // strcmp (tanh pair impl dispatch, #92)
+#include <csignal>             // for raise (misaligned-fault portable fallback, #91)
+#include <cstdint>             // for uint32_t (input-immutability scribble, #90)
+#include <cstring>             // strcmp (tanh pair impl dispatch, #92)
 #if defined(__SSE2__)
 #include <emmintrin.h> // SSE2 umbrella; provides the SSE1 _mm_load_ps/_mm_storeu_ps
                        // used by the #91 planted misaligned-fault control

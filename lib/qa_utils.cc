@@ -2147,7 +2147,7 @@ run_volk_immutability_test(volk_func_desc_t desc,
 
     for (size_t i = 0; i < d.arch_list.size(); i++) {
         const std::string arch = d.arch_list[i];
-        summary.applied = true; // we are about to check at least one impl
+        summary.applied = true;                // we are about to check at least one impl
         summary.checked_impls.push_back(arch); // #92 triage detail
         bool arch_mutated = false;
 
