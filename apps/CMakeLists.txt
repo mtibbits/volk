@@ -66,6 +66,17 @@ install(
     DESTINATION bin
     COMPONENT "volk")
 
+# Round-trip regression test for the volk_config reader/writer (issue #158).
+# Drives the volk_profile binary; needs Python 3 (already required for codegen).
+if(ENABLE_TESTING)
+    set(volk_config_roundtrip_test
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_volk_config_roundtrip.py)
+    add_test(
+        NAME volk_config_roundtrip
+        COMMAND ${PYTHON_EXECUTABLE} ${volk_config_roundtrip_test}
+                --binary $<TARGET_FILE:volk_profile>)
+endif(ENABLE_TESTING)
+
 # Launch volk_profile if requested to do so
 if(ENABLE_PROFILING)
     if(DEFINED VOLK_CONFIGPATH)
