@@ -75,6 +75,10 @@ if(ENABLE_TESTING)
         NAME volk_config_roundtrip
         COMMAND ${PYTHON_EXECUTABLE} ${volk_config_roundtrip_test}
                 --binary $<TARGET_FILE:volk_profile>)
+    # The test seeds the config so the kernel is skipped (no profiling) and runs
+    # in well under a second. Bound it so any future over-match that triggers real
+    # profiling fails closed instead of hanging CI.
+    set_tests_properties(volk_config_roundtrip PROPERTIES TIMEOUT 60)
 endif(ENABLE_TESTING)
 
 # Launch volk_profile if requested to do so
