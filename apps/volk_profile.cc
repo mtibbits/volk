@@ -227,7 +227,7 @@ void read_results(std::vector<volk_test_results_t>* results, std::string path)
         std::ifstream config(path.c_str());
         char config_line[256];
         while (config.getline(config_line, 255)) {
-            // tokenize the input line by kernel_name unaligned aligned
+            // tokenize the input line by kernel_name aligned unaligned
             // then push back in the results vector with fields filled in
 
             std::vector<std::string> single_kernel_result;
