@@ -22,8 +22,8 @@
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_32f_binary_slicer_8i(int8_t* cVector, const float* aVector, unsigned int num_points)
- * \endcode
+ * void volk_32f_binary_slicer_8i(int8_t* cVector, const float* aVector, unsigned int
+ * num_points) \endcode
  *
  * \b Inputs
  * \li aVector: The input vector of soft-decision float samples (float).

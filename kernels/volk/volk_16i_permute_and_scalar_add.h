@@ -37,13 +37,12 @@
  *
  * \b Inputs
  * \li src0: The source vector of 16-bit integers (short).
- * \li permute_indexes: Index array specifying which element of src0 to gather for each output position (short).
- * \li cntl0: Control mask vector for scalars[0] (short).
- * \li cntl1: Control mask vector for scalars[1] (short).
- * \li cntl2: Control mask vector for scalars[2] (short).
- * \li cntl3: Control mask vector for scalars[3] (short).
- * \li scalars: Array of four 16-bit scalar values (short).
- * \li num_points: The number of 16-bit elements to process.
+ * \li permute_indexes: Index array specifying which element of src0 to gather for each
+ * output position (short). \li cntl0: Control mask vector for scalars[0] (short). \li
+ * cntl1: Control mask vector for scalars[1] (short). \li cntl2: Control mask vector for
+ * scalars[2] (short). \li cntl3: Control mask vector for scalars[3] (short). \li scalars:
+ * Array of four 16-bit scalar values (short). \li num_points: The number of 16-bit
+ * elements to process.
  *
  * \b Outputs
  * \li target: The output vector of 16-bit integers (short).

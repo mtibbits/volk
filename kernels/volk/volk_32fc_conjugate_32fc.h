@@ -24,8 +24,8 @@
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_32fc_conjugate_32fc(lv_32fc_t* cVector, const lv_32fc_t* aVector, unsigned int num_points)
- * \endcode
+ * void volk_32fc_conjugate_32fc(lv_32fc_t* cVector, const lv_32fc_t* aVector, unsigned
+ * int num_points) \endcode
  *
  * \b Inputs
  * \li aVector: The input vector of complex samples (lv_32fc_t).

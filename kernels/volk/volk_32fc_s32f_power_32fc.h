@@ -23,8 +23,8 @@
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_32fc_s32f_power_32fc(lv_32fc_t* cVector, const lv_32fc_t* aVector, const float power, unsigned int num_points)
- * \endcode
+ * void volk_32fc_s32f_power_32fc(lv_32fc_t* cVector, const lv_32fc_t* aVector, const
+ * float power, unsigned int num_points) \endcode
  *
  * \b Inputs
  * \li aVector: The complex input vector of samples (lv_32fc_t).

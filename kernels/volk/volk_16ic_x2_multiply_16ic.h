@@ -23,8 +23,8 @@
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_16ic_x2_multiply_16ic(lv_16sc_t* result, const lv_16sc_t* in_a, const lv_16sc_t* in_b, unsigned int num_points);
- * \endcode
+ * void volk_16ic_x2_multiply_16ic(lv_16sc_t* result, const lv_16sc_t* in_a, const
+ * lv_16sc_t* in_b, unsigned int num_points); \endcode
  *
  * \b Inputs
  * \li in_a: First input vector of complex samples (lv_16sc_t).

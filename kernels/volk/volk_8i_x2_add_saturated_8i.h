@@ -23,8 +23,8 @@
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_8i_x2_add_saturated_8i(int8_t* outVector, const int8_t* inVectorA, const int8_t* inVectorB, unsigned int num_points)
- * \endcode
+ * void volk_8i_x2_add_saturated_8i(int8_t* outVector, const int8_t* inVectorA, const
+ * int8_t* inVectorB, unsigned int num_points) \endcode
  *
  * \b Inputs
  * \li inVectorA: First input sample vector (int8_t).

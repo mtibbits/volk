@@ -25,8 +25,8 @@
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_16ic_magnitude_16i(int16_t* magnitudeVector, const lv_16sc_t* complexVector, unsigned int num_points)
- * \endcode
+ * void volk_16ic_magnitude_16i(int16_t* magnitudeVector, const lv_16sc_t* complexVector,
+ * unsigned int num_points) \endcode
  *
  * \b Inputs
  * \li complexVector: The complex input samples (lv_16sc_t).

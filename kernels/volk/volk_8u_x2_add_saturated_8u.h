@@ -24,8 +24,8 @@
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_8u_x2_add_saturated_8u(uint8_t* outVector, const uint8_t* inVectorA, const uint8_t* inVectorB, unsigned int num_points)
- * \endcode
+ * void volk_8u_x2_add_saturated_8u(uint8_t* outVector, const uint8_t* inVectorA, const
+ * uint8_t* inVectorB, unsigned int num_points) \endcode
  *
  * \b Inputs
  * \li inVectorA: First input sample vector (uint8_t).

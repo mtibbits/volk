@@ -22,8 +22,8 @@
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_32f_accumulator_s32f(float* result, const float* inputBuffer, unsigned int num_points)
- * \endcode
+ * void volk_32f_accumulator_s32f(float* result, const float* inputBuffer, unsigned int
+ * num_points) \endcode
  *
  * \b Inputs
  * \li inputBuffer: The buffer of samples to be accumulated (float).

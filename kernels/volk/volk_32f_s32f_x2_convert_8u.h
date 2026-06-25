@@ -25,8 +25,8 @@
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_32f_s32f_x2_convert_8u(uint8_t* outputVector, const float* inputVector, const float scale, const float bias, unsigned int num_points)
- * \endcode
+ * void volk_32f_s32f_x2_convert_8u(uint8_t* outputVector, const float* inputVector, const
+ * float scale, const float bias, unsigned int num_points) \endcode
  *
  * \b Inputs
  * \li inputVector: The input vector of floating-point samples (float).

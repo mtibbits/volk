@@ -31,8 +31,8 @@
  *
  * \b Inputs
  * \li inVector: Input signal samples to be rotated (lv_32fc_t).
- * \li phase_inc: Phase increment per sample, i.e. rotational velocity (lv_32fc_t pointer).
- * \li phase: Initial phase accumulator, updated on return (lv_32fc_t pointer).
+ * \li phase_inc: Phase increment per sample, i.e. rotational velocity (lv_32fc_t
+ * pointer). \li phase: Initial phase accumulator, updated on return (lv_32fc_t pointer).
  * \li num_points: The number of complex samples to process.
  *
  * \b Outputs

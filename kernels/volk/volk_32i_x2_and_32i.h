@@ -21,8 +21,8 @@
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_32i_x2_and_32i(int32_t* cVector, const int32_t* aVector, const int32_t* bVector, unsigned int num_points)
- * \endcode
+ * void volk_32i_x2_and_32i(int32_t* cVector, const int32_t* aVector, const int32_t*
+ * bVector, unsigned int num_points) \endcode
  *
  * \b Inputs
  * \li aVector: First input vector of samples (int32_t).

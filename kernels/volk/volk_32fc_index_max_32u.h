@@ -22,8 +22,8 @@
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_32fc_index_max_32u(uint32_t* target, const lv_32fc_t* src0, uint32_t num_points)
- * \endcode
+ * void volk_32fc_index_max_32u(uint32_t* target, const lv_32fc_t* src0, uint32_t
+ * num_points) \endcode
  *
  * \b Inputs
  * \li src0: The complex input vector (lv_32fc_t).

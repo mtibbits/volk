@@ -22,8 +22,8 @@
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_32f_invsqrt_32f(float* cVector, const float* aVector, unsigned int num_points)
- * \endcode
+ * void volk_32f_invsqrt_32f(float* cVector, const float* aVector, unsigned int
+ * num_points) \endcode
  *
  * \b Inputs
  * \li aVector: The input vector of sample values (float).

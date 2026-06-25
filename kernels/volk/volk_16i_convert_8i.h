@@ -23,8 +23,8 @@
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_16i_convert_8i(int8_t* outputVector, const int16_t* inputVector, unsigned int num_points)
- * \endcode
+ * void volk_16i_convert_8i(int8_t* outputVector, const int16_t* inputVector, unsigned int
+ * num_points) \endcode
  *
  * \b Inputs
  * \li inputVector: The input vector of 16-bit signed samples (int16_t).

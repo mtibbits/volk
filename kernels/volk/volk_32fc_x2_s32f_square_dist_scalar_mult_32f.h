@@ -24,23 +24,21 @@
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_32fc_x2_s32f_square_dist_scalar_mult_32f(float* target, const lv_32fc_t* src0, const lv_32fc_t* points, float scalar, unsigned int num_points)
- * \endcode
+ * void volk_32fc_x2_s32f_square_dist_scalar_mult_32f(float* target, const lv_32fc_t*
+ * src0, const lv_32fc_t* points, float scalar, unsigned int num_points) \endcode
  *
  * \b Inputs
  * \li src0: The received complex sample (lv_32fc_t). Only the first element is used.
  * \li points: A vector of complex constellation reference points (lv_32fc_t).
- * \li scalar: A float scaling factor applied to each squared distance (e.g. SNR or normalization constant).
- * \li num_points: The number of constellation points.
+ * \li scalar: A float scaling factor applied to each squared distance (e.g. SNR or
+ * normalization constant). \li num_points: The number of constellation points.
  *
  * \b Outputs
  * \li target: A vector of scaled squared distances (float), one per constellation point.
  *
  * \b Example
- * Compute scaled squared distances from a received sample to four QPSK constellation points.
- * \code
- * unsigned int N = 4;
- * unsigned int alignment = volk_get_alignment();
+ * Compute scaled squared distances from a received sample to four QPSK constellation
+ * points. \code unsigned int N = 4; unsigned int alignment = volk_get_alignment();
  * lv_32fc_t* rx = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t), alignment);
  * lv_32fc_t* constellation = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t) * N, alignment);
  * float* out = (float*)volk_malloc(sizeof(float) * N, alignment);

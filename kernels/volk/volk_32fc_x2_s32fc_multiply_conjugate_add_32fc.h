@@ -37,9 +37,10 @@
  *
  * \b Inputs
  * \li aVector: The input vector to be added, e.g. current tap weights (lv_32fc_t).
- * \li bVector: The input vector to be conjugated and multiplied, e.g. signal samples (lv_32fc_t).
- * \li scalar: The complex scalar to multiply against conjugated bVector, e.g. step-size error term (lv_32fc_t).
- * \li num_points: The number of complex values to process.
+ * \li bVector: The input vector to be conjugated and multiplied, e.g. signal samples
+ * (lv_32fc_t). \li scalar: The complex scalar to multiply against conjugated bVector,
+ * e.g. step-size error term (lv_32fc_t). \li num_points: The number of complex values to
+ * process.
  *
  * \b Outputs
  * \li cVector: The output vector of updated values (lv_32fc_t).

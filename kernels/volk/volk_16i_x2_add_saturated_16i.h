@@ -25,8 +25,8 @@
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_16i_x2_add_saturated_16i(int16_t* outVector, const int16_t* inVectorA, const int16_t* inVectorB, unsigned int num_points)
- * \endcode
+ * void volk_16i_x2_add_saturated_16i(int16_t* outVector, const int16_t* inVectorA, const
+ * int16_t* inVectorB, unsigned int num_points) \endcode
  *
  * \b Inputs
  * \li inVectorA: First input vector of samples (int16_t).

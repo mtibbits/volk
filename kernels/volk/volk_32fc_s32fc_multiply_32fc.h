@@ -28,8 +28,8 @@
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_32fc_s32fc_multiply_32fc(lv_32fc_t* cVector, const lv_32fc_t* aVector, const lv_32fc_t scalar, unsigned int num_points)
- * \endcode
+ * void volk_32fc_s32fc_multiply_32fc(lv_32fc_t* cVector, const lv_32fc_t* aVector, const
+ * lv_32fc_t scalar, unsigned int num_points) \endcode
  *
  * \b Inputs
  * \li aVector: The input complex signal vector (lv_32fc_t).

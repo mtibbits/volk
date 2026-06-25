@@ -26,13 +26,14 @@
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_8u_x2_encodeframepolar_8u(unsigned char* frame, unsigned char* temp, unsigned int frame_size)
- * \endcode
+ * void volk_8u_x2_encodeframepolar_8u(unsigned char* frame, unsigned char* temp, unsigned
+ * int frame_size) \endcode
  *
  * \b Inputs
  * \li frame: The binary frame to encode, one bit per byte (unsigned char).
- * \li temp: Scratch buffer initialized with a copy of frame (unsigned char). Must be the same size as frame.
- * \li frame_size: The number of bytes in the frame. Must be a power of two.
+ * \li temp: Scratch buffer initialized with a copy of frame (unsigned char). Must be the
+ * same size as frame. \li frame_size: The number of bytes in the frame. Must be a power
+ * of two.
  *
  * \b Outputs
  * \li frame: The polar-encoded codeword, one bit per byte (unsigned char).
@@ -43,8 +44,9 @@
  * unsigned int N = 4;
  * unsigned int alignment = volk_get_alignment();
  *
- * unsigned char* frame = (unsigned char*)volk_malloc(sizeof(unsigned char) * N, alignment);
- * unsigned char* temp = (unsigned char*)volk_malloc(sizeof(unsigned char) * N, alignment);
+ * unsigned char* frame = (unsigned char*)volk_malloc(sizeof(unsigned char) * N,
+ * alignment); unsigned char* temp = (unsigned char*)volk_malloc(sizeof(unsigned char) *
+ * N, alignment);
  *
  * // Input: all ones
  * frame[0] = 1; frame[1] = 1; frame[2] = 1; frame[3] = 1;

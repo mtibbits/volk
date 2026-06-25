@@ -24,8 +24,8 @@
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_32fc_s32f_deinterleave_real_16i(int16_t* iBuffer, const lv_32fc_t* complexVector, const float scalar, unsigned int num_points)
- * \endcode
+ * void volk_32fc_s32f_deinterleave_real_16i(int16_t* iBuffer, const lv_32fc_t*
+ * complexVector, const float scalar, unsigned int num_points) \endcode
  *
  * \b Inputs
  * \li complexVector: The complex input samples (lv_32fc_t).

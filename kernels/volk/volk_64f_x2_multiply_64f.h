@@ -24,8 +24,8 @@
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_64f_x2_multiply_64f(double* cVector, const double* aVector, const double* bVector, unsigned int num_points)
- * \endcode
+ * void volk_64f_x2_multiply_64f(double* cVector, const double* aVector, const double*
+ * bVector, unsigned int num_points) \endcode
  *
  * \b Inputs
  * \li aVector: First input vector of samples (double).

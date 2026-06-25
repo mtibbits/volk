@@ -24,8 +24,8 @@
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_8ic_s32f_deinterleave_32f_x2(float* iBuffer, float* qBuffer, const lv_8sc_t* complexVector, const float scalar, unsigned int num_points)
- * \endcode
+ * void volk_8ic_s32f_deinterleave_32f_x2(float* iBuffer, float* qBuffer, const lv_8sc_t*
+ * complexVector, const float scalar, unsigned int num_points) \endcode
  *
  * \b Inputs
  * \li complexVector: The interleaved complex input samples (lv_8sc_t).

@@ -50,7 +50,8 @@
  * in[0] = -2.0f; in[1] = -1.0f; in[2] = 1.0f; in[3] = 2.0f;
  *
  * // Expected: {-1.5, -1.0, 1.0, 1.5}
- * // -2.0 < -1.5 => clamped to -1.5; -1.0 in range; 1.0 in range; 2.0 > 1.5 => clamped to 1.5
+ * // -2.0 < -1.5 => clamped to -1.5; -1.0 in range; 1.0 in range; 2.0 > 1.5 => clamped
+ * to 1.5
  *
  * volk_32f_s32f_x2_clamp_32f(out, in, -1.5f, 1.5f, N);
  *

@@ -24,8 +24,8 @@
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_16ic_deinterleave_16i_x2(int16_t* iBuffer, int16_t* qBuffer, const lv_16sc_t* complexVector, unsigned int num_points)
- * \endcode
+ * void volk_16ic_deinterleave_16i_x2(int16_t* iBuffer, int16_t* qBuffer, const lv_16sc_t*
+ * complexVector, unsigned int num_points) \endcode
  *
  * \b Inputs
  * \li complexVector: The interleaved complex input samples (lv_16sc_t).

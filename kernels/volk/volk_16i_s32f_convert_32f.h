@@ -23,8 +23,8 @@
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_16i_s32f_convert_32f(float* outputVector, const int16_t* inputVector, const float scalar, unsigned int num_points)
- * \endcode
+ * void volk_16i_s32f_convert_32f(float* outputVector, const int16_t* inputVector, const
+ * float scalar, unsigned int num_points) \endcode
  *
  * \b Inputs
  * \li inputVector: The input vector of 16-bit integer samples (int16_t).

@@ -23,8 +23,8 @@
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_32f_x2_divide_32f(float* cVector, const float* aVector, const float* bVector, unsigned int num_points)
- * \endcode
+ * void volk_32f_x2_divide_32f(float* cVector, const float* aVector, const float* bVector,
+ * unsigned int num_points) \endcode
  *
  * \b Inputs
  * \li aVector: The numerator vector of input samples (float).

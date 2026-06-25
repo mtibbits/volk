@@ -29,11 +29,12 @@
  *
  * \b Inputs
  * \li complexFFTInput: The complex frequency-domain samples from an FFT (lv_32fc_t).
- * \li normalizationFactor: Scale factor applied to each sample before computing power (float).
- * \li num_points: The number of complex FFT data points.
+ * \li normalizationFactor: Scale factor applied to each sample before computing power
+ * (float). \li num_points: The number of complex FFT data points.
  *
  * \b Outputs
- * \li logPowerOutput: The 10.0 * log10(r*r + i*i) power in dB for each data point (float).
+ * \li logPowerOutput: The 10.0 * log10(r*r + i*i) power in dB for each data point
+ * (float).
  *
  * \b Example
  * Compute the power spectrum of four identical complex FFT bins with unit normalization.

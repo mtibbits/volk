@@ -23,8 +23,8 @@
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_32i_x2_or_32i(int32_t* cVector, const int32_t* aVector, const int32_t* bVector, unsigned int num_points)
- * \endcode
+ * void volk_32i_x2_or_32i(int32_t* cVector, const int32_t* aVector, const int32_t*
+ * bVector, unsigned int num_points) \endcode
  *
  * \b Inputs
  * \li aVector: First input vector of 32-bit integers (int32_t).

@@ -23,8 +23,8 @@
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_32fc_x2_dot_prod_32fc(lv_32fc_t* result, const lv_32fc_t* input, const lv_32fc_t* taps, unsigned int num_points)
- * \endcode
+ * void volk_32fc_x2_dot_prod_32fc(lv_32fc_t* result, const lv_32fc_t* input, const
+ * lv_32fc_t* taps, unsigned int num_points) \endcode
  *
  * \b Inputs
  * \li input: Input vector of complex float samples (lv_32fc_t).

@@ -39,7 +39,8 @@
  * \li dec: Decision buffer (unsigned char) for storing trellis decisions.
  * \li framebits: Number of data bits in the frame to decode.
  * \li excess: Number of extra tail bits to process beyond framebits.
- * \li Branchtab: Branch metric lookup table (unsigned char), 64 entries encoding the generator polynomials.
+ * \li Branchtab: Branch metric lookup table (unsigned char), 64 entries encoding the
+ * generator polynomials.
  *
  * \b Outputs
  * \li Y: Updated path metric state buffer (unsigned char), 64 elements.
@@ -53,9 +54,10 @@
  *
  * unsigned char* Y = (unsigned char*)volk_malloc(sizeof(unsigned char) * 64, alignment);
  * unsigned char* X = (unsigned char*)volk_malloc(sizeof(unsigned char) * 64, alignment);
- * unsigned char* syms = (unsigned char*)volk_malloc(sizeof(unsigned char) * 2, alignment);
- * unsigned char* dec = (unsigned char*)volk_malloc(sizeof(unsigned char) * 8, alignment);
- * unsigned char* Branchtab = (unsigned char*)volk_malloc(sizeof(unsigned char) * 64, alignment);
+ * unsigned char* syms = (unsigned char*)volk_malloc(sizeof(unsigned char) * 2,
+ * alignment); unsigned char* dec = (unsigned char*)volk_malloc(sizeof(unsigned char) * 8,
+ * alignment); unsigned char* Branchtab = (unsigned char*)volk_malloc(sizeof(unsigned
+ * char) * 64, alignment);
  *
  * // Initialize: state 0 has metric 0, all others are high
  * memset(X, 127, 64);

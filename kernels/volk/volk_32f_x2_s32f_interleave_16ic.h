@@ -15,7 +15,8 @@
  * Interleaves two float input vectors — the inphase (real) part and the
  * quadrature (imaginary) part — scales each sample by a scalar value, and
  * converts to 16-bit complex integers:
- * complexVector[i] = (int16_t)rintf(iBuffer[i] * scalar) + j*(int16_t)rintf(qBuffer[i] * scalar).
+ * complexVector[i] = (int16_t)rintf(iBuffer[i] * scalar) + j*(int16_t)rintf(qBuffer[i] *
+ * scalar).
  *
  * This kernel is commonly used in transmit signal paths where baseband I/Q
  * samples in floating-point must be quantized and packed into fixed-point
@@ -31,8 +32,8 @@
  * \b Inputs
  * \li iBuffer: Input vector of float samples for the inphase (real) part.
  * \li qBuffer: Input vector of float samples for the quadrature (imaginary) part.
- * \li scalar: The scalar value used to scale samples before converting to 16-bit integers.
- * \li num_points: The number of samples in each input vector.
+ * \li scalar: The scalar value used to scale samples before converting to 16-bit
+ * integers. \li num_points: The number of samples in each input vector.
  *
  * \b Outputs
  * \li complexVector: The output vector of 16-bit complex integers (lv_16sc_t).

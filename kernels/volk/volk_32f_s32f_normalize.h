@@ -23,8 +23,8 @@
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_32f_s32f_normalize(float* vecBuffer, const float scalar, unsigned int num_points)
- * \endcode
+ * void volk_32f_s32f_normalize(float* vecBuffer, const float scalar, unsigned int
+ * num_points) \endcode
  *
  * \b Inputs
  * \li vecBuffer: The buffer of signal samples to normalize (float).

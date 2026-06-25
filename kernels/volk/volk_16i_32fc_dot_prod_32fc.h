@@ -25,8 +25,8 @@
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_16i_32fc_dot_prod_32fc(lv_32fc_t* result, const short* input, const lv_32fc_t* taps, unsigned int num_points)
- * \endcode
+ * void volk_16i_32fc_dot_prod_32fc(lv_32fc_t* result, const short* input, const
+ * lv_32fc_t* taps, unsigned int num_points) \endcode
  *
  * \b Inputs
  * \li input: The input signal samples (short).

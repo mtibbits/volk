@@ -35,9 +35,9 @@
  *
  * \b Inputs
  * \li src0: The input sample values (float).
- * \li center_point_array: Polynomial coefficients in order {c1, c2, c3, c4, c0} (float, length 5).
- * \li cutoff: Pointer to the minimum sample value; inputs below this are clamped (float).
- * \li num_points: The number of input samples.
+ * \li center_point_array: Polynomial coefficients in order {c1, c2, c3, c4, c0} (float,
+ * length 5). \li cutoff: Pointer to the minimum sample value; inputs below this are
+ * clamped (float). \li num_points: The number of input samples.
  *
  * \b Outputs
  * \li target: The accumulated polynomial sum (float, scalar).

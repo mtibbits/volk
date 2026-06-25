@@ -25,8 +25,8 @@
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_8ic_x2_multiply_conjugate_16ic(lv_16sc_t* cVector, const lv_8sc_t* aVector, const lv_8sc_t* bVector, unsigned int num_points)
- * \endcode
+ * void volk_8ic_x2_multiply_conjugate_16ic(lv_16sc_t* cVector, const lv_8sc_t* aVector,
+ * const lv_8sc_t* bVector, unsigned int num_points) \endcode
  *
  * \b Inputs
  * \li aVector: First input complex vector (lv_8sc_t).
