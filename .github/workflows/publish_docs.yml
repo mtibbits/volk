@@ -16,7 +16,10 @@ jobs:
         run: mkdir build && cd build && cmake -DCMAKE_CXX_FLAGS="-Werror" -DBUILD_EXECUTABLE=ON ..
       - name: Build
         run: cmake --build build --target volk_doc
+      # The SSH deploy targets gnuradio's libvolk.org server; its secrets only
+      # exist in the upstream repo, so forks must skip it or the job fails.
       - name: Setup SSH Keys
+        if: github.repository == 'gnuradio/volk'
         env:
           SSH_AUTH_SOCK: /tmp/ssh_agent.sock
         run: |
@@ -25,6 +28,7 @@ jobs:
           mkdir $HOME/.ssh
           echo -n "${{ secrets.SSH_KNOWN_HOST }}" > $HOME/.ssh/known_hosts
       - name: Upload via SSH
+        if: github.repository == 'gnuradio/volk'
         env:
           SSH_AUTH_SOCK: /tmp/ssh_agent.sock
           TARGET_DIR: "${{ github.ref_type }}/${{ github.ref_name }}"
@@ -33,3 +37,27 @@ jobs:
         with:
           name: volk_docs
           path: build/html/
+      # Fork deploy target: GitHub Pages (https://mtibbits.github.io/volk/),
+      # keyless via the job-scoped OIDC token. One Pages site per repo, so only
+      # the integration branch publishes.
+      - name: Upload Pages artifact
+        if: github.repository == 'mtibbits/volk' && github.ref == 'refs/heads/dev/all-prs'
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: build/html/
+
+  deploy-pages:
+    name: Deploy docs to GitHub Pages
+    if: github.repository == 'mtibbits/volk' && github.ref == 'refs/heads/dev/all-prs'
+    needs: build-docs
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5
