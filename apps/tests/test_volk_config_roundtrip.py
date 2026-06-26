@@ -31,6 +31,7 @@ tokens are opaque to read/write_results; only their distinctness matters.
 
 import argparse
 import os
+import shlex
 import subprocess  # nosec B404 - drives the locally-built volk_profile binary
 import sys
 import tempfile
@@ -53,9 +54,13 @@ def kernel_lines(text):
     return rows
 
 
-def run_update(binary, cfgdir):
+def run_update(binary, cfgdir, emulator=None):
+    # Under cross-compilation the target binary is launched through an emulator
+    # (e.g. ``qemu-riscv64-static -L <sysroot>``); ``emulator`` is that command
+    # as a list, prepended to the argv. Native builds pass nothing.
+    argv = list(emulator or []) + [binary, "-u", "-p", cfgdir, "-R", KERNEL]
     proc = subprocess.run(  # nosec B603 - fixed argv, no shell, test-controlled inputs
-        [binary, "-u", "-p", cfgdir, "-R", KERNEL],
+        argv,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         universal_newlines=True,
@@ -70,7 +75,14 @@ def run_update(binary, cfgdir):
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--binary", required=True, help="path to the volk_profile binary")
+    ap.add_argument(
+        "--emulator",
+        default="",
+        help="emulator command prefix used to launch the target binary "
+        "(cross builds, e.g. qemu); empty for native builds",
+    )
     args = ap.parse_args()
+    emulator = shlex.split(args.emulator)
 
     with tempfile.TemporaryDirectory(prefix="volk_cfg_rt_") as tmp:
         cfg = os.path.join(tmp, "volk_config")
@@ -81,7 +93,7 @@ def main():
             f.write("%s %s %s\n" % (KERNEL, ARCH_A, ARCH_U))
 
         # First -u pass: read the seed, skip (already present), write it back.
-        run_update(args.binary, tmp)
+        run_update(args.binary, tmp, emulator)
         with open(cfg) as f:
             out1 = f.read()
         rows1 = kernel_lines(out1)
@@ -107,7 +119,7 @@ def main():
             return 1
 
         # Second -u pass must reproduce the file byte-for-byte (idempotent).
-        run_update(args.binary, tmp)
+        run_update(args.binary, tmp, emulator)
         with open(cfg) as f:
             out2 = f.read()
         if out2 != out1:
