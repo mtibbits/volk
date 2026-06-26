@@ -1217,6 +1217,42 @@ int main(int argc, char* argv[])
                           << uns_results.back().skip_reason << ")\n";
             }
         }
+
+        // #161: the buffer-role registry promotes a registered under-write from the
+        // canary's `part` hedge to a hard FAIL. Run the planted under-writer through
+        // the SAME run_volk_canary_test path and assert classify_canary (the verdict
+        // mapping the roster sweep uses) promotes it to FAIL when registered as a map,
+        // and keeps it `part` when unregistered. CI-enforced here so a regression to
+        // the promotion path or classify_canary breaks the build, not just the opt-in
+        // HARNESS_CANARY sweep.
+        {
+            std::vector<volk_test_results_t> uw_results;
+            const volk_canary_summary uw_sum =
+                run_volk_canary_test(volk_canary_desc(),
+                                     (void (*)())(&volk_32f_canaryunwritten_32f),
+                                     "volk_32f_canaryunwritten_32f",
+                                     power_scalar,
+                                     127u,
+                                     &uw_results,
+                                     kFloatEdges,
+                                     kComplexEdges);
+            const volk_buffer_roles_entry map_entry{ "volk_32f_canaryunwritten_32f", 0 };
+            const std::string promoted = classify_canary(
+                uw_sum.applied, uw_sum.guard_violation, uw_sum.unwritten, &map_entry);
+            const std::string hedged = classify_canary(
+                uw_sum.applied, uw_sum.guard_violation, uw_sum.unwritten, nullptr);
+            const bool good = uw_sum.unwritten && promoted == "FAIL" && hedged == "part";
+            std::cout << (good ? "ok    " : "LOST  ")
+                      << "[combined-nc] buffer-role promotion: under-writer registered "
+                         "as map → FAIL, unregistered → part (#161)\n";
+            if (!good) {
+                std::cerr << "NEGATIVE CONTROL LOST: the planted under-writer was not "
+                             "promoted to FAIL when registered as a map (or no longer "
+                             "stays `part` unregistered) — the #161 buffer-role "
+                             "promotion path is broken.\n";
+                lost = true;
+            }
+        }
         if (lost)
             return 2;
         std::cerr << "combined negative control OK: power flagged by the independent "
