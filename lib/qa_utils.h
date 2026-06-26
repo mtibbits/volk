@@ -302,6 +302,13 @@ struct volk_canary_summary {
 // both sentinels across the two runs flags a never-written element. This canary is
 // allocator-independent and authoritative; ASan is best-effort double coverage.
 // Toggle is in the driver; run_volk_tests/default qa are untouched.
+// #161: `contracted_elems` declares how many elements per output buffer the kernel
+// is contracted to write (from the buffer-role registry). 0 = unregistered: scan
+// the whole output buffer for unwritten bytes exactly as before. N>0 = scan only
+// the first N elements (the contracted region); a survived sentinel there is a real
+// under-write, while survivals past the boundary are the expected reduction tail and
+// are ignored. This lets the driver promote a registered reduction's `part` to a
+// clean pass and a registered map's under-write to a hard FAIL.
 volk_canary_summary run_volk_canary_test(
     volk_func_desc_t,
     void (*)(),
@@ -310,7 +317,8 @@ volk_canary_summary run_volk_canary_test(
     unsigned int,
     std::vector<volk_test_results_t>* results = NULL,
     const std::vector<float>& float_edge_cases = std::vector<float>(),
-    const std::vector<lv_32fc_t>& complex_edge_cases = std::vector<lv_32fc_t>());
+    const std::vector<lv_32fc_t>& complex_edge_cases = std::vector<lv_32fc_t>(),
+    unsigned int contracted_elems = 0);
 
 // #90: outcome of run_volk_immutability_test. A kernel that writes any byte of an
 // input buffer (which an out-of-place kernel's contract forbids) sets `mutated`.

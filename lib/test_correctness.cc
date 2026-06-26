@@ -32,6 +32,7 @@
 #include "qa_canary_kernel.h" // for the planted output-canary negative controls (#89)
 #include "qa_utils.h"         // for volk_test_case_t, run_volk_tests
 #include "volk/volk_complex.h"
+#include "volk_buffer_roles.h" // for the per-kernel buffer-role registry (#161)
 #include "volk_reference.h" // for the independent double-precision oracle registry (#88)
 #include <volk/volk.h>
 
@@ -210,12 +211,46 @@ quiet_run(volk_test_case_t& tc,
     return fail;
 }
 
+// #161: single source of canary verdict truth, shared by the roster sweep and the
+// negative-control block, so the registry promotion path is itself exercised against
+// the planted controls. Maps the aggregated per-kernel canary signals + the kernel's
+// buffer-role entry (nullptr = unregistered) to the verdict the sweep emits:
+//   - any guard/over-run violation        -> "FAIL" (a buffer overflow is always a defect)
+//   - an unwritten contracted region:
+//       registered (entry != nullptr)     -> "FAIL" (declared map/reduction under-wrote
+//                                            its contract; for a registered kernel the
+//                                            runner scanned only the contracted region,
+//                                            so `any_unwritten` already means under-write)
+//       unregistered                      -> "part" (today's hedge: cannot tell a
+//                                            reduction's fixed-size output from a real
+//                                            map under-write without a declared role)
+//   - nothing guardable observed at all   -> "skip" (fail closed; never masquerade as ok)
+//   - else                                -> "ok"
+static const char* classify_canary(bool any_applied,
+                                   bool any_guard,
+                                   bool any_unwritten,
+                                   const volk_buffer_roles_entry* entry)
+{
+    if (any_guard)
+        return "FAIL";
+    if (any_unwritten)
+        return entry ? "FAIL" : "part";
+    if (!any_applied)
+        return "skip";
+    return "ok";
+}
+
 // #89: run the output-buffer canary for one (kernel, vlen) with stdout muted
 // (mirrors quiet_run). Returns the split summary so the driver can treat a buffer
 // over/under-write (always a defect) differently from an in-bounds unwritten
 // element (expected for reduction/index kernels). On an exception, the guarded
 // path could not complete -- reported as a guard violation to surface it.
-static volk_canary_summary quiet_canary_run(volk_test_case_t& tc, unsigned int v)
+// #161: `contracted_elems` is the per-output contracted write count from the
+// buffer-role registry (0 = unregistered, scan whole buffer as before; for a map
+// pass `v`, for a reduction pass its fixed element count). Threaded to the runner
+// so a registered reduction's expected unwritten tail is not flagged.
+static volk_canary_summary
+quiet_canary_run(volk_test_case_t& tc, unsigned int v, unsigned int contracted_elems = 0)
 {
     std::vector<volk_test_results_t> results;
     const bool verbose = (std::getenv("HARNESS_VERBOSE") != nullptr);
@@ -237,7 +272,8 @@ static volk_canary_summary quiet_canary_run(volk_test_case_t& tc, unsigned int v
                                        v /*vlen*/,
                                        &results,
                                        kFloatEdges,
-                                       kComplexEdges);
+                                       kComplexEdges,
+                                       contracted_elems);
     } catch (...) {
         summary.guard_violation = true;
     }
@@ -563,6 +599,29 @@ int main(int argc, char* argv[])
             nc_err = "the planted kernel volk_32f_canaryunwritten_32f did not trip the "
                      "unwritten check — the canary is blind to in-bounds gaps";
         }
+        // #161: prove the registry PROMOTION path on the same planted control. The
+        // under-writing puppet, treated as a registered map (output_elems = 0), must be
+        // promoted by classify_canary to a hard FAIL; the SAME summary unregistered
+        // (nullptr) must stay the `part` hedge. This exercises the exact verdict mapping
+        // the roster sweep uses, against a control whose under-write is known.
+        if (!nc_err) {
+            const volk_buffer_roles_entry map_entry{ "volk_32f_canaryunwritten_32f", 0 };
+            const std::string promoted = classify_canary(unwritten_sum.applied,
+                                                         unwritten_sum.guard_violation,
+                                                         unwritten_sum.unwritten,
+                                                         &map_entry);
+            const std::string hedged = classify_canary(unwritten_sum.applied,
+                                                       unwritten_sum.guard_violation,
+                                                       unwritten_sum.unwritten,
+                                                       nullptr);
+            if (promoted != "FAIL") {
+                nc_err = "the under-writing planted kernel, registered as a map, was not "
+                         "promoted to FAIL — the #161 registry FAIL path is broken";
+            } else if (hedged != "part") {
+                nc_err = "the under-writing planted kernel, unregistered, did not stay "
+                         "`part` — the #161 backward-compat path is broken";
+            }
+        }
         if (nc_err) {
             std::cerr << "NEGATIVE CONTROL LOST: " << nc_err << ". Aborting.\n";
             if (report)
@@ -594,6 +653,8 @@ int main(int argc, char* argv[])
                 std::cout.flush();
                 continue;
             }
+            // #161: a registered kernel declares its contracted output cardinality.
+            const volk_buffer_roles_entry* roles = volk_buffer_roles_lookup(tc.name());
             std::vector<unsigned int> over_run;
             std::vector<unsigned int> partial;
             bool any_applied = false;
@@ -601,7 +662,13 @@ int main(int argc, char* argv[])
             std::map<std::string, std::vector<unsigned int>> guard_fails;
             std::map<std::string, std::vector<unsigned int>> unwritten_fails;
             for (unsigned int v : vlens) {
-                const volk_canary_summary s = quiet_canary_run(tc, v);
+                // #161: pass the contracted write count so the runner flags only an
+                // unwritten byte INSIDE the contracted region. Map => `v` elements;
+                // reduction => its fixed count; 0 => unregistered (whole-buffer scan,
+                // today's behavior).
+                const unsigned int contracted =
+                    roles ? (roles->output_elems == 0 ? v : roles->output_elems) : 0u;
+                const volk_canary_summary s = quiet_canary_run(tc, v, contracted);
                 if (s.applied)
                     any_applied = true;
                 if (s.guard_violation)
@@ -615,13 +682,16 @@ int main(int argc, char* argv[])
                 for (const std::string& impl : s.unwritten_impls)
                     unwritten_fails[impl].push_back(v);
             }
-            // A kernel the canary could not guard (no output buffer / unsupported
-            // signature) is SKIPPED, not reported ok — an unguarded kernel must not
-            // masquerade as covered. But a guard violation (incl. an exception, which
-            // quiet_canary_run reports as guard_violation) is a real defect and must
-            // FAIL even when no impl was successfully guarded: skip only when nothing
-            // was observed at all (fail closed).
-            if (!any_applied && over_run.empty() && partial.empty()) {
+            // #161: classify_canary is the single source of canary verdict truth
+            // (shared with the negative-control block). A kernel the canary could not
+            // guard at all is SKIPPED (fail closed); a guard/over-run is always a FAIL;
+            // an unwritten contracted region is a hard FAIL for a registered kernel (a
+            // declared map/reduction that under-wrote its contract) but stays the `part`
+            // hedge for an unregistered kernel (signature alone cannot tell a reduction's
+            // fixed-size output from a real map under-write).
+            const std::string verdict =
+                classify_canary(any_applied, !over_run.empty(), !partial.empty(), roles);
+            if (verdict == "skip") {
                 std::cout << "skip  [canary] " << tc.name()
                           << " (no guardable output buffer)\n";
                 if (report)
@@ -631,11 +701,18 @@ int main(int argc, char* argv[])
             }
             ++c_tested;
             const std::vector<unsigned int>* vl;
-            if (!over_run.empty()) {
+            if (verdict == "FAIL") {
                 ++c_failed;
-                vl = &over_run;
-                std::cout << "FAIL  [canary] " << tc.name() << "  over-run vlens:";
-            } else if (!partial.empty()) {
+                if (!over_run.empty()) {
+                    vl = &over_run;
+                    std::cout << "FAIL  [canary] " << tc.name() << "  over-run vlens:";
+                } else {
+                    // registered map/reduction that under-wrote its contracted region
+                    vl = &partial;
+                    std::cout << "FAIL  [canary] " << tc.name()
+                              << "  under-wrote contracted region, vlens:";
+                }
+            } else if (verdict == "part") {
                 ++c_partial;
                 vl = &partial;
                 std::cout << "part  [canary] " << tc.name()
@@ -650,13 +727,15 @@ int main(int argc, char* argv[])
             }
             std::cout << "\n";
             if (report) {
-                // Guard violation > unwritten (#92).
+                // Guard violation > unwritten (#92). For a registered kernel an
+                // unwritten contracted region is a FAIL, not a partial (#161).
+                const char* uw_label = roles ? "FAIL" : "partial";
                 emit_impl_rows(
                     report,
                     tc.name(),
                     "canary",
                     impls_seen,
-                    { { &guard_fails, "FAIL" }, { &unwritten_fails, "partial" } });
+                    { { &guard_fails, "FAIL" }, { &unwritten_fails, uw_label } });
                 // Guard-violation vlens with no impl attribution (an exception
                 // inside the guarded run) stay visible on a "-" row.
                 const std::vector<unsigned int> unattr =
@@ -1136,6 +1215,42 @@ int main(int argc, char* argv[])
                 std::cout << "ok    [combined-nc] ref-mode unsupported shape → "
                              "skip (applied=false, "
                           << uns_results.back().skip_reason << ")\n";
+            }
+        }
+
+        // #161: the buffer-role registry promotes a registered under-write from the
+        // canary's `part` hedge to a hard FAIL. Run the planted under-writer through
+        // the SAME run_volk_canary_test path and assert classify_canary (the verdict
+        // mapping the roster sweep uses) promotes it to FAIL when registered as a map,
+        // and keeps it `part` when unregistered. CI-enforced here so a regression to
+        // the promotion path or classify_canary breaks the build, not just the opt-in
+        // HARNESS_CANARY sweep.
+        {
+            std::vector<volk_test_results_t> uw_results;
+            const volk_canary_summary uw_sum =
+                run_volk_canary_test(volk_canary_desc(),
+                                     (void (*)())(&volk_32f_canaryunwritten_32f),
+                                     "volk_32f_canaryunwritten_32f",
+                                     power_scalar,
+                                     127u,
+                                     &uw_results,
+                                     kFloatEdges,
+                                     kComplexEdges);
+            const volk_buffer_roles_entry map_entry{ "volk_32f_canaryunwritten_32f", 0 };
+            const std::string promoted = classify_canary(
+                uw_sum.applied, uw_sum.guard_violation, uw_sum.unwritten, &map_entry);
+            const std::string hedged = classify_canary(
+                uw_sum.applied, uw_sum.guard_violation, uw_sum.unwritten, nullptr);
+            const bool good = uw_sum.unwritten && promoted == "FAIL" && hedged == "part";
+            std::cout << (good ? "ok    " : "LOST  ")
+                      << "[combined-nc] buffer-role promotion: under-writer registered "
+                         "as map → FAIL, unregistered → part (#161)\n";
+            if (!good) {
+                std::cerr << "NEGATIVE CONTROL LOST: the planted under-writer was not "
+                             "promoted to FAIL when registered as a map (or no longer "
+                             "stays `part` unregistered) — the #161 buffer-role "
+                             "promotion path is broken.\n";
+                lost = true;
             }
         }
         if (lost)
