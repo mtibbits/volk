@@ -1896,7 +1896,8 @@ volk_canary_summary run_volk_canary_test(volk_func_desc_t desc,
                                          unsigned int vlen,
                                          std::vector<volk_test_results_t>* results,
                                          const std::vector<float>& float_edge_cases,
-                                         const std::vector<lv_32fc_t>& complex_edge_cases)
+                                         const std::vector<lv_32fc_t>& complex_edge_cases,
+                                         unsigned int contracted_elems)
 {
     volk_canary_summary summary;
 
@@ -2086,8 +2087,23 @@ volk_canary_summary run_volk_canary_test(volk_func_desc_t desc,
             // (deterministic) value in both runs, so it cannot equal S1 after run 1
             // AND S2 after run 2. A byte that still equals both sentinels was never
             // written -- an in-bounds element left untouched (which ASan cannot see).
+            // #161: for a registered kernel (contracted_elems > 0) only the first
+            // `contracted_elems` elements are contracted to be written; scan just that
+            // region so a reduction's expected unwritten tail is not flagged, while an
+            // under-write of the contracted region still is. 0 = unregistered: scan the
+            // whole buffer exactly as before.
             const uint8_t* d2 = static_cast<const uint8_t*>(gbufs[j]->data());
-            for (size_t b = 0; b < gbufs[j]->data_bytes(); b++) {
+            size_t scan_bytes = gbufs[j]->data_bytes();
+            if (contracted_elems > 0) {
+                const size_t elem_bytes =
+                    d.outputsig[j].size * (d.outputsig[j].is_complex ? 2 : 1);
+                const size_t contracted_bytes =
+                    static_cast<size_t>(contracted_elems) * elem_bytes;
+                if (contracted_bytes < scan_bytes) {
+                    scan_bytes = contracted_bytes;
+                }
+            }
+            for (size_t b = 0; b < scan_bytes; b++) {
                 if (snap_s1[j][b] == S1 && d2[b] == S2) {
                     arch_unwritten = true;
                     std::cout << name << ": canary found unwritten output byte on arch "
