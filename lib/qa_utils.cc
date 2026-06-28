@@ -38,7 +38,7 @@
 #include <stdexcept> // for runtime_error (#88)
 #include <vector>    // for vector, _Bit_refe...
 
-#include <fmt/core.h>
+#include <fmt/format.h>
 #include <fmt/ostream.h>
 
 // Warmup time for CPU frequency scaling (ms)
