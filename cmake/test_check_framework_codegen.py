@@ -466,6 +466,95 @@ def test_real_xchg_is_not_stripped():
         {"mnemonic": "xchg", "operands": "%ax, %ax"})
 
 
+def test_require_standalone_must_be_bool():
+    """parse_manifest rejects a non-boolean require_standalone with exit 2."""
+    manifest = {"tuples": [{
+        "kernel": "k", "isa": "avx", "alignment": "a",
+        "impl_a": {"symbol": "s", "machine_o": "m.o"},
+        "impl_b": {"symbol": "s2", "machine_o": "m2.o"},
+        "criterion": "byte_identical",
+        "require_standalone": "yes",  # not a bool
+    }]}
+    manifest_path = Path("/tmp/cge_reqstandalone_bad_manifest.json")
+    manifest_path.write_text(json.dumps(manifest))
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT),
+         "--manifest", str(manifest_path), "--list-only"],
+        capture_output=True, text=True,
+    )
+    assert result.returncode == 2, (result.returncode, result.stdout)
+    assert "require_standalone" in result.stderr, result.stderr
+
+
+def _compile_present_fn_o(tag):
+    """Compile a TU defining `present_fn` into a .o; return (cc, objdump, o_path)
+    or (None, None, None) when the toolchain is unavailable (caller self-skips)."""
+    import shutil
+    cc = shutil.which("cc")
+    if not cc:
+        return None, None, None
+    objdump = _which_objdump()
+    src = ("#include <immintrin.h>\n"
+           "__m256 present_fn(__m256 a,__m256 b){return _mm256_add_ps(a,b);}\n")
+    c = Path(f"/tmp/cge_{tag}.c"); c.write_text(src)
+    o = Path(f"/tmp/cge_{tag}.o")
+    subprocess.run([cc, "-O3", "-mavx", "-c", str(c), "-o", str(o)], check=True)
+    return cc, objdump, o
+
+
+def test_require_standalone_inlined_hard_fails():
+    """A tuple marked require_standalone whose symbol is absent (inlined away)
+    is a HARD failure: main() exits 1 and names the tuple. The .o defines
+    `present_fn` but the tuple references `inlined_away`, so the first
+    extraction raises SymbolNotEmittedError -- the deterministic stand-in for
+    a compiler having inlined the impl."""
+    cc, objdump, o = _compile_present_fn_o("reqstandalone_fail")
+    if not cc:
+        print("  (skip test_require_standalone_inlined_hard_fails: no cc)")
+        return
+    manifest = {"tuples": [{
+        "kernel": "nc", "isa": "avx", "alignment": "a",
+        "impl_a": {"symbol": "inlined_away", "machine_o": str(o)},
+        "impl_b": {"symbol": "present_fn", "machine_o": str(o)},
+        "criterion": "byte_identical",
+        "require_standalone": True,
+    }]}
+    mpath = Path("/tmp/cge_reqstandalone_fail_manifest.json")
+    mpath.write_text(json.dumps(manifest))
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), "--manifest", str(mpath),
+         "--build-lib-dir", "/tmp", "--objdump", objdump],
+        capture_output=True, text=True)
+    assert result.returncode == 1, (result.returncode, result.stdout, result.stderr)
+    assert "CHECK FAILED" in result.stderr, result.stderr
+    assert "require_standalone assertion FAILED" in result.stderr, result.stderr
+    assert "nc.avx.a" in result.stderr, result.stderr
+
+
+def test_unmarked_inlined_still_skips():
+    """Negative control: the same inlined-away condition WITHOUT the opt-in keeps
+    today's behavior -- skip-with-warning, exit 0 (the build stays green)."""
+    cc, objdump, o = _compile_present_fn_o("reqstandalone_skip")
+    if not cc:
+        print("  (skip test_unmarked_inlined_still_skips: no cc)")
+        return
+    manifest = {"tuples": [{
+        "kernel": "nc", "isa": "avx", "alignment": "a",
+        "impl_a": {"symbol": "inlined_away", "machine_o": str(o)},
+        "impl_b": {"symbol": "present_fn", "machine_o": str(o)},
+        "criterion": "byte_identical",
+        # no require_standalone
+    }]}
+    mpath = Path("/tmp/cge_reqstandalone_skip_manifest.json")
+    mpath.write_text(json.dumps(manifest))
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), "--manifest", str(mpath),
+         "--build-lib-dir", "/tmp", "--objdump", objdump],
+        capture_output=True, text=True)
+    assert result.returncode == 0, (result.returncode, result.stdout, result.stderr)
+    assert "WARNING: skipping nc.avx.a" in result.stderr, result.stderr
+
+
 def main():
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     failed = 0
