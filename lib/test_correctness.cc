@@ -215,12 +215,14 @@ quiet_run(volk_test_case_t& tc,
 // negative-control block, so the registry promotion path is itself exercised against
 // the planted controls. Maps the aggregated per-kernel canary signals + the kernel's
 // buffer-role entry (nullptr = unregistered) to the verdict the sweep emits:
-//   - any guard/over-run violation        -> "FAIL" (a buffer overflow is always a defect)
+//   - any guard/over-run violation        -> "FAIL" (a buffer overflow is always a
+//   defect)
 //   - an unwritten contracted region:
 //       registered (entry != nullptr)     -> "FAIL" (declared map/reduction under-wrote
 //                                            its contract; for a registered kernel the
 //                                            runner scanned only the contracted region,
-//                                            so `any_unwritten` already means under-write)
+//                                            so `any_unwritten` already means
+//                                            under-write)
 //       unregistered                      -> "part" (today's hedge: cannot tell a
 //                                            reduction's fixed-size output from a real
 //                                            map under-write without a declared role)
