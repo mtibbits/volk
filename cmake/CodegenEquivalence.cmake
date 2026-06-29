@@ -23,13 +23,17 @@
 set_property(GLOBAL PROPERTY CODEGEN_EQUIVALENCE_TUPLES "")
 
 function(ADD_CODEGEN_EQUIVALENCE_TUPLE)
-    set(one_value
+    set(required_args
         KERNEL ISA ALIGNMENT CRITERION
         IMPL_A_SYMBOL IMPL_A_MACHINE_O
         IMPL_B_SYMBOL IMPL_B_MACHINE_O)
-    cmake_parse_arguments(CGE "" "${one_value}" "" ${ARGN})
+    # REQUIRE_MNEMONIC is OPTIONAL: parsed but NOT in required_args, so existing
+    # call sites without it are unaffected. When set, the harness additionally
+    # asserts the compared function contains >=1 instruction whose mnemonic
+    # matches the regex (scalar-fallback guard).
+    cmake_parse_arguments(CGE "" "${required_args};REQUIRE_MNEMONIC" "" ${ARGN})
 
-    foreach(required IN LISTS one_value)
+    foreach(required IN LISTS required_args)
         if(NOT DEFINED CGE_${required})
             message(FATAL_ERROR
                 "ADD_CODEGEN_EQUIVALENCE_TUPLE: missing required arg ${required}")
@@ -41,7 +45,14 @@ function(ADD_CODEGEN_EQUIVALENCE_TUPLE)
             "or within_noise (got '${CGE_CRITERION}')")
     endif()
 
-    set(frag "{\"kernel\":\"${CGE_KERNEL}\",\"isa\":\"${CGE_ISA}\",\"alignment\":\"${CGE_ALIGNMENT}\",\"criterion\":\"${CGE_CRITERION}\",\"impl_a\":{\"symbol\":\"${CGE_IMPL_A_SYMBOL}\",\"machine_o\":\"${CGE_IMPL_A_MACHINE_O}\"},\"impl_b\":{\"symbol\":\"${CGE_IMPL_B_SYMBOL}\",\"machine_o\":\"${CGE_IMPL_B_MACHINE_O}\"}}")
+    # Emit require_mnemonic only when set, so tuples without it produce
+    # byte-identical JSON to before this change.
+    set(_extra "")
+    if(DEFINED CGE_REQUIRE_MNEMONIC)
+        set(_extra ",\"require_mnemonic\":\"${CGE_REQUIRE_MNEMONIC}\"")
+    endif()
+
+    set(frag "{\"kernel\":\"${CGE_KERNEL}\",\"isa\":\"${CGE_ISA}\",\"alignment\":\"${CGE_ALIGNMENT}\",\"criterion\":\"${CGE_CRITERION}\",\"impl_a\":{\"symbol\":\"${CGE_IMPL_A_SYMBOL}\",\"machine_o\":\"${CGE_IMPL_A_MACHINE_O}\"},\"impl_b\":{\"symbol\":\"${CGE_IMPL_B_SYMBOL}\",\"machine_o\":\"${CGE_IMPL_B_MACHINE_O}\"}${_extra}}")
     set_property(GLOBAL APPEND PROPERTY CODEGEN_EQUIVALENCE_TUPLES "${frag}")
 endfunction()
 
