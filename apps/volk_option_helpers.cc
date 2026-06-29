@@ -27,7 +27,7 @@ option_t::option_t(std::string t_longform,
                    std::string t_msg,
                    void (*t_callback)())
     : longform("--" + t_longform),
-      shortform("-" + t_shortform),
+      shortform(t_shortform.empty() ? std::string() : "-" + t_shortform),
       msg(t_msg),
       callback(t_callback)
 {
@@ -39,7 +39,7 @@ option_t::option_t(std::string t_longform,
                    std::string t_msg,
                    void (*t_callback)(int))
     : longform("--" + t_longform),
-      shortform("-" + t_shortform),
+      shortform(t_shortform.empty() ? std::string() : "-" + t_shortform),
       msg(t_msg),
       callback((void (*)())t_callback)
 {
@@ -51,7 +51,7 @@ option_t::option_t(std::string t_longform,
                    std::string t_msg,
                    void (*t_callback)(float))
     : longform("--" + t_longform),
-      shortform("-" + t_shortform),
+      shortform(t_shortform.empty() ? std::string() : "-" + t_shortform),
       msg(t_msg),
       callback((void (*)())t_callback)
 {
@@ -63,7 +63,7 @@ option_t::option_t(std::string t_longform,
                    std::string t_msg,
                    void (*t_callback)(bool))
     : longform("--" + t_longform),
-      shortform("-" + t_shortform),
+      shortform(t_shortform.empty() ? std::string() : "-" + t_shortform),
       msg(t_msg),
       callback((void (*)())t_callback)
 {
@@ -75,7 +75,7 @@ option_t::option_t(std::string t_longform,
                    std::string t_msg,
                    void (*t_callback)(std::string))
     : longform("--" + t_longform),
-      shortform("-" + t_shortform),
+      shortform(t_shortform.empty() ? std::string() : "-" + t_shortform),
       msg(t_msg),
       callback((void (*)())t_callback)
 {
@@ -87,7 +87,7 @@ option_t::option_t(std::string t_longform,
                    std::string t_msg,
                    std::string t_printval)
     : longform("--" + t_longform),
-      shortform("-" + t_shortform),
+      shortform(t_shortform.empty() ? std::string() : "-" + t_shortform),
       msg(t_msg),
       printval(t_printval)
 {
@@ -256,7 +256,7 @@ void option_list::help()
          this_option != d_internal_list.end();
          this_option++) {
         std::string help_line("  ");
-        if (this_option->shortform == "-") {
+        if (this_option->shortform.empty()) {
             help_line += this_option->longform + " ";
         } else {
             help_line += this_option->shortform + " [ " + this_option->longform + " ]";
