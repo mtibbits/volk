@@ -116,7 +116,8 @@ void option_list::parse(int argc, char** argv)
              this_option++) {
             int int_val = INT_MIN;
             if (this_option->longform == std::string(argv[arg_number]) ||
-                this_option->shortform == std::string(argv[arg_number])) {
+                (!this_option->shortform.empty() &&
+                 this_option->shortform == std::string(argv[arg_number]))) {
                 matched = true;
 
                 if (d_present_options.count(this_option->longform) == 0) {
