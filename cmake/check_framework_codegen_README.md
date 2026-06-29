@@ -81,6 +81,12 @@ ADD_CODEGEN_EQUIVALENCE_TUPLE(
   `byte_identical`. When a wrapper or a different flag set introduces benign
   register/immediate churn without changing the instruction stream's shape,
   use `within_noise`.
+- Two optional opt-in fields may also be declared per tuple:
+  `REQUIRE_MNEMONIC <regex>` (assert a present symbol contains a given
+  instruction — see *Required-mnemonic assertion*) and `REQUIRE_STANDALONE`
+  (a bare boolean flag that makes an inlined-away impl a hard failure — see
+  *Require-standalone assertion*). Both default off; omitting them leaves the
+  emitted manifest JSON byte-identical.
 
 `FINALIZE_CODEGEN_EQUIVALENCE_HARNESS()` is called once (already wired in
 `lib/CMakeLists.txt`) after all tuple declarations and after `volk_obj` is
@@ -123,6 +129,35 @@ actually present. The field is **opt-in**: tuples without it are unaffected and
 produce identical manifest JSON to before. Use it on framework-instantiation
 tuples to guarantee the instantiation didn't silently fall back to scalar code.
 
+## Require-standalone assertion (inlined-away guard)
+
+By default, when the compiler inlines an impl rather than emitting it as a
+standalone symbol there is nothing to disassemble, so the tuple is
+**skipped with a warning** and the build stays green (see *Diagnostics* and
+*Cross-compiler robustness* below). That is the right default for impls whose
+standalone emission is compiler-dependent — but it leaves a masked-regression
+class for impls that the dispatch table relies on existing as real, separately
+dispatchable symbols: if such an impl gets inlined away by a future refactor,
+the symbol silently disappears and the check still passes.
+
+Declare the optional boolean flag `REQUIRE_STANDALONE` (pass the **bare keyword**,
+no value) on such a tuple to flip that outcome: when the impl is inlined away,
+the checker reports a **hard failure** (exit 1) for that tuple instead of
+skip-with-warning.
+
+```cmake
+ADD_CODEGEN_EQUIVALENCE_TUPLE(
+    ...
+    REQUIRE_STANDALONE           # inlined-away is a regression here, not OK
+)
+```
+
+This is an **orthogonal axis** to `REQUIRE_MNEMONIC`: the latter asserts which
+instructions a *present* symbol contains; `REQUIRE_STANDALONE` asserts the symbol
+*exists* as a dispatchable standalone in the first place. The field is **opt-in**:
+tuples without it are unaffected and produce identical manifest JSON to before
+(unmarked tuples keep the skip-with-warning / exit-0 behavior).
+
 ## How the check runs
 
 1. **CMake configure:** each `ADD_CODEGEN_EQUIVALENCE_TUPLE` appends a JSON
@@ -146,7 +181,11 @@ positives on a clean tree.
 
 - `symbol '<x>' not found in disassembly of <o>` — the impl was inlined away
   (no address taken, so no symbol emitted), or the symbol is in a different
-  `.o` than declared.
+  `.o` than declared. Skipped-with-warning by default; a hard failure if the
+  tuple declares `REQUIRE_STANDALONE`.
+- `require_standalone assertion FAILED: implementation was not emitted as a
+  standalone dispatchable symbol (inlined away)` — a tuple declaring
+  `REQUIRE_STANDALONE` had its impl inlined away; the build fails (exit 1).
 - `object file '<x>' not found under <dir>` — the `MACHINE_O` name does not
   match any compiled object; check the build actually produced it.
 - `object file '<x>' is ambiguous` — more than one `.o` with that name exists;
@@ -214,7 +253,9 @@ equivalence violation, while still hard-failing on a genuine divergence.
   (`data16 cs nopw …`); treated as padding like the NOP family.
 - **Symbol not emitted standalone** (e.g. macOS clang inlines the impl): there
   is nothing to compare, so the tuple is **skipped with a warning** and the
-  build stays green. The summary line reports `N skipped`.
+  build stays green. The summary line reports `N skipped`. (Exception: a tuple
+  that declares `REQUIRE_STANDALONE` hard-fails instead — see *Require-standalone
+  assertion*.)
 
 **Still a hard failure:**
 

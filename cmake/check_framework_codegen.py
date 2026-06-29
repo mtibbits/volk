@@ -33,6 +33,12 @@ is skipped-with-warning (exit 0) since there is nothing to compare. A genuine
 post-normalization divergence still fails (exit 1); a genuinely unparsable
 non-padding line still errors (exit 2).
 
+Per-tuple opt-in `require_standalone` (bool, default off) flips that inlined-away
+outcome: for a tuple whose dispatch relies on the impl existing as a real,
+separately-dispatchable symbol, "inlined away" is a regression, so the checker
+hard-fails it (exit 1) instead of skip-with-warning. Orthogonal to
+`require_mnemonic`, which asserts which instructions a present symbol contains.
+
 Exit codes:
     0  all declared tuples pass (or are skipped/empty); skips warn on stderr
     1  one or more tuples fail their criterion (per-tuple diff on stderr)
@@ -116,6 +122,14 @@ def parse_manifest(path: Path) -> list:
             except re.error as e:
                 print(f"error: require_mnemonic is not a valid regex "
                       f"({t['require_mnemonic']!r}): {e}", file=sys.stderr)
+                sys.exit(2)
+        # Optional opt-in field (orthogonal to require_mnemonic): a boolean that,
+        # when true, turns an inlined-away impl from skip-with-warning into a
+        # hard failure -- the impl must exist as a standalone dispatchable symbol.
+        if "require_standalone" in t:
+            if not isinstance(t["require_standalone"], bool):
+                print(f"error: require_standalone must be a boolean: {t}",
+                      file=sys.stderr)
                 sys.exit(2)
     return tuples
 
@@ -493,9 +507,18 @@ def main():
             b_instrs = extract_function_body(
                 b_o, t["impl_b"]["symbol"], objdump=args.objdump)
         except SymbolNotEmittedError as e:
-            # Compiler inlined the impl rather than emitting it standalone
-            # (e.g. macOS clang): nothing to compare, so skip with a loud
-            # warning instead of failing the build. A present-but-divergent
+            # Opt-in (require_standalone): for tuples whose dispatch relies on the
+            # impl existing as a real, separately-dispatchable symbol, "inlined
+            # away" is a regression, not an acceptable outcome -- hard-fail it.
+            if t.get("require_standalone"):
+                msg = ("require_standalone assertion FAILED: implementation "
+                       "was not emitted as a standalone dispatchable symbol "
+                       f"(inlined away). {e}")
+                failures.append((tuple_id(t), msg))
+                continue
+            # Default: compiler inlined the impl rather than emitting it
+            # standalone (e.g. macOS clang): nothing to compare, so skip with a
+            # loud warning instead of failing the build. A present-but-divergent
             # body is unaffected -- it still fails below.
             print(f"codegen-equivalence: WARNING: skipping {tuple_id(t)}: {e}",
                   file=sys.stderr)

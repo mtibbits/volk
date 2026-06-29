@@ -31,7 +31,14 @@ function(ADD_CODEGEN_EQUIVALENCE_TUPLE)
     # call sites without it are unaffected. When set, the harness additionally
     # asserts the compared function contains >=1 instruction whose mnemonic
     # matches the regex (scalar-fallback guard).
-    cmake_parse_arguments(CGE "" "${required_args};REQUIRE_MNEMONIC" "" ${ARGN})
+    #
+    # REQUIRE_STANDALONE is an OPTIONAL boolean flag (orthogonal axis): pass the
+    # bare keyword (no value) for a tuple whose dispatch relies on the impl
+    # existing as a real, separately-dispatchable symbol. When set, the harness
+    # treats "inlined away" (SymbolNotEmittedError) as a hard failure instead of
+    # skip-with-warning. Omitted -> today's skip-with-warning behavior.
+    cmake_parse_arguments(CGE
+        "REQUIRE_STANDALONE" "${required_args};REQUIRE_MNEMONIC" "" ${ARGN})
 
     foreach(required IN LISTS required_args)
         if(NOT DEFINED CGE_${required})
@@ -45,11 +52,15 @@ function(ADD_CODEGEN_EQUIVALENCE_TUPLE)
             "or within_noise (got '${CGE_CRITERION}')")
     endif()
 
-    # Emit require_mnemonic only when set, so tuples without it produce
-    # byte-identical JSON to before this change.
+    # Emit optional fields only when set, so tuples without them produce
+    # byte-identical JSON to before this change. require_standalone is a flag, so
+    # it is ALWAYS defined (TRUE/FALSE) -- gate on its truthiness, not DEFINED.
     set(_extra "")
     if(DEFINED CGE_REQUIRE_MNEMONIC)
         set(_extra ",\"require_mnemonic\":\"${CGE_REQUIRE_MNEMONIC}\"")
+    endif()
+    if(CGE_REQUIRE_STANDALONE)
+        string(APPEND _extra ",\"require_standalone\":true")
     endif()
 
     set(frag "{\"kernel\":\"${CGE_KERNEL}\",\"isa\":\"${CGE_ISA}\",\"alignment\":\"${CGE_ALIGNMENT}\",\"criterion\":\"${CGE_CRITERION}\",\"impl_a\":{\"symbol\":\"${CGE_IMPL_A_SYMBOL}\",\"machine_o\":\"${CGE_IMPL_A_MACHINE_O}\"},\"impl_b\":{\"symbol\":\"${CGE_IMPL_B_SYMBOL}\",\"machine_o\":\"${CGE_IMPL_B_MACHINE_O}\"}${_extra}}")
