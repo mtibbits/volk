@@ -20,12 +20,19 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - uses: actions/checkout@v6
-      - uses: gnuradio/clang-format-lint-action@v0.5-4
-        with:
-          source: "."
-          exclude: "./tmpl,./include/volk/sse2neon.h"
-          extensions: "c,cc,cpp,cxx,h,hh"
+      # Fork divergence (mtibbits/volk#139): pin clang-format to the version this
+      # fork actually develops with (clang-format-18) instead of the upstream
+      # action's image, which bundles an ancient clang-format 9.0.0 whose style
+      # the fork's modern edits no longer match. Self-contained (apt + explicit
+      # version) so the check is deterministic, not tied to a cached image.
+      - name: Install clang-format-18
+        run: sudo apt-get update && sudo apt-get install -y clang-format-18
+      - name: Check formatting (clang-format-18)
+        run: |
+          files=$(git ls-files '*.c' '*.cc' '*.cpp' '*.cxx' '*.h' '*.hh' \
+            | grep -vE '^tmpl/|^include/volk/sse2neon\.h$')
+          clang-format-18 --dry-run -Werror $files
