@@ -112,8 +112,7 @@ void print_qa_xml(std::vector<volk_test_results_t> results, unsigned int nfails)
     qa_file.open(".unittest/kernels.xml");
 
     qa_file << "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" << std::endl;
-    qa_file << "<testsuites name=\"kernels\" "
-            << "tests=\"" << results.size() << "\" "
+    qa_file << "<testsuites name=\"kernels\" " << "tests=\"" << results.size() << "\" "
             << "failures=\"" << nfails << "\" id=\"1\">" << std::endl;
 
     // Results are in a vector by kernel. Each element has a result
@@ -128,12 +127,11 @@ void print_qa_xml(std::vector<volk_test_results_t> results, unsigned int nfails)
              ++kernel_time_pair) {
             volk_test_time_t test_time = kernel_time_pair->second;
             qa_file << "    <testcase name=\"" << test_time.name << "\" "
-                    << "classname=\"" << result.name << "\" "
-                    << "time=\"" << test_time.time << "\">" << std::endl;
+                    << "classname=\"" << result.name << "\" " << "time=\""
+                    << test_time.time << "\">" << std::endl;
             if (!test_time.pass)
-                qa_file << "      <failure "
-                        << "message=\"fail on arch " << test_time.name << "\">"
-                        << "</failure>" << std::endl;
+                qa_file << "      <failure " << "message=\"fail on arch "
+                        << test_time.name << "\">" << "</failure>" << std::endl;
             qa_file << "    </testcase>" << std::endl;
         }
         qa_file << "  </testsuite>" << std::endl;
