@@ -115,10 +115,18 @@ else()
 endif()
 
 if(VOLK_CPU_FEATURES)
-    find_package(CpuFeatures QUIET)
+    # Skip find_package when cross-compiling: a host-installed CpuFeatures is likely
+    # to have headers for the wrong architecture (e.g. an x86 host install lacks
+    # cpuinfo_aarch64.h), which is silently picked over the correct bundled submodule
+    # and breaks the cross build. See mtibbits/volk#66.
+    if(NOT CMAKE_CROSSCOMPILING)
+        find_package(CpuFeatures QUIET)
+    endif()
     if(NOT CpuFeatures_FOUND)
         message(
-            STATUS "cpu_features package not found. Requiring cpu_features submodule ...")
+            STATUS
+                "cpu_features package not found (or skipped for cross-compile). Requiring cpu_features submodule ..."
+        )
         if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/cpu_features/CMakeLists.txt")
             message(
                 FATAL_ERROR
