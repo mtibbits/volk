@@ -71,11 +71,15 @@
 ////////////////////////////////////////////////////////////////////////
 // Ignore annoying warnings in MSVC
 ////////////////////////////////////////////////////////////////////////
+// clang-format off
+// (clang-format 18 would wrap the first pragma's trailing comment with a `\`
+//  line-continuation, which gcc -Werror=comment rejects as a multi-line comment)
 #if defined(_MSC_VER)
 #pragma warning(disable : 4244) //'conversion' conversion from 'type1' to 'type2',
                                 // possible loss of data
 #pragma warning(disable : 4305) //'identifier' : truncation from 'type1' to 'type2'
 #endif
+// clang-format on
 
 ////////////////////////////////////////////////////////////////////////
 // C-linkage declaration macros
