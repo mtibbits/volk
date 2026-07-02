@@ -9,6 +9,7 @@
  */
 
 #include "qa_utils.h"
+#include "volk_reference.h" // for the independent double-precision oracle registry (#88)
 #include <volk/volk.h>
 
 #include <volk/volk.h>        // for volk_func_desc_t
@@ -26,7 +27,8 @@
 #include <limits>   // for numeric_limits
 #include <map>      // for map, map<>::mappe...
 #include <random>
-#include <vector> // for vector, _Bit_refe...
+#include <stdexcept> // for runtime_error (#88)
+#include <vector>    // for vector, _Bit_refe...
 
 #include <fmt/format.h>
 
@@ -777,6 +779,125 @@ bool run_volk_tests(volk_func_desc_t desc,
                           test_params.complex_edge_cases());
 }
 
+// Shared setup for run_volk_tests and run_volk_reference_test (#88): build the
+// arch list, parse the kernel signature, generate ONE set of random inputs, and
+// build the per-arch buffer copies. `vlen` is the already-twiddled buffer length
+// (the caller owns the twiddle). Emits the same diagnostics and returns
+// ok=false on <2 archs (non-benchmark) or an unparseable signature. `mem_pool`
+// must outlive the returned buffers. This is pure setup (no kernel execution and
+// no comparison), so run_volk_tests' observable behaviour is unchanged.
+struct qa_test_data {
+    std::vector<std::string> arch_list;
+    std::map<std::string, size_t> arch_to_orig_idx;
+    std::vector<volk_type_t> inputsig;
+    std::vector<volk_type_t> outputsig;
+    std::vector<volk_type_t> inputsc;
+    std::vector<volk_type_t> both_sigs;
+    std::vector<void*> inbuffs;
+    std::vector<std::vector<void*>> test_data;
+    bool ok = true;
+};
+
+static qa_test_data setup_test_data(volk_func_desc_t desc,
+                                    const std::string& name,
+                                    unsigned int vlen,
+                                    bool benchmark_mode,
+                                    const std::vector<float>& float_edge_cases,
+                                    const std::vector<lv_32fc_t>& complex_edge_cases,
+                                    volk_qa_aligned_mem_pool& mem_pool)
+{
+    qa_test_data d;
+
+    // first let's get a list of available architectures for the test
+    d.arch_list = get_arch_list(desc);
+
+    // Build map from arch name to original index (for impl_alignment lookup)
+    for (size_t i = 0; i < d.arch_list.size(); i++) {
+        d.arch_to_orig_idx[d.arch_list[i]] = i;
+    }
+
+    // Reorder arch_list to put generic implementations first for consistent output
+    // Priority: "generic" first, then other generic_* variants, then everything else
+    std::vector<std::string> plain_generic;
+    std::vector<std::string> other_generic_impls;
+    std::vector<std::string> other_impls;
+    for (const auto& arch : d.arch_list) {
+        if (arch == "generic") {
+            plain_generic.push_back(arch);
+        } else if (arch.find("generic") == 0) { // starts with "generic"
+            other_generic_impls.push_back(arch);
+        } else {
+            other_impls.push_back(arch);
+        }
+    }
+    d.arch_list.clear();
+    d.arch_list.insert(d.arch_list.end(), plain_generic.begin(), plain_generic.end());
+    d.arch_list.insert(
+        d.arch_list.end(), other_generic_impls.begin(), other_generic_impls.end());
+    d.arch_list.insert(d.arch_list.end(), other_impls.begin(), other_impls.end());
+
+    if ((!benchmark_mode) && (d.arch_list.size() < 2)) {
+        std::cerr << "no architectures to test" << std::endl;
+        d.ok = false;
+        return d;
+    }
+
+    // now we have to get a function signature by parsing the name
+    try {
+        get_signatures_from_name(d.inputsig, d.outputsig, name);
+    } catch (std::exception& error) {
+        std::cerr << "Error: unable to get function signature from kernel name"
+                  << std::endl;
+        std::cerr << "  - " << name << std::endl;
+        d.ok = false;
+        return d;
+    }
+
+    // pull the input scalars into their own vector
+    for (size_t i = 0; i < d.inputsig.size(); i++) {
+        if (d.inputsig[i].is_scalar) {
+            d.inputsc.push_back(d.inputsig[i]);
+            d.inputsig.erase(d.inputsig.begin() + i);
+            i -= 1;
+        }
+    }
+    for (unsigned int inputsig_index = 0; inputsig_index < d.inputsig.size();
+         ++inputsig_index) {
+        volk_type_t sig = d.inputsig[inputsig_index];
+        if (!sig.is_scalar) // we don't make buffers for scalars
+            d.inbuffs.push_back(
+                mem_pool.get_new(vlen * sig.size * (sig.is_complex ? 2 : 1)));
+    }
+    for (size_t i = 0; i < d.inbuffs.size(); i++) {
+        load_random_data(
+            d.inbuffs[i], d.inputsig[i], vlen, float_edge_cases, complex_edge_cases);
+    }
+
+    // ok let's make a vector of vector of void buffers, which holds the input/output
+    // vectors for each arch
+    for (size_t i = 0; i < d.arch_list.size(); i++) {
+        std::vector<void*> arch_buffs;
+        for (size_t j = 0; j < d.outputsig.size(); j++) {
+            arch_buffs.push_back(mem_pool.get_new(vlen * d.outputsig[j].size *
+                                                  (d.outputsig[j].is_complex ? 2 : 1)));
+        }
+        for (size_t j = 0; j < d.inputsig.size(); j++) {
+            void* arch_inbuff = mem_pool.get_new(vlen * d.inputsig[j].size *
+                                                 (d.inputsig[j].is_complex ? 2 : 1));
+            memcpy(arch_inbuff,
+                   d.inbuffs[j],
+                   vlen * d.inputsig[j].size * (d.inputsig[j].is_complex ? 2 : 1));
+            arch_buffs.push_back(arch_inbuff);
+        }
+        d.test_data.push_back(arch_buffs);
+    }
+
+    d.both_sigs.insert(d.both_sigs.end(), d.outputsig.begin(), d.outputsig.end());
+    d.both_sigs.insert(d.both_sigs.end(), d.inputsig.begin(), d.inputsig.end());
+
+    return d;
+}
+
 bool run_volk_tests(volk_func_desc_t desc,
                     void (*manual_func)(),
                     std::string name,
@@ -808,99 +929,24 @@ bool run_volk_tests(volk_func_desc_t desc,
     const float tol_f = tol;
     const unsigned int tol_i = static_cast<unsigned int>(tol);
 
-    // first let's get a list of available architectures for the test
-    std::vector<std::string> arch_list = get_arch_list(desc);
-
-    // Build map from arch name to original index (for impl_alignment lookup)
-    std::map<std::string, size_t> arch_to_orig_idx;
-    for (size_t i = 0; i < arch_list.size(); i++) {
-        arch_to_orig_idx[arch_list[i]] = i;
-    }
-
-    // Reorder arch_list to put generic implementations first for consistent output
-    // Priority: "generic" first, then other generic_* variants, then everything else
-    std::vector<std::string> plain_generic;
-    std::vector<std::string> other_generic_impls;
-    std::vector<std::string> other_impls;
-    for (const auto& arch : arch_list) {
-        if (arch == "generic") {
-            plain_generic.push_back(arch);
-        } else if (arch.find("generic") == 0) { // starts with "generic"
-            other_generic_impls.push_back(arch);
-        } else {
-            other_impls.push_back(arch);
-        }
-    }
-    arch_list.clear();
-    arch_list.insert(arch_list.end(), plain_generic.begin(), plain_generic.end());
-    arch_list.insert(
-        arch_list.end(), other_generic_impls.begin(), other_generic_impls.end());
-    arch_list.insert(arch_list.end(), other_impls.begin(), other_impls.end());
-
-    if ((!benchmark_mode) && (arch_list.size() < 2)) {
-        std::cout << "no architectures to test" << std::endl;
-        return false;
-    }
-
     // something that can hang onto memory and cleanup when this function exits
     volk_qa_aligned_mem_pool mem_pool;
 
-    // now we have to get a function signature by parsing the name
-    std::vector<volk_type_t> inputsig, outputsig;
-    try {
-        get_signatures_from_name(inputsig, outputsig, name);
-    } catch (std::exception& error) {
-        std::cerr << "Error: unable to get function signature from kernel name"
-                  << std::endl;
-        std::cerr << "  - " << name << std::endl;
+    // Build arch list, parse the signature, generate inputs, and per-arch buffer
+    // copies (shared with run_volk_reference_test; #88). `vlen` is twiddled here.
+    qa_test_data test_setup = setup_test_data(
+        desc, name, vlen, benchmark_mode, float_edge_cases, complex_edge_cases, mem_pool);
+    if (!test_setup.ok) {
         return false;
     }
-
-    // pull the input scalars into their own vector
-    std::vector<volk_type_t> inputsc;
-    for (size_t i = 0; i < inputsig.size(); i++) {
-        if (inputsig[i].is_scalar) {
-            inputsc.push_back(inputsig[i]);
-            inputsig.erase(inputsig.begin() + i);
-            i -= 1;
-        }
-    }
-    std::vector<void*> inbuffs;
-    for (unsigned int inputsig_index = 0; inputsig_index < inputsig.size();
-         ++inputsig_index) {
-        volk_type_t sig = inputsig[inputsig_index];
-        if (!sig.is_scalar) // we don't make buffers for scalars
-            inbuffs.push_back(
-                mem_pool.get_new(vlen * sig.size * (sig.is_complex ? 2 : 1)));
-    }
-    for (size_t i = 0; i < inbuffs.size(); i++) {
-        load_random_data(
-            inbuffs[i], inputsig[i], vlen, float_edge_cases, complex_edge_cases);
-    }
-
-    // ok let's make a vector of vector of void buffers, which holds the input/output
-    // vectors for each arch
-    std::vector<std::vector<void*>> test_data;
-    for (size_t i = 0; i < arch_list.size(); i++) {
-        std::vector<void*> arch_buffs;
-        for (size_t j = 0; j < outputsig.size(); j++) {
-            arch_buffs.push_back(mem_pool.get_new(vlen * outputsig[j].size *
-                                                  (outputsig[j].is_complex ? 2 : 1)));
-        }
-        for (size_t j = 0; j < inputsig.size(); j++) {
-            void* arch_inbuff = mem_pool.get_new(vlen * inputsig[j].size *
-                                                 (inputsig[j].is_complex ? 2 : 1));
-            memcpy(arch_inbuff,
-                   inbuffs[j],
-                   vlen * inputsig[j].size * (inputsig[j].is_complex ? 2 : 1));
-            arch_buffs.push_back(arch_inbuff);
-        }
-        test_data.push_back(arch_buffs);
-    }
-
-    std::vector<volk_type_t> both_sigs;
-    both_sigs.insert(both_sigs.end(), outputsig.begin(), outputsig.end());
-    both_sigs.insert(both_sigs.end(), inputsig.begin(), inputsig.end());
+    std::vector<std::string>& arch_list = test_setup.arch_list;
+    std::map<std::string, size_t>& arch_to_orig_idx = test_setup.arch_to_orig_idx;
+    std::vector<volk_type_t>& inputsig = test_setup.inputsig;
+    std::vector<volk_type_t>& outputsig = test_setup.outputsig;
+    std::vector<volk_type_t>& inputsc = test_setup.inputsc;
+    std::vector<volk_type_t>& both_sigs = test_setup.both_sigs;
+    std::vector<void*>& inbuffs = test_setup.inbuffs;
+    std::vector<std::vector<void*>>& test_data = test_setup.test_data;
 
     // now run the test
     vlen = vlen - vlen_twiddle;
@@ -1549,5 +1595,173 @@ bool run_volk_tests(volk_func_desc_t desc,
     results->back().best_arch_a = best_arch_a;
     results->back().best_arch_u = best_arch_u;
 
+    return fail_global;
+}
+
+// #88: run every impl (generic included) and compare each against an INDEPENDENT
+// double-precision reference (the registry oracle), instead of impl-vs-generic.
+// This catches defects all impls share. run_volk_tests is untouched; default qa
+// is unaffected. Returns true if ANY impl diverges from the oracle past tol.
+// Supported signatures: 1-3 buffers with an optional real (s32f) scalar and a
+// float/complex-float output — covers the registered reference kernels.
+bool run_volk_reference_test(volk_func_desc_t desc,
+                             void (*manual_func)(),
+                             std::string name,
+                             const volk_reference_entry& ref,
+                             lv_32fc_t scalar,
+                             unsigned int vlen,
+                             std::vector<volk_test_results_t>* results,
+                             const std::vector<float>& float_edge_cases,
+                             const std::vector<lv_32fc_t>& complex_edge_cases)
+{
+    results->push_back(volk_test_results_t());
+    results->back().name = name;
+    results->back().vlen = vlen;
+    results->back().iter = 1;
+    fmt::print("\nRUN_VOLK_REFERENCE_TEST: {}(vlen={}, tol={:.0e}, {})\n",
+               name,
+               vlen,
+               ref.tol,
+               ref.absolute ? "abs" : "rel");
+
+    const unsigned int vlen_twiddle = 5;
+    const unsigned int vlen_alloc = vlen + vlen_twiddle;
+
+    volk_qa_aligned_mem_pool mem_pool;
+    // Pass benchmark_mode=true to setup_test_data ONLY to bypass its "need >=2
+    // archs" guard: reference mode compares a single impl (e.g. power_32fc's
+    // generic-only) against the oracle — that single-impl case is exactly the
+    // blind spot #88 exists to cover, so it must NOT be skipped.
+    qa_test_data d = setup_test_data(
+        desc, name, vlen_alloc, true, float_edge_cases, complex_edge_cases, mem_pool);
+    if (!d.ok) {
+        return false;
+    }
+
+    const bool s32f =
+        (d.inputsc.size() == 1) && d.inputsc[0].is_float && !d.inputsc[0].is_complex;
+    if (d.inputsc.size() != 0 && !s32f) {
+        std::cerr << "reference mode: unsupported scalar signature for " << name
+                  << std::endl;
+        return false;
+    }
+
+    // Run every impl ONCE into its own buffer set, at the user vlen.
+    for (size_t i = 0; i < d.arch_list.size(); i++) {
+        const std::string arch = d.arch_list[i];
+        switch (d.both_sigs.size()) {
+        case 1:
+            if (s32f)
+                run_cast_test1_s32f((volk_fn_1arg_s32f)(manual_func),
+                                    d.test_data[i],
+                                    scalar.real(),
+                                    vlen,
+                                    1,
+                                    arch);
+            else
+                run_cast_test1(
+                    (volk_fn_1arg)(manual_func), d.test_data[i], vlen, 1, arch);
+            break;
+        case 2:
+            if (s32f)
+                run_cast_test2_s32f((volk_fn_2arg_s32f)(manual_func),
+                                    d.test_data[i],
+                                    scalar.real(),
+                                    vlen,
+                                    1,
+                                    arch);
+            else
+                run_cast_test2(
+                    (volk_fn_2arg)(manual_func), d.test_data[i], vlen, 1, arch);
+            break;
+        case 3:
+            if (s32f)
+                run_cast_test3_s32f((volk_fn_3arg_s32f)(manual_func),
+                                    d.test_data[i],
+                                    scalar.real(),
+                                    vlen,
+                                    1,
+                                    arch);
+            else
+                run_cast_test3(
+                    (volk_fn_3arg)(manual_func), d.test_data[i], vlen, 1, arch);
+            break;
+        default:
+            std::cerr << "reference mode: unsupported arity for " << name << std::endl;
+            return false;
+        }
+    }
+
+    // Independent double-precision golden, computed from the PRISTINE inputs
+    // (d.inbuffs is the original fill; impls run on per-arch memcpy copies, so
+    // inbuffs is never mutated by a kernel).
+    std::vector<const void*> oracle_in;
+    for (size_t k = 0; k < d.inbuffs.size(); k++) {
+        oracle_in.push_back(d.inbuffs[k]);
+    }
+    std::vector<void*> oracle_out;
+    for (size_t j = 0; j < d.outputsig.size(); j++) {
+        oracle_out.push_back(mem_pool.get_new(vlen_alloc * d.outputsig[j].size *
+                                              (d.outputsig[j].is_complex ? 2 : 1)));
+    }
+    ref.fn(oracle_in, oracle_out, scalar, vlen);
+
+    // Output type is a signature property — validate once up front and fail
+    // LOUDLY (throw; the driver catches and reports a failure) on an unsupported
+    // registration, rather than silently reporting ok.
+    if (d.outputsig.empty()) {
+        throw std::runtime_error("reference mode: kernel has no output: " + name);
+    }
+    for (size_t j = 0; j < d.outputsig.size(); j++) {
+        if (!d.outputsig[j].is_float) {
+            throw std::runtime_error("reference mode: non-float output unsupported for " +
+                                     name);
+        }
+    }
+
+    // Compare EVERY impl (generic included) against the golden.
+    bool fail_global = false;
+    for (size_t i = 0; i < d.arch_list.size(); i++) {
+        bool arch_fail = false;
+        double arch_max_err = 0.0;
+        for (size_t j = 0; j < d.outputsig.size(); j++) {
+            std::vector<unsigned int> fail_indices;
+            double max_err = 0.0;
+            bool fail;
+            if (d.outputsig[j].is_complex) {
+                fail = ccompare((float*)oracle_out[j],
+                                (float*)d.test_data[i][j],
+                                vlen,
+                                ref.tol,
+                                ref.absolute,
+                                fail_indices,
+                                max_err);
+            } else {
+                fail = fcompare((float*)oracle_out[j],
+                                (float*)d.test_data[i][j],
+                                vlen,
+                                ref.tol,
+                                ref.absolute,
+                                fail_indices,
+                                max_err);
+            }
+            arch_fail = arch_fail || fail;
+            if (max_err > arch_max_err) {
+                arch_max_err = max_err;
+            }
+        }
+        volk_test_time_t result;
+        result.name = d.arch_list[i];
+        result.time = 0.0; // reference mode does not time the run; avoid an
+                           // uninitialized read when the result is consumed
+        result.units = "ref";
+        result.pass = !arch_fail;
+        results->back().results[d.arch_list[i]] = result;
+        if (arch_fail) {
+            fail_global = true;
+            std::cout << "reference mismatch on arch: " << d.arch_list[i]
+                      << " (max_err=" << arch_max_err << ")" << std::endl;
+        }
+    }
     return fail_global;
 }

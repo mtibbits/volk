@@ -19,15 +19,19 @@
  * reports per kernel which vlens failed — the triage list for the per-kernel fix tickets.
  * It reuses run_volk_tests unchanged; default qa is untouched.
  *
- * The other detection capabilities are separate epic-#85 children: an independent
- * double-precision reference (#88, catches bugs all impls share, e.g. a swapped atan2),
- * output canary + ASan (#89), input-immutability (#90), and misaligned `_u` runs (#91).
- * This child catches the (large) class where impls disagree at a tail/edge boundary.
+ * Child #88 adds an INDEPENDENT double-precision reference: for kernels in the
+ * volk_reference registry, every impl (generic included) is compared against a
+ * double-precision oracle instead of impl-vs-generic, catching defects ALL impls
+ * share (e.g. the swapped atan2 in volk_32fc_s32f_power_32fc). Unregistered kernels
+ * fall back to this child's impl-vs-impl comparison; each kernel's mode (ref|impl)
+ * is reported. Output canary + ASan (#89), input-immutability (#90), and misaligned
+ * `_u` runs (#91) are the remaining epic-#85 children.
  */
 
 #include "kernel_tests.h" // for init_test_list
 #include "qa_utils.h"     // for volk_test_case_t, run_volk_tests
 #include "volk/volk_complex.h"
+#include "volk_reference.h" // for the independent double-precision oracle registry (#88)
 #include <volk/volk.h>
 
 #include <cstdio>  // fflush
@@ -73,10 +77,17 @@ static const std::vector<lv_32fc_t> kComplexEdges = {
     lv_32fc_t(6, -6), lv_32fc_t(-8, 8), lv_32fc_t(1, 0)
 };
 
-// Run run_volk_tests with its stdout (fmt::print + std::cout) muted at the fd level,
-// so the sweep emits only our per-kernel report. Returns true on FAILURE.
-static bool
-quiet_run(volk_test_case_t& tc, float tol, lv_32fc_t scalar, int iter, unsigned int v)
+// Run a single (kernel, vlen) with stdout (fmt::print + std::cout) muted at the fd
+// level, so the sweep emits only our per-kernel report. If `ref` is non-null the
+// kernel is checked against the independent double-precision oracle (#88, every impl
+// vs truth); otherwise it falls back to the impl-vs-impl comparison. Returns true on
+// FAILURE.
+static bool quiet_run(volk_test_case_t& tc,
+                      const volk_reference_entry* ref,
+                      float tol,
+                      lv_32fc_t scalar,
+                      int iter,
+                      unsigned int v)
 {
     std::vector<volk_test_results_t> results;
     const bool verbose = (std::getenv("HARNESS_VERBOSE") != nullptr);
@@ -93,19 +104,31 @@ quiet_run(volk_test_case_t& tc, float tol, lv_32fc_t scalar, int iter, unsigned 
     }
     bool fail = false;
     try {
-        fail = run_volk_tests(tc.desc(),
-                              tc.kernel_ptr(),
-                              tc.name(),
-                              tol,
-                              scalar,
-                              v /*vlen*/,
-                              iter,
-                              &results,
-                              tc.puppet_master_name(),
-                              false /*absolute_mode*/,
-                              false /*benchmark_mode*/,
-                              kFloatEdges,
-                              kComplexEdges);
+        if (ref) {
+            fail = run_volk_reference_test(tc.desc(),
+                                           tc.kernel_ptr(),
+                                           tc.name(),
+                                           *ref,
+                                           scalar,
+                                           v /*vlen*/,
+                                           &results,
+                                           kFloatEdges,
+                                           kComplexEdges);
+        } else {
+            fail = run_volk_tests(tc.desc(),
+                                  tc.kernel_ptr(),
+                                  tc.name(),
+                                  tol,
+                                  scalar,
+                                  v /*vlen*/,
+                                  iter,
+                                  &results,
+                                  tc.puppet_master_name(),
+                                  false /*absolute_mode*/,
+                                  false /*benchmark_mode*/,
+                                  kFloatEdges,
+                                  kComplexEdges);
+        }
     } catch (...) {
         fail = true; // an exception at this vlen is itself a defect to report
     }
@@ -148,7 +171,7 @@ int main(int argc, char* argv[])
     if (const char* rp = std::getenv("HARNESS_REPORT")) {
         report = std::fopen(rp, "w");
         if (report)
-            std::fprintf(report, "kernel,result,failed_vlens\n");
+            std::fprintf(report, "kernel,mode,result,failed_vlens\n");
         else
             std::cerr << "HARNESS_REPORT: cannot open '" << rp
                       << "' — human output only\n";
@@ -158,20 +181,36 @@ int main(int argc, char* argv[])
     std::cout.flush();
 
     int tested = 0, failed = 0;
+    // Negative-control tracking: power_seen = power_32fc was in the (filtered) sweep
+    // at all; power_ref_tested = it ran in reference mode. The two together detect a
+    // dropped/renamed registration (the likelier regression), not just a broken oracle.
+    bool power_seen = false, power_ref_tested = false;
     for (auto& tc : test_cases) {
         if (!filter.empty() && tc.name() != filter)
             continue;
         ++tested;
+        // Registered kernels run against the independent double reference (#88);
+        // the rest fall back to the impl-vs-impl comparison.
+        const volk_reference_entry* ref = volk_reference_lookup(tc.name());
+        const char* mode = ref ? "ref" : "impl";
+        // Reference mode needs the kernel's OWN scalar (e.g. power exponent 2.5, not
+        // the driver default 327 — which would overflow |x|^327 to inf and mask the
+        // defect). Impl mode keeps the driver default to preserve #87's sweep.
+        const lv_32fc_t kscalar = ref ? tc.test_parameters().scalar() : scalar;
         std::vector<unsigned int> bad;
         for (unsigned int v : vlens) {
-            if (quiet_run(tc, tol, scalar, iter, v))
+            if (quiet_run(tc, ref, tol, kscalar, iter, v))
                 bad.push_back(v);
         }
+        if (tc.name() == "volk_32fc_s32f_power_32fc") {
+            power_seen = true;
+            power_ref_tested = (ref != nullptr);
+        }
         if (bad.empty()) {
-            std::cout << "ok    " << tc.name() << "\n";
+            std::cout << "ok    [" << mode << "] " << tc.name() << "\n";
         } else {
             ++failed;
-            std::cout << "FAIL  " << tc.name() << "  vlens:";
+            std::cout << "FAIL  [" << mode << "] " << tc.name() << "  vlens:";
             for (unsigned int v : bad)
                 std::cout << " " << v;
             std::cout << "\n";
@@ -183,8 +222,9 @@ int main(int argc, char* argv[])
                 vs += ' ';
             }
             std::fprintf(report,
-                         "%s,%s,%s\n",
+                         "%s,%s,%s,%s\n",
                          tc.name().c_str(),
+                         mode,
                          bad.empty() ? "ok" : "FAIL",
                          vs.c_str());
         }
@@ -194,5 +234,22 @@ int main(int argc, char* argv[])
         std::fclose(report);
     std::cerr << "\ncorrectness remainder sweep: " << failed << " / " << tested
               << " kernels failed\n";
+
+    // #88 coverage guard: volk_32fc_s32f_power_32fc is the harness's motivating
+    // escaped defect (swapped atan2f; it has no SIMD impl, so the impl-vs-impl
+    // comparison can never see it — the double oracle is its only detector).
+    // Deliberately state-independent: whether the live kernel passes or fails
+    // reference mode is NOT asserted here — a kernel regression already fails
+    // the sweep above (exit 1), and the detector itself is proven continuously
+    // by the planted-twin combined negative control (HARNESS_COMBINED_NC).
+    // The one failure nothing else catches is the reference REGISTRATION
+    // silently disappearing (dropped/renamed) — only that is guarded.
+    if (power_seen && !power_ref_tested) {
+        std::cerr << "NEGATIVE CONTROL LOST: volk_32fc_s32f_power_32fc ran but is NOT "
+                     "reference-registered (dropped/renamed registration) — a power "
+                     "defect of the escaped swapped-atan2 class would go undetected.\n";
+        return 2;
+    }
+
     return failed > 0 ? 1 : 0;
 }
