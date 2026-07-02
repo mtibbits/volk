@@ -57,6 +57,13 @@ public:
     std::map<std::string, volk_test_time_t> results;
     std::string best_arch_a;
     std::string best_arch_u;
+    // #133: reference-mode tri-state. `applied` is false when the oracle could
+    // not evaluate this kernel (unsupported scalar signature / arity / setup
+    // failure) — the driver then reports `skip`, not a silent `ok`. Mirrors the
+    // canary/immutability summaries' `applied` flag. Stays true for impl mode and
+    // for supported ref kernels, so every other producer/consumer is unaffected.
+    bool applied = true;
+    std::string skip_reason;
 };
 
 class volk_test_params_t

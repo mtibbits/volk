@@ -1656,6 +1656,10 @@ bool run_volk_reference_test(volk_func_desc_t desc,
     qa_test_data d = setup_test_data(
         desc, name, vlen_alloc, true, float_edge_cases, complex_edge_cases, mem_pool);
     if (!d.ok) {
+        // #133: tri-state skip, not a silent ok. setup couldn't produce data for
+        // this kernel — a coverage gap to surface, not a defect and not a pass.
+        results->back().applied = false;
+        results->back().skip_reason = "ref-setup-failed";
         return false;
     }
 
@@ -1664,6 +1668,9 @@ bool run_volk_reference_test(volk_func_desc_t desc,
     if (d.inputsc.size() != 0 && !s32f) {
         std::cerr << "reference mode: unsupported scalar signature for " << name
                   << std::endl;
+        // #133: report skip — the oracle path can't drive this scalar shape.
+        results->back().applied = false;
+        results->back().skip_reason = "unsupported-scalar-signature";
         return false;
     }
 
@@ -1709,6 +1716,9 @@ bool run_volk_reference_test(volk_func_desc_t desc,
             break;
         default:
             std::cerr << "reference mode: unsupported arity for " << name << std::endl;
+            // #133: report skip — the oracle path has no caster for this arity.
+            results->back().applied = false;
+            results->back().skip_reason = "unsupported-arity";
             return false;
         }
     }
