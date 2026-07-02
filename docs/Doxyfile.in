@@ -953,7 +953,14 @@ EXCLUDE                = @CMAKE_BINARY_DIR@ \
                          @CMAKE_SOURCE_DIR@/cpu_features \
                          @CMAKE_SOURCE_DIR@/include/volk/sse2neon \
                          @CMAKE_SOURCE_DIR@/README.md \
-                         @CMAKE_SOURCE_DIR@/docs/AUTHORS_RESUBMITTING_UNDER_LGPL_LICENSE.md
+                         @CMAKE_SOURCE_DIR@/docs/AUTHORS_RESUBMITTING_UNDER_LGPL_LICENSE.md \
+                         @CMAKE_SOURCE_DIR@/cmake \
+                         @CMAKE_SOURCE_DIR@/apps \
+                         @CMAKE_SOURCE_DIR@/lib/qa_utils.cc \
+                         @CMAKE_SOURCE_DIR@/lib/qa_utils.h \
+                         @CMAKE_SOURCE_DIR@/lib/testqa.cc \
+                         @CMAKE_SOURCE_DIR@/tmpl \
+                         @CMAKE_SOURCE_DIR@/gen
 
 # The EXCLUDE_SYMLINKS tag can be used to select whether or not files or
 # directories that are symbolic links (a Unix file system feature) are excluded
