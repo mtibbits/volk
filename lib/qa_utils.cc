@@ -876,7 +876,7 @@ bool run_volk_tests(volk_func_desc_t desc,
     arch_list.insert(arch_list.end(), other_impls.begin(), other_impls.end());
 
     if ((!benchmark_mode) && (arch_list.size() < 2)) {
-        std::cout << "no architectures to test" << std::endl;
+        std::cerr << "no architectures to test" << std::endl;
         return false;
     }
 
