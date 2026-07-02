@@ -113,6 +113,7 @@ quiet_run(volk_test_case_t& tc,
           const volk_reference_entry* ref,
           float tol,
           lv_32fc_t scalar,
+          bool absolute_mode,
           int iter,
           unsigned int v,
           const std::vector<float>& fedges = kFloatEdges,
@@ -155,7 +156,7 @@ quiet_run(volk_test_case_t& tc,
                                   iter,
                                   &results,
                                   tc.puppet_master_name(),
-                                  false /*absolute_mode*/,
+                                  absolute_mode,
                                   false /*benchmark_mode*/,
                                   fedges,
                                   cedges);
@@ -987,7 +988,8 @@ int main(int argc, char* argv[])
                             const std::vector<lv_32fc_t>& ce) {
             bool flagged = false;
             for (unsigned int v : nc_vlens)
-                flagged |= quiet_run(tc, ref, tol_, power_scalar, 1, v, fe, ce);
+                flagged |= quiet_run(
+                    tc, ref, tol_, power_scalar, false /*absolute_mode*/, 1, v, fe, ce);
             return flagged;
         };
 
@@ -1073,10 +1075,14 @@ int main(int argc, char* argv[])
         // the rest fall back to the impl-vs-impl comparison.
         const volk_reference_entry* ref = volk_reference_lookup(tc.name());
         const char* mode = ref ? "ref" : "impl";
-        // Reference mode needs the kernel's OWN scalar (e.g. power exponent 2.5, not
-        // the driver default 327 — which would overflow |x|^327 to inf and mask the
-        // defect). Impl mode keeps the driver default to preserve #87's sweep.
-        const lv_32fc_t kscalar = ref ? tc.test_parameters().scalar() : scalar;
+        // The sweep judges each kernel against its OWN registered QA contract
+        // (#106): scalar always (driver-default 327 turns power into inf and
+        // clamp into an inverted range), tol/absolute_mode in impl mode only —
+        // ref mode ignores them (the oracle applies the registry entry's bound).
+        volk_test_params_t kp = tc.test_parameters(); // accessors are non-const
+        const lv_32fc_t kscalar = kp.scalar();
+        const float ktol = ref ? tol : kp.tol();
+        const bool kabs = ref ? false : kp.absolute_mode();
         std::vector<unsigned int> bad;
         std::set<std::string> impls_seen;
         std::map<std::string, std::vector<unsigned int>> impl_fails;
@@ -1085,8 +1091,9 @@ int main(int argc, char* argv[])
             // per-(kernel,vlen) map building when no report was requested.
             if (quiet_run(tc,
                           ref,
-                          tol,
+                          ktol,
                           kscalar,
+                          kabs,
                           iter,
                           v,
                           kFloatEdges,
