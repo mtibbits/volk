@@ -152,7 +152,11 @@ std::vector<volk_test_case_t> init_test_list(volk_test_params_t test_params)
                                             0.707107f,
                                             -0.707107f });
     QA(VOLK_INIT_TEST(volk_32f_asin_32f, test_params_asin))
-    QA(VOLK_INIT_TEST(volk_32f_acos_32f, test_params_asin))
+    // acos flakes ~12x worse than asin under the shared relative tol (near
+    // +/-1); split so asin's contract is untouched and register an absolute
+    // bound. See the kernel's "Numerical accuracy" doc-comment. (#174)
+    volk_test_params_t test_params_acos(test_params_asin.make_absolute(4e-6));
+    QA(VOLK_INIT_TEST(volk_32f_acos_32f, test_params_acos))
     QA(VOLK_INIT_TEST(volk_32fc_s32f_power_32fc, test_params_power))
     QA(VOLK_INIT_TEST(volk_32f_s32f_calc_spectral_noise_floor_32f, test_params_snf))
 
