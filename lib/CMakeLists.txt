@@ -682,11 +682,20 @@ if(ENABLE_TESTING)
     if(ENABLE_STATIC_LIBS)
         volk_gen_test(volk_test_all SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/testqa.cc
                       ${CMAKE_CURRENT_SOURCE_DIR}/qa_utils.cc TARGET_DEPS volk_static)
+        volk_gen_test(
+            volk_test_correctness SOURCES
+            ${CMAKE_CURRENT_SOURCE_DIR}/test_correctness.cc
+            ${CMAKE_CURRENT_SOURCE_DIR}/qa_utils.cc TARGET_DEPS volk_static)
     else()
         volk_gen_test(volk_test_all SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/testqa.cc
                       ${CMAKE_CURRENT_SOURCE_DIR}/qa_utils.cc TARGET_DEPS volk)
+        volk_gen_test(
+            volk_test_correctness SOURCES
+            ${CMAKE_CURRENT_SOURCE_DIR}/test_correctness.cc
+            ${CMAKE_CURRENT_SOURCE_DIR}/qa_utils.cc TARGET_DEPS volk)
     endif()
     target_link_libraries(volk_test_all fmt::fmt)
+    target_link_libraries(volk_test_correctness fmt::fmt)
 
     foreach(kernel ${h_files})
         get_filename_component(kernel ${kernel} NAME)
