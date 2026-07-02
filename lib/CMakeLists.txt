@@ -228,10 +228,42 @@ endif(NOT CPU_IS_x86)
 
 include(CheckCSourceCompiles)
 
+# On native 32-bit armhf toolchains (e.g. gcc on a Raspberry Pi) NEON is not
+# enabled by default, so the default-flag probe fails and -- without the fallback
+# below -- every NEON arch is overruled and the build silently loses all NEON
+# acceleration.
+set(VOLK_NEON_TEST_SOURCE "#include <arm_neon.h>
+int main(){ uint8_t *dest; uint8x8_t res; vst1_u8(dest, res); }")
+
+# Flags that enable NEON on a native armhf toolchain, and a single ARM-target test.
+# Both the fallback retry and the warning below must agree on "is this ARM", and the
+# detection retry and the build must use the same flags -- keep them single-sourced.
+set(VOLK_NEON_FALLBACK_FLAGS "-mfpu=neon -march=armv7-a")
+set(VOLK_TARGET_IS_ARM FALSE)
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(arm.*|aarch64.*)$")
+    set(VOLK_TARGET_IS_ARM TRUE)
+endif()
+
 set(CMAKE_C_FLAGS_SAVED "${CMAKE_C_FLAGS}")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-uninitialized")
-check_c_source_compiles("#include <arm_neon.h>
-int main(){ uint8_t *dest; uint8x8_t res; vst1_u8(dest, res); }" neon_compile_result)
+
+# First probe: default flags. Passes on aarch64 (mandatory ASIMD) and any
+# toolchain with NEON enabled by default.
+check_c_source_compiles("${VOLK_NEON_TEST_SOURCE}" neon_compile_result)
+
+set(VOLK_NEON_ARMV7_FALLBACK FALSE)
+if(NOT neon_compile_result AND VOLK_TARGET_IS_ARM)
+    # Native armhf does not enable NEON by default. Retry with explicit
+    # NEON-enabling flags before giving up. A DISTINCT result variable is required:
+    # check_c_source_compiles caches its result, so reusing neon_compile_result
+    # would return the stale failure.
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${VOLK_NEON_FALLBACK_FLAGS}")
+    check_c_source_compiles("${VOLK_NEON_TEST_SOURCE}" neon_compile_result_armv7)
+    if(neon_compile_result_armv7)
+        set(neon_compile_result TRUE)
+        set(VOLK_NEON_ARMV7_FALLBACK TRUE)
+    endif()
+endif()
 
 if(neon_compile_result)
     set(CMAKE_REQUIRED_INCLUDES ${PROJECT_SOURCE_DIR}/include)
@@ -248,11 +280,31 @@ if(neon_compile_result)
         overrule_arch(neonv8 "Compiler doesn't support neonv8")
     endif()
 else(neon_compile_result)
+    if(VOLK_TARGET_IS_ARM)
+        message(WARNING
+            "VOLK: NEON could not be enabled on ARM target "
+            "'${CMAKE_SYSTEM_PROCESSOR}' even with ${VOLK_NEON_FALLBACK_FLAGS}. "
+            "All NEON kernels are DISABLED; only generic C kernels will run. "
+            "Check that the compiler supports NEON for this target.")
+    endif()
     overrule_arch(neon "Compiler doesn't support NEON")
     overrule_arch(neonv7 "Compiler doesn't support NEON")
     overrule_arch(neonv8 "Compiler doesn't support NEON")
 endif(neon_compile_result)
+
+# Restore the probe-only flags (-Wno-uninitialized). When the armv7 fallback was
+# needed to detect NEON, persist its flags into the build. A cross toolchain file
+# would normally carry these; a native armhf build has none, so without this:
+#   - the plain `neon` machine TU (compiled with the `neon` arch flags only, no
+#     -mfpu=neon) fails to compile arm_neon.h intrinsics, and
+#   - the hand-written NEON .s kernels (globbed in once neonv7 is available) fail to
+#     assemble with "selected FPU does not support instruction".
+# So propagate the flags to both the C compiler and the assembler.
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS_SAVED}")
+if(VOLK_NEON_ARMV7_FALLBACK)
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${VOLK_NEON_FALLBACK_FLAGS}")
+    set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} ${VOLK_NEON_FALLBACK_FLAGS}")
+endif()
 ########################################################################
 # implement overruling in the ORC case,
 # since ORC always passes flag detection
