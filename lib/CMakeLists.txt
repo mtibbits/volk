@@ -734,16 +734,40 @@ if(ENABLE_TESTING)
     if(ENABLE_STATIC_LIBS)
         volk_gen_test(volk_test_all SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/testqa.cc
                       ${CMAKE_CURRENT_SOURCE_DIR}/qa_utils.cc TARGET_DEPS volk_static)
+        volk_gen_test(
+            volk_test_correctness SOURCES
+            ${CMAKE_CURRENT_SOURCE_DIR}/test_correctness.cc
+            ${CMAKE_CURRENT_SOURCE_DIR}/volk_reference.cc
+            ${CMAKE_CURRENT_SOURCE_DIR}/qa_canary_kernel.cc
+            ${CMAKE_CURRENT_SOURCE_DIR}/volk_buffer_roles.cc
+            ${CMAKE_CURRENT_SOURCE_DIR}/qa_utils.cc TARGET_DEPS volk_static)
     else()
         volk_gen_test(volk_test_all SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/testqa.cc
                       ${CMAKE_CURRENT_SOURCE_DIR}/qa_utils.cc TARGET_DEPS volk)
+        volk_gen_test(
+            volk_test_correctness SOURCES
+            ${CMAKE_CURRENT_SOURCE_DIR}/test_correctness.cc
+            ${CMAKE_CURRENT_SOURCE_DIR}/volk_reference.cc
+            ${CMAKE_CURRENT_SOURCE_DIR}/qa_canary_kernel.cc
+            ${CMAKE_CURRENT_SOURCE_DIR}/volk_buffer_roles.cc
+            ${CMAKE_CURRENT_SOURCE_DIR}/qa_utils.cc TARGET_DEPS volk)
     endif()
     target_link_libraries(volk_test_all fmt::fmt)
+    target_link_libraries(volk_test_correctness fmt::fmt)
 
     foreach(kernel ${h_files})
         get_filename_component(kernel ${kernel} NAME)
         string(REPLACE ".h" "" kernel ${kernel})
         volk_add_test(${kernel} volk_test_all)
     endforeach()
+
+    # Combined negative control for the kernel-correctness harness (epic #85
+    # closeout, #92): asserts the assembled harness still detects the two
+    # escaped-defect classes that motivated it, each via its intended
+    # capability. Plain ctest, every platform, no special build or env beyond
+    # the mode toggle. If a change blinds the harness to either class, CI
+    # breaks here.
+    volk_add_test(harness_negative_control volk_test_correctness ENVIRONS
+                  "HARNESS_COMBINED_NC=1")
 
 endif(ENABLE_TESTING)
