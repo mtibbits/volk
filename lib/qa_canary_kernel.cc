@@ -9,8 +9,11 @@
 
 #include "qa_canary_kernel.h"
 
-#include <csignal> // for raise (misaligned-fault portable fallback, #91)
-#include <cstdint> // for uint32_t (input-immutability scribble, #90)
+#include "volk/volk_complex.h" // lv_32fc_t/lv_cmake (planted power pair, #92)
+#include <cmath>               // atan2f/powf/cosf/sinf/tanhf (planted defect pairs, #92)
+#include <csignal>             // for raise (misaligned-fault portable fallback, #91)
+#include <cstdint>             // for uint32_t (input-immutability scribble, #90)
+#include <cstring>             // strcmp (tanh pair impl dispatch, #92)
 #if defined(__SSE2__)
 #include <emmintrin.h> // SSE2 umbrella; provides the SSE1 _mm_load_ps/_mm_storeu_ps
                        // used by the #91 planted misaligned-fault control
@@ -145,5 +148,125 @@ volk_func_desc_t volk_canary_desc()
     desc.impl_deps = impl_deps;
     desc.impl_alignment = impl_alignment;
     desc.n_impls = 1;
+    return desc;
+}
+
+// ---- #92 combined negative control planted kernels ----
+
+// The defective scalar power core, verbatim from pre-e29bc7f
+// volk_32fc_s32f_power_32fc.h: atan2f(re, im) is SWAPPED (must be (im, re)) and
+// the cosine is negated. Kept in this test-only TU permanently so the combined
+// negative control survives the live kernel's eventual fix.
+static inline lv_32fc_t power_core_defect(const lv_32fc_t exp, const float power)
+{
+    const float arg = power * atan2f(lv_creal(exp), lv_cimag(exp));
+    const float mag =
+        powf(lv_creal(exp) * lv_creal(exp) + lv_cimag(exp) * lv_cimag(exp), power / 2);
+    return mag * lv_cmake(-cosf(arg), sinf(arg));
+}
+
+// The corrected formula (the e29bc7f fix): this is the "reverted
+// reintroduction" twin -- reference mode must pass it.
+static inline lv_32fc_t power_core_ok(const lv_32fc_t exp, const float power)
+{
+    const float arg = power * atan2f(lv_cimag(exp), lv_creal(exp));
+    const float mag =
+        powf(lv_creal(exp) * lv_creal(exp) + lv_cimag(exp) * lv_cimag(exp), power / 2);
+    return mag * lv_cmake(cosf(arg), sinf(arg));
+}
+
+void volk_32fc_s32f_powerdefect_32fc(
+    void* out, void* in, float scalar, unsigned int num_points, const char*)
+{
+    // single-impl desc; arch is always "generic"
+    lv_32fc_t* c = static_cast<lv_32fc_t*>(out);
+    const lv_32fc_t* a = static_cast<const lv_32fc_t*>(in);
+    for (unsigned int n = 0; n < num_points; ++n) {
+        c[n] = power_core_defect(a[n], scalar);
+    }
+}
+
+void volk_32fc_s32f_powerok_32fc(
+    void* out, void* in, float scalar, unsigned int num_points, const char*)
+{
+    lv_32fc_t* c = static_cast<lv_32fc_t*>(out);
+    const lv_32fc_t* a = static_cast<const lv_32fc_t*>(in);
+    for (unsigned int n = 0; n < num_points; ++n) {
+        c[n] = power_core_ok(a[n], scalar);
+    }
+}
+
+// The tanh series impl, with and without the pre-e29bc7f stale-pointer defect:
+// when |x| crosses the 4.97 clamp, only the output pointer advances in the
+// defective version, so every subsequent element reads a stale input value.
+static void
+tanh_series_impl(float* cPtr, const float* aPtr, unsigned int num_points, bool stale)
+{
+    for (unsigned int number = 0; number < num_points; number++) {
+        if (*aPtr > 4.97f) {
+            *cPtr++ = 1;
+            if (!stale) {
+                aPtr++;
+            }
+        } else if (*aPtr <= -4.97f) {
+            *cPtr++ = -1;
+            if (!stale) {
+                aPtr++;
+            }
+        } else {
+            float x2 = (*aPtr) * (*aPtr);
+            float a = (*aPtr) * (135135.0f + x2 * (17325.0f + x2 * (378.0f + x2)));
+            float b = 135135.0f + x2 * (62370.0f + x2 * (3150.0f + x2 * 28.0f));
+            *cPtr++ = a / b;
+            aPtr++;
+        }
+    }
+}
+
+static void tanh_nc_dispatch(
+    void* out, void* in, unsigned int num_points, const char* arch, bool stale)
+{
+    float* c = static_cast<float*>(out);
+    const float* a = static_cast<const float*>(in);
+    if (arch && strcmp(arch, "u_series") == 0) {
+        tanh_series_impl(c, a, num_points, stale);
+    } else { // "generic": the independent correct baseline
+        for (unsigned int n = 0; n < num_points; ++n) {
+            c[n] = tanhf(a[n]);
+        }
+    }
+}
+
+void volk_32f_tanhstale_32f(void* out,
+                            void* in,
+                            unsigned int num_points,
+                            const char* arch)
+{
+    tanh_nc_dispatch(out, in, num_points, arch, true);
+}
+
+void volk_32f_tanhok_32f(void* out, void* in, unsigned int num_points, const char* arch)
+{
+    tanh_nc_dispatch(out, in, num_points, arch, false);
+}
+
+volk_func_desc_t volk_power_nc_desc()
+{
+    // Same synthetic single-impl shape as the #89-#91 planted kernels; the
+    // distinct name documents intent at the #92 call sites.
+    return volk_canary_desc();
+}
+
+volk_func_desc_t volk_tanh_nc_desc()
+{
+    static const char* impl_names[] = { "generic", "u_series" };
+    static const int impl_deps[] = { 0, 0 };
+    static const bool impl_alignment[] = { false, false };
+
+    volk_func_desc_t desc;
+    desc.impl_names = impl_names;
+    desc.impl_deps = impl_deps;
+    desc.impl_alignment = impl_alignment;
+    desc.n_impls = 2;
     return desc;
 }

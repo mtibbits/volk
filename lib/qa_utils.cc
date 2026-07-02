@@ -1915,6 +1915,7 @@ volk_canary_summary run_volk_canary_test(volk_func_desc_t desc,
     for (size_t i = 0; i < d.arch_list.size(); i++) {
         const std::string arch = d.arch_list[i];
         summary.applied = true; // we are about to guard-check at least one impl
+        summary.checked_impls.push_back(arch); // #92 triage detail
 
         // One guarded own-malloc buffer per output; inputs stay in the pool.
         std::vector<std::unique_ptr<guarded_output_buffer>> gbufs;
@@ -2068,6 +2069,12 @@ volk_canary_summary run_volk_canary_test(volk_func_desc_t desc,
         results->back().results[arch] = result;
         summary.guard_violation = summary.guard_violation || arch_guard;
         summary.unwritten = summary.unwritten || arch_unwritten;
+        // #92 triage detail: record offenders once per arch, from the per-arch
+        // flags (never at the per-byte detection sites).
+        if (arch_guard)
+            summary.guard_impls.push_back(arch);
+        if (arch_unwritten)
+            summary.unwritten_impls.push_back(arch);
     }
     return summary;
 }
@@ -2140,7 +2147,9 @@ run_volk_immutability_test(volk_func_desc_t desc,
 
     for (size_t i = 0; i < d.arch_list.size(); i++) {
         const std::string arch = d.arch_list[i];
-        summary.applied = true; // we are about to check at least one impl
+        summary.applied = true;                // we are about to check at least one impl
+        summary.checked_impls.push_back(arch); // #92 triage detail
+        bool arch_mutated = false;
 
         // buffs layout matches setup_test_data: outputs first, then inputs. Inputs
         // are arch i's own pool copy (seeded from the pristine d.inbuffs[k], which the
@@ -2218,6 +2227,7 @@ run_volk_immutability_test(volk_func_desc_t desc,
                 static_cast<const uint8_t*>(d.test_data[i][d.outputsig.size() + k]);
             if (std::memcmp(pre, post, in_bytes) != 0) {
                 summary.mutated = true;
+                arch_mutated = true;
                 size_t off = 0;
                 while (off < in_bytes && pre[off] == post[off]) {
                     ++off;
@@ -2226,6 +2236,10 @@ run_volk_immutability_test(volk_func_desc_t desc,
                           << ", byte offset " << off << ")\n";
             }
         }
+        // #92 triage detail: record the offender once per arch, from the
+        // per-arch flag (never at the per-input detection sites).
+        if (arch_mutated)
+            summary.mutated_impls.push_back(arch);
     }
 
     return summary;
@@ -2620,6 +2634,7 @@ run_volk_misaligned_test(volk_func_desc_t desc,
             continue; // aligned-only impl: allowed to assume alignment, not under test
         }
         summary.applied = true;
+        summary.checked_impls.push_back(arch); // #92 triage detail
 
         // ---- Reference run: this impl on its ALIGNED pool buffers ----
         std::vector<void*> abuffs;
@@ -2644,6 +2659,7 @@ run_volk_misaligned_test(volk_func_desc_t desc,
             // An "unaligned" impl crashing on ALIGNED buffers is a worse defect
             // than the one under test -- record it the same way and move on.
             summary.crashed = true;
+            summary.crashed_impls.push_back(arch); // #92: once per arch (continues)
             std::cerr << name << ": impl crashed on ALIGNED buffers on arch " << arch
                       << " (signal " << static_cast<int>(g_misaligned_sig) << ", vlen "
                       << vlen << ")\n";
@@ -2677,21 +2693,28 @@ run_volk_misaligned_test(volk_func_desc_t desc,
             g_misaligned_window_open = 0;
         } else {
             summary.crashed = true;
+            summary.crashed_impls.push_back(arch); // #92: once per arch (continues)
             std::cerr << name << ": impl crashed on misaligned buffers on arch " << arch
                       << " (signal " << static_cast<int>(g_misaligned_sig) << ", vlen "
                       << vlen << ")\n";
             continue; // recorded FAIL; next impl runs with its own fresh buffers
         }
 
+        bool arch_diverged = false;
         for (size_t j = 0; j < d.both_sigs.size(); j++) {
             double max_err = 0.0;
             if (compare_buffer(j, abuffs[j], buffs[j], max_err)) {
                 summary.diverged = true;
+                arch_diverged = true;
                 std::cerr << name << ": output diverged between aligned and "
                           << "misaligned runs on arch " << arch << " (buffer " << j
                           << ", vlen " << vlen << ", max_err " << max_err << ")\n";
             }
         }
+        // #92 triage detail: record the offender once per arch, from the
+        // per-arch flag (never at the per-buffer detection sites).
+        if (arch_diverged)
+            summary.diverged_impls.push_back(arch);
     }
 
     return summary;
