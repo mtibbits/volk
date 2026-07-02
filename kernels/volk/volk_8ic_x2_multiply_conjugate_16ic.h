@@ -7,6 +7,65 @@
  * SPDX-License-Identifier: LGPL-3.0-or-later
  */
 
+/*!
+ * \page volk_8ic_x2_multiply_conjugate_16ic
+ *
+ * \b Overview
+ *
+ * Multiplies each element of one complex 8-bit integer vector by the complex
+ * conjugate of the corresponding element in a second complex 8-bit integer
+ * vector. Results are stored as complex 16-bit integers to accommodate the
+ * wider product range: c[i] = a[i] * conj(b[i]).
+ *
+ * Complex conjugate multiplication is a fundamental operation in correlation
+ * and cross-spectral analysis. In receiver signal processing it appears in
+ * carrier frequency offset estimation, differential demodulation, and
+ * autocorrelation-based synchronization, where the conjugate product of
+ * successive samples reveals phase differences between them.
+ *
+ * <b>Dispatcher Prototype</b>
+ * \code
+ * void volk_8ic_x2_multiply_conjugate_16ic(lv_16sc_t* cVector, const lv_8sc_t* aVector,
+ * const lv_8sc_t* bVector, unsigned int num_points) \endcode
+ *
+ * \b Inputs
+ * \li aVector: First input complex vector (lv_8sc_t).
+ * \li bVector: Second input complex vector, whose conjugate is used (lv_8sc_t).
+ * \li num_points: The number of complex samples to process.
+ *
+ * \b Outputs
+ * \li cVector: Output complex vector containing the conjugate products (lv_16sc_t).
+ *
+ * \b Example
+ * Multiply a constant complex vector by the conjugate of another and verify one element.
+ * \code
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
+ *
+ * lv_8sc_t* aVector = (lv_8sc_t*)volk_malloc(sizeof(lv_8sc_t) * N, alignment);
+ * lv_8sc_t* bVector = (lv_8sc_t*)volk_malloc(sizeof(lv_8sc_t) * N, alignment);
+ * lv_16sc_t* cVector = (lv_16sc_t*)volk_malloc(sizeof(lv_16sc_t) * N, alignment);
+ *
+ * // a = (3 + 4j), b = (1 + 2j) for all elements
+ * for (unsigned int i = 0; i < N; ++i) {
+ *   aVector[i] = lv_cmake((int8_t)3, (int8_t)4);
+ *   bVector[i] = lv_cmake((int8_t)1, (int8_t)2);
+ * }
+ *
+ * // Expected: (3+4j)*(1-2j) = 3 -6j +4j -8j^2 = 11 -2j
+ * lv_16sc_t expected = lv_cmake((int16_t)11, (int16_t)-2);
+ *
+ * volk_8ic_x2_multiply_conjugate_16ic(cVector, aVector, bVector, N);
+ *
+ * printf("Expected: (%d, %d)\n", lv_creal(expected), lv_cimag(expected));
+ * printf("Result:   (%d, %d)\n", lv_creal(cVector[0]), lv_cimag(cVector[0]));
+ *
+ * volk_free(aVector);
+ * volk_free(bVector);
+ * volk_free(cVector);
+ * \endcode
+ */
+
 #ifndef INCLUDED_volk_8ic_x2_multiply_conjugate_16ic_a_H
 #define INCLUDED_volk_8ic_x2_multiply_conjugate_16ic_a_H
 

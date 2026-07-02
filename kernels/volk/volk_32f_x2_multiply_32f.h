@@ -12,9 +12,14 @@
  *
  * \b Overview
  *
- * Multiplies two input floating point vectors together.
+ * Performs element-wise multiplication of two floating-point vectors:
  *
  * c[i] = a[i] * b[i]
+ *
+ * Element-wise multiplication is a fundamental building block in many DSP
+ * operations. It is used for applying window functions to time-domain samples
+ * before an FFT, for scaling signal vectors by per-element gain in AGC loops,
+ * and for frequency-domain filtering where multiplication replaces convolution.
  *
  * <b>Dispatcher Prototype</b>
  * \code
@@ -22,36 +27,38 @@
  * bVector, unsigned int num_points) \endcode
  *
  * \b Inputs
- * \li aVector: First input vector.
- * \li bVector: Second input vector.
- * \li num_points: The number of values in both input vectors.
+ * \li aVector: First input vector (float).
+ * \li bVector: Second input vector (float).
+ * \li num_points: The number of float samples in each input vector.
  *
  * \b Outputs
- * \li cVector: The output vector.
+ * \li cVector: The element-wise product output vector (float).
  *
  * \b Example
- * Multiply elements of an increasing vector by those of a decreasing vector.
+ * Multiply a constant vector by a ramp and verify one element by hand.
  * \code
- *   int N = 10;
- *   unsigned int alignment = volk_get_alignment();
- *   float* increasing = (float*)volk_malloc(sizeof(float)*N, alignment);
- *   float* decreasing = (float*)volk_malloc(sizeof(float)*N, alignment);
- *   float* out = (float*)volk_malloc(sizeof(float)*N, alignment);
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
+ * float* aVector = (float*)volk_malloc(sizeof(float) * N, alignment);
+ * float* bVector = (float*)volk_malloc(sizeof(float) * N, alignment);
+ * float* cVector = (float*)volk_malloc(sizeof(float) * N, alignment);
  *
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       increasing[ii] = (float)ii;
- *       decreasing[ii] = 10.f - (float)ii;
- *   }
+ * for (unsigned int i = 0; i < N; ++i) {
+ *     aVector[i] = 3.0f;
+ *     bVector[i] = (float)(i + 1);  // {1, 2, 3, 4}
+ * }
  *
- *   volk_32f_x2_multiply_32f(out, increasing, decreasing, N);
+ * // Expected: c[i] = 3.0 * (i+1) => {3, 6, 9, 12}
+ * float expected = 3.0f * 4.0f;  // c[3]
  *
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       printf("out[%u] = %1.2f\n", ii, out[ii]);
- *   }
+ * volk_32f_x2_multiply_32f(cVector, aVector, bVector, N);
  *
- *   volk_free(increasing);
- *   volk_free(decreasing);
- *   volk_free(out);
+ * printf("Expected c[3]: %1.1f\n", expected);
+ * printf("Result   c[3]: %1.1f\n", cVector[3]);
+ *
+ * volk_free(aVector);
+ * volk_free(bVector);
+ * volk_free(cVector);
  * \endcode
  */
 

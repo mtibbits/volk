@@ -18,61 +18,62 @@
  *
  * \b Overview
  *
- * Conjugate the input complex vector, multiply them by a complex scalar,
- * add the another input complex vector and returns the results.
+ * Conjugates the input complex vector, multiplies each element by a complex scalar,
+ * and adds the result to another input complex vector:
  *
  * c[i] = a[i] + conj(b[i]) * scalar
+ *
+ * This conjugate-multiply-accumulate operation is a building block for adaptive
+ * filtering algorithms such as LMS and CMA equalizers, where filter tap weights
+ * are updated each sample interval using conjugated signal samples scaled by an
+ * error term.
  *
  * <b>Dispatcher Prototype</b>
  * \code
  * void volk_32fc_x2_s32fc_multiply_conjugate_add_32fc(lv_32fc_t* cVector, const
  * lv_32fc_t* aVector, const lv_32fc_t* bVector, const lv_32fc_t scalar, unsigned int
- * num_points); \endcode
+ * num_points);
+ * \endcode
  *
  * \b Inputs
- * \li aVector: The input vector to be added.
- * \li bVector: The input vector to be conjugate and multiplied.
- * \li scalar: The complex scalar to multiply against conjugated bVector.
- * \li num_points: The number of complex values in aVector and bVector to be conjugate,
- * multiplied and stored into cVector.
+ * \li aVector: The input vector to be added, e.g. current tap weights (lv_32fc_t).
+ * \li bVector: The input vector to be conjugated and multiplied, e.g. signal samples
+ * (lv_32fc_t). \li scalar: The complex scalar to multiply against conjugated bVector,
+ * e.g. step-size error term (lv_32fc_t). \li num_points: The number of complex values to
+ * process.
  *
  * \b Outputs
- * \li cVector: The vector where the results will be stored.
+ * \li cVector: The output vector of updated values (lv_32fc_t).
  *
  * \b Example
- * Calculate coefficients.
+ * Compute c[i] = a[i] + conj(b[i]) * scalar with constant inputs.
  *
  * \code
- * int n_filter = 2 * N + 1;
+ * unsigned int N = 4;
  * unsigned int alignment = volk_get_alignment();
  *
- * // state is a queue of input IQ data.
- * lv_32fc_t* state = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t) * n_filter, alignment);
- * // weight and next one.
- * lv_32fc_t* weight = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t) * n_filter, alignment);
- * lv_32fc_t* next = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t) * n_filter, alignment);
- * ...
- * // push back input IQ data into state.
- * foo_push_back_queue(state, input);
+ * lv_32fc_t* aVector = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t) * N, alignment);
+ * lv_32fc_t* bVector = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t) * N, alignment);
+ * lv_32fc_t* cVector = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t) * N, alignment);
  *
- * // get filtered output.
- * lv_32fc_t output = lv_cmake(0.f,0.f);
- * for (int i = 0; i < n_filter; i++) {
- *   output += state[i] * weight[i];
+ * for (unsigned int i = 0; i < N; ++i) {
+ *   aVector[i] = lv_cmake(1.0f, 2.0f);
+ *   bVector[i] = lv_cmake(3.0f, 4.0f);
  * }
+ * lv_32fc_t scalar = lv_cmake(2.0f, 0.0f);
  *
- * // update weight using output.
- * float real = lv_creal(output) * (1.0 - std::norm(output)) * MU;
- * lv_32fc_t factor = lv_cmake(real, 0.f);
- * volk_32fc_x2_s32fc_multiply_conjugate_add_32fc(next, weight, state, factor, n_filter);
- * lv_32fc_t *tmp = next;
- * next = weight;
- * weight = tmp;
- * weight[N + 1] = lv_cmake(lv_creal(weight[N + 1]), 0.f);
- * ...
- * volk_free(state);
- * volk_free(weight);
- * volk_free(next);
+ * // conj(b) = (3, -4), conj(b) * scalar = (6, -8)
+ * // c = a + conj(b) * scalar = (1+6, 2-8) = (7, -6)
+ * lv_32fc_t expected = lv_cmake(7.0f, -6.0f);
+ *
+ * volk_32fc_x2_s32fc_multiply_conjugate_add_32fc(cVector, aVector, bVector, scalar, N);
+ *
+ * printf("Expected: (%1.1f, %1.1f)\n", lv_creal(expected), lv_cimag(expected));
+ * printf("Result:   (%1.1f, %1.1f)\n", lv_creal(cVector[0]), lv_cimag(cVector[0]));
+ *
+ * volk_free(aVector);
+ * volk_free(bVector);
+ * volk_free(cVector);
  * \endcode
  */
 

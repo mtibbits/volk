@@ -12,29 +12,52 @@
  *
  * \b Overview
  *
- * Deinterleaves the complex 16 bit vector and returns the real (inphase) part of the
- * signal.
+ * Deinterleaves a complex 16-bit integer vector and extracts the real (inphase)
+ * component. For each complex sample \f$z_k = I_k + jQ_k\f$, the output is
+ * \f$I_k\f$.
+ *
+ * This operation is common in receiver signal processing pipelines where complex
+ * baseband samples arrive interleaved (I, Q, I, Q, ...) and only the inphase
+ * component is needed — for example, after downconversion when the signal of
+ * interest is real-valued, or as a preprocessing step before further demodulation.
  *
  * <b>Dispatcher Prototype</b>
  * \code
  * void volk_16ic_deinterleave_real_16i(int16_t* iBuffer, const lv_16sc_t* complexVector,
- * unsigned int num_points) \endcode
+ * unsigned int num_points)
+ * \endcode
  *
  * \b Inputs
- * \li complexVector: The complex input vector.
- * \li num_points: The number of complex data values to be deinterleaved.
+ * \li complexVector: The complex input vector of interleaved I/Q samples (lv_16sc_t).
+ * \li num_points: The number of complex samples to deinterleave.
  *
  * \b Outputs
- * \li iBuffer: The I buffer output data.
+ * \li iBuffer: The real (inphase) output samples (int16_t).
  *
  * \b Example
+ * Extract the real part from four complex 16-bit samples.
  * \code
- * int N = 10000;
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
  *
- * volk_16ic_deinterleave_real_16i();
+ * lv_16sc_t* complexVector =
+ *     (lv_16sc_t*)volk_malloc(sizeof(lv_16sc_t) * N, alignment);
+ * int16_t* iBuffer = (int16_t*)volk_malloc(sizeof(int16_t) * N, alignment);
  *
- * volk_free(x);
- * volk_free(t);
+ * // Each complex sample has real and imaginary parts
+ * complexVector[0] = (lv_16sc_t){ 100, -50 };
+ * complexVector[1] = (lv_16sc_t){ 200, -100 };
+ * complexVector[2] = (lv_16sc_t){ 300, -150 };
+ * complexVector[3] = (lv_16sc_t){ 400, -200 };
+ *
+ * volk_16ic_deinterleave_real_16i(iBuffer, complexVector, N);
+ *
+ * // Expected output: iBuffer = {100, 200, 300, 400}
+ * printf("Expected: %d %d %d %d\n", 100, 200, 300, 400);
+ * printf("Result:   %d %d %d %d\n", iBuffer[0], iBuffer[1], iBuffer[2], iBuffer[3]);
+ *
+ * volk_free(complexVector);
+ * volk_free(iBuffer);
  * \endcode
  */
 

@@ -12,49 +12,57 @@
  *
  * \b Overview
  *
- * Adds two vectors together element by element:
+ * Adds two complex vectors together element by element:
  *
  * c[i] = a[i] + b[i]
  *
+ * Complex addition is a fundamental building block in many DSP operations.
+ * It is used for signal combining, diversity combining, beamforming, and
+ * accumulating partial results in channelized receivers. For example, in a
+ * multi-antenna system the baseband samples from each antenna element may be
+ * summed to form a composite signal.
+ *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_32fc_x2_add_32fc(lv_32fc_t* cVector, const lv_32fc_t* aVector, const
- * lv_32fc_t* bVector, unsigned int num_points) \endcode
+ * void volk_32fc_x2_add_32fc(lv_32fc_t* cVector, const lv_32fc_t* aVector,
+ * const lv_32fc_t* bVector, unsigned int num_points)
+ * \endcode
  *
  * \b Inputs
- * \li aVector: First vector of input points.
- * \li bVector: Second vector of input points.
- * \li num_points: The number of values in both input vector.
+ * \li aVector: First vector of complex input samples (lv_32fc_t).
+ * \li bVector: Second vector of complex input samples (lv_32fc_t).
+ * \li num_points: The number of complex samples in each input vector.
  *
  * \b Outputs
- * \li cVector: The output vector.
+ * \li cVector: The output vector of complex sums (lv_32fc_t).
  *
  * \b Example
  *
- * The follow example adds the increasing and decreasing vectors such that the result of
- * every summation pair is 10
+ * Adds two constant complex vectors so the expected result is easy to verify:
+ * (1+2j) + (3+4j) = (4+6j) for every element.
  *
  * \code
- *   int N = 10;
- *   unsigned int alignment = volk_get_alignment();
- *   lv_32fc_t* increasing = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t)*N, alignment);
- *   lv_32fc_t* decreasing = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t)*N, alignment);
- *   lv_32fc_t* out = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t)*N, alignment);
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
+ * lv_32fc_t* aVector = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t) * N, alignment);
+ * lv_32fc_t* bVector = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t) * N, alignment);
+ * lv_32fc_t* out = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t) * N, alignment);
  *
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       increasing[ii] = (lv_32fc_t)ii;
- *       decreasing[ii] = 10.f - (lv_32fc_t)ii;
- *   }
+ * for (unsigned int i = 0; i < N; ++i) {
+ *     aVector[i] = lv_cmake(1.0f, 2.0f);
+ *     bVector[i] = lv_cmake(3.0f, 4.0f);
+ * }
  *
- *   volk_32fc_x2_add_32fc(out, increasing, decreasing, N);
+ * lv_32fc_t expected = lv_cmake(4.0f, 6.0f);
  *
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       printf("out[%u] = %1.2f\n", ii, out[ii]);
- *   }
+ * volk_32fc_x2_add_32fc(out, aVector, bVector, N);
  *
- *   volk_free(increasing);
- *   volk_free(decreasing);
- *   volk_free(out);
+ * printf("Expected: (%1.1f, %1.1f)\n", lv_creal(expected), lv_cimag(expected));
+ * printf("Result:   (%1.1f, %1.1f)\n", lv_creal(out[0]), lv_cimag(out[0]));
+ *
+ * volk_free(aVector);
+ * volk_free(bVector);
+ * volk_free(out);
  * \endcode
  */
 

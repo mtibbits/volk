@@ -17,28 +17,51 @@
  *
  * \b Overview
  *
- * <FIXME>
+ * Computes the horizontal max* (maximum) of adjacent pairs in the input
+ * vector. For each pair (src0[2*i], src0[2*i+1]), the larger value is
+ * selected and written to target[i], producing an output vector half the
+ * length of the input. The max* operation is a key primitive in
+ * log-domain trellis decoding algorithms such as the BCJR (MAP) decoder
+ * used in turbo codes and convolutional codes, where path metrics stored
+ * as fixed-point log-likelihoods must be compared and reduced at each
+ * trellis stage.
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_16i_max_star_horizontal_16i(short* target, short* src0, unsigned int
- * num_points); \endcode
+ * void volk_16i_max_star_horizontal_16i(int16_t* target, int16_t* src0, unsigned int
+ * num_points) \endcode
  *
  * \b Inputs
- * \li src0: The input vector.
- * \li num_points: The number of complex data points.
+ * \li src0: The input vector of path metrics or log-likelihood values (int16_t).
+ * \li num_points: The number of input values (must be even).
  *
  * \b Outputs
- * \li target: The output value of the max* operation.
+ * \li target: The max* result for each adjacent pair (int16_t), with length num_points/2.
  *
  * \b Example
+ * Compute the pairwise max* of 8 log-likelihood values (4 pairs).
  * \code
- * int N = 10000;
+ * unsigned int N = 8;
+ * unsigned int alignment = volk_get_alignment();
  *
- * volk_16i_max_star_horizontal_16i();
+ * int16_t* src0 = (int16_t*)volk_malloc(sizeof(int16_t) * N, alignment);
+ * int16_t* target = (int16_t*)volk_malloc(sizeof(int16_t) * (N / 2), alignment);
  *
- * volk_free(x);
- * volk_free(t);
+ * // Pairs: (3,7), (10,2), (-5,1), (4,4)
+ * src0[0] = 3;  src0[1] = 7;
+ * src0[2] = 10; src0[3] = 2;
+ * src0[4] = -5; src0[5] = 1;
+ * src0[6] = 4;  src0[7] = 4;
+ *
+ * // Expected: max(3,7)=7, max(10,2)=10, max(-5,1)=1, max(4,4)=4
+ *
+ * volk_16i_max_star_horizontal_16i(target, src0, N);
+ *
+ * printf("Expected: 7, 10, 1, 4\n");
+ * printf("Result:   %d, %d, %d, %d\n", target[0], target[1], target[2], target[3]);
+ *
+ * volk_free(src0);
+ * volk_free(target);
  * \endcode
  */
 

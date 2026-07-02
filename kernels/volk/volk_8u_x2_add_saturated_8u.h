@@ -12,8 +12,15 @@
  *
  * \b Overview
  *
- * Adds two uint8_t vectors element-wise with saturation. Results are clamped
- * to the range [0, 255] to prevent overflow wraparound.
+ * Adds two unsigned 8-bit integer vectors element-wise with saturation,
+ * clamping results to the range [0, 255] to prevent overflow wraparound:
+ * out[i] = min(inA[i] + inB[i], 255).
+ *
+ * Saturating addition is used in digital signal processing when combining
+ * unsigned sample streams or amplitude envelopes where wraparound would
+ * introduce discontinuities. Common applications include image processing
+ * pipelines, audio level mixing of unsigned PCM data, and combining
+ * soft-decision metrics in digital communications receivers.
  *
  * <b>Dispatcher Prototype</b>
  * \code
@@ -21,31 +28,35 @@
  * uint8_t* inVectorB, unsigned int num_points) \endcode
  *
  * \b Inputs
- * \li inVectorA: First input vector.
- * \li inVectorB: Second input vector.
- * \li num_points: Vector length.
+ * \li inVectorA: First input sample vector (uint8_t).
+ * \li inVectorB: Second input sample vector (uint8_t).
+ * \li num_points: The number of samples to process.
  *
  * \b Outputs
- * \li outVector: Saturated sum output.
+ * \li outVector: The saturated sum output vector (uint8_t).
  *
  * \b Example
+ * Add two vectors with values that demonstrate saturation behavior.
  * \code
- *   unsigned int N = 8;
- *   unsigned int align = volk_get_alignment();
- *   uint8_t* a = (uint8_t*)volk_malloc(N, align);
- *   uint8_t* b = (uint8_t*)volk_malloc(N, align);
- *   uint8_t* result = (uint8_t*)volk_malloc(N, align);
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
+ * uint8_t* a = (uint8_t*)volk_malloc(sizeof(uint8_t) * N, alignment);
+ * uint8_t* b = (uint8_t*)volk_malloc(sizeof(uint8_t) * N, alignment);
+ * uint8_t* result = (uint8_t*)volk_malloc(sizeof(uint8_t) * N, alignment);
  *
- *   // Values that will cause saturation
- *   a[0] = 200; b[0] = 100; // 300 -> saturates to 255
- *   a[1] = 50;  b[1] = 30;  // 80 -> no saturation
+ * a[0] = 200; b[0] = 100; // 300 saturates to 255
+ * a[1] = 50;  b[1] = 30;  // 80, no saturation
+ * a[2] = 255; b[2] = 255; // 510 saturates to 255
+ * a[3] = 0;   b[3] = 0;   // 0, no saturation
  *
- *   volk_8u_x2_add_saturated_8u(result, a, b, N);
- *   // result[0] == 255, result[1] == 80
+ * volk_8u_x2_add_saturated_8u(result, a, b, N);
  *
- *   volk_free(a);
- *   volk_free(b);
- *   volk_free(result);
+ * printf("Expected: 255, 80, 255, 0\n");
+ * printf("Result:   %u, %u, %u, %u\n", result[0], result[1], result[2], result[3]);
+ *
+ * volk_free(a);
+ * volk_free(b);
+ * volk_free(result);
  * \endcode
  */
 

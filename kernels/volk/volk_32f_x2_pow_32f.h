@@ -12,48 +12,54 @@
  *
  * \b Overview
  *
- * Raises the sample in aVector to the power of the number in bVector.
+ * Computes the element-wise power of base samples raised to exponent values:
+ * c[i] = pow(a[i], b[i]). Note that the base values in aVector must be
+ * positive; otherwise the output may be inaccurate.
  *
- * c[i] = pow(a[i], b[i])
- *
- * Note that the aVector values must be positive; otherwise the output may be inaccurate.
+ * Element-wise exponentiation is useful in signal processing for power-law
+ * compression and expansion, non-linear amplitude scaling, and computing
+ * signal statistics such as higher-order moments. It also appears in
+ * adaptive gain control where the exponent controls the compression curve.
  *
  * <b>Dispatcher Prototype</b>
  * \code
  * void volk_32f_x2_pow_32f(float* cVector, const float* bVector, const float* aVector,
- * unsigned int num_points) \endcode
+ * unsigned int num_points)
+ * \endcode
  *
  * \b Inputs
- * \li bVector: The input vector of indices (power values).
- * \li aVector: The input vector of base values.
- * \li num_points: The number of values in both input vectors.
+ * \li bVector: The exponent values (float).
+ * \li aVector: The base values; must be positive (float).
+ * \li num_points: The number of elements in each input vector.
  *
  * \b Outputs
- * \li cVector: The output vector.
+ * \li cVector: The output vector of results (float).
  *
  * \b Example
- * Calculate the first two powers of two (2^x).
+ * Raise a constant base of 2.0 to the power 3.0 (expected: 8.0 for each element).
  * \code
- *   int N = 10;
- *   unsigned int alignment = volk_get_alignment();
- *   float* increasing = (float*)volk_malloc(sizeof(float)*N, alignment);
- *   float* twos = (float*)volk_malloc(sizeof(float)*N, alignment);
- *   float* out = (float*)volk_malloc(sizeof(float)*N, alignment);
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
+ * float* aVector = (float*)volk_malloc(sizeof(float) * N, alignment);
+ * float* bVector = (float*)volk_malloc(sizeof(float) * N, alignment);
+ * float* cVector = (float*)volk_malloc(sizeof(float) * N, alignment);
  *
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       increasing[ii] = (float)ii;
- *       twos[ii] = 2.f;
- *   }
+ * for (unsigned int i = 0; i < N; ++i) {
+ *     aVector[i] = 2.0f;
+ *     bVector[i] = 3.0f;
+ * }
  *
- *   volk_32f_x2_pow_32f(out, increasing, twos, N);
+ * // Expected: pow(2.0, 3.0) = 8.0 for each element
+ * float expected = 8.0f;
  *
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       printf("out[%u] = %1.2f\n", ii, out[ii]);
- *   }
+ * volk_32f_x2_pow_32f(cVector, bVector, aVector, N);
  *
- *   volk_free(increasing);
- *   volk_free(twos);
- *   volk_free(out);
+ * printf("Expected: %1.1f\n", expected);
+ * printf("Result:   %1.1f\n", cVector[0]);
+ *
+ * volk_free(aVector);
+ * volk_free(bVector);
+ * volk_free(cVector);
  * \endcode
  */
 

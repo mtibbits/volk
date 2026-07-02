@@ -12,48 +12,52 @@
  *
  * \b Overview
  *
- * Calculates the magnitude of the complexVector and stores the
- * results in the magnitudeVector. The results are scaled and
- * converted into 16-bit shorts.
+ * Computes the magnitude of each complex sample, scales by a scalar factor,
+ * and converts the result to a 16-bit integer:
+ * out[i] = (int16_t)round(scalar * sqrt(real[i]^2 + imag[i]^2)).
+ *
+ * This kernel is useful in receiver chains where magnitude detection must feed
+ * into fixed-point processing stages, such as RSSI estimation, signal strength
+ * indication, or envelope detection. The scalar factor allows mapping
+ * floating-point magnitudes into a meaningful integer range for downstream
+ * quantized processing.
  *
  * <b>Dispatcher Prototype</b>
  * \code
  * void volk_32fc_s32f_magnitude_16i(int16_t* magnitudeVector, const lv_32fc_t*
- * complexVector, unsigned int num_points) \endcode
+ * complexVector, const float scalar, unsigned int num_points) \endcode
  *
  * \b Inputs
- * \li complexVector: The complex input vector.
- * \li num_points: The number of samples.
+ * \li complexVector: The complex input vector (lv_32fc_t).
+ * \li scalar: Scale factor applied to each magnitude before conversion to int16.
+ * \li num_points: The number of complex samples.
  *
  * \b Outputs
- * \li magnitudeVector: The output value as 16-bit shorts.
+ * \li magnitudeVector: The scaled magnitudes as 16-bit integers (int16_t).
  *
  * \b Example
- * Generate points around the unit circle and map them to integers with
- * magnitude 50 to preserve smallest deltas.
+ * Use a 3-4-5 Pythagorean triple so the expected magnitude is exact.
  * \code
- *   int N = 10;
- *   unsigned int alignment = volk_get_alignment();
- *   lv_32fc_t* in  = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t)*N, alignment);
- *   int16_t* out = (int16_t*)volk_malloc(sizeof(int16_t)*N, alignment);
- *   float scale = 50.f;
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
+ * lv_32fc_t* in = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t) * N, alignment);
+ * int16_t* out = (int16_t*)volk_malloc(sizeof(int16_t) * N, alignment);
+ * float scalar = 10.0f;
  *
- *   for(unsigned int ii = 0; ii < N/2; ++ii){
- *       // Generate points around the unit circle
- *       float real = -4.f * ((float)ii / (float)N) + 1.f;
- *       float imag = std::sqrt(1.f - real * real);
- *       in[ii] = lv_cmake(real, imag);
- *       in[ii+N/2] = lv_cmake(-real, -imag);
- *   }
+ * for (unsigned int i = 0; i < N; ++i) {
+ *     in[i] = lv_cmake(3.0f, 4.0f); // magnitude = 5.0
+ * }
  *
- *   volk_32fc_s32f_magnitude_16i(out, in, scale, N);
+ * // Expected: round(10.0 * 5.0) = 50
+ * int16_t expected = 50;
  *
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       printf("out[%u] = %i\n", ii, out[ii]);
- *   }
+ * volk_32fc_s32f_magnitude_16i(out, in, scalar, N);
  *
- *   volk_free(in);
- *   volk_free(out);
+ * printf("Expected: %d\n", expected);
+ * printf("Result:   %d\n", out[0]);
+ *
+ * volk_free(in);
+ * volk_free(out);
  * \endcode
  */
 

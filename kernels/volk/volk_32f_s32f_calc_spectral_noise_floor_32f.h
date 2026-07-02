@@ -15,33 +15,63 @@
  * Computes the spectral noise floor of an input power spectrum.
  *
  * Calculates the spectral noise floor of an input power spectrum by
- * determining the mean of the input power spectrum, then
- * recalculating the mean excluding any power spectrum values that
- * exceed the mean by the spectralExclusionValue (in dB).  Provides a
- * rough estimation of the signal noise floor.
+ * determining the mean of the input power spectrum, then recalculating
+ * the mean excluding any power spectrum values that exceed the mean by
+ * the spectralExclusionValue (in dB). Provides a rough estimation of
+ * the signal noise floor.
+ *
+ * This kernel is used in spectral analysis to separate signal energy from
+ * background noise. A typical application is automatic threshold detection
+ * in spectrum sensing or interference monitoring, where the noise floor
+ * must be estimated before signal peaks can be identified.
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_32f_s32f_calc_spectral_noise_floor_32f(float* noiseFloorAmplitude, const
- * float* realDataPoints, const float spectralExclusionValue, const unsigned int
- * num_points) \endcode
+ * void volk_32f_s32f_calc_spectral_noise_floor_32f(float* noiseFloorAmplitude,
+ *   const float* realDataPoints, const float spectralExclusionValue,
+ *   const unsigned int num_points)
+ * \endcode
  *
  * \b Inputs
- * \li realDataPoints: The input power spectrum.
- * \li spectralExclusionValue: The number of dB above the noise floor that a data point
- * must be to be excluded from the noise floor calculation - default value is 20. \li
- * num_points: The number of data points.
+ * \li realDataPoints: The input power spectrum (float).
+ * \li spectralExclusionValue: The number of dB above the mean that a data
+ * point must be to be excluded from the noise floor calculation (float).
+ * \li num_points: The number of spectral bins.
  *
  * \b Outputs
- * \li noiseFloorAmplitude: The noise floor of the input spectrum, in dB.
+ * \li noiseFloorAmplitude: The noise floor of the input spectrum, in dB (float).
  *
  * \b Example
+ * Estimate the noise floor of a spectrum with 6 noise bins at -30 dB and
+ * 2 signal bins at 10 dB, using a 20 dB exclusion threshold.
  * \code
- * int N = 10000;
+ * unsigned int N = 8;
+ * unsigned int alignment = volk_get_alignment();
  *
- * volk_32f_s32f_calc_spectral_noise_floor_32f
+ * float* spectrum = (float*)volk_malloc(sizeof(float) * N, alignment);
+ * float* noiseFloor = (float*)volk_malloc(sizeof(float), alignment);
  *
- * volk_free(x);
+ * // 6 noise bins at -30 dB, 2 signal bins at 10 dB
+ * for (unsigned int i = 0; i < 6; ++i) {
+ *   spectrum[i] = -30.0f;
+ * }
+ * spectrum[6] = 10.0f;
+ * spectrum[7] = 10.0f;
+ *
+ * float spectralExclusionValue = 20.0f;
+ *
+ * // Expected: mean = (6*-30 + 2*10)/8 = -20; threshold = -20+20 = 0
+ * // Second pass keeps only bins <= 0: six -30 dB bins => -180/6 = -30
+ * float expected = -30.0f;
+ *
+ * volk_32f_s32f_calc_spectral_noise_floor_32f(noiseFloor, spectrum,
+ *   spectralExclusionValue, N);
+ *
+ * printf("Expected: %f\n", expected);
+ * printf("Result:   %f\n", *noiseFloor);
+ *
+ * volk_free(spectrum);
+ * volk_free(noiseFloor);
  * \endcode
  */
 

@@ -12,22 +12,57 @@
  *
  * \b Overview
  *
- * Converts a complex vector of 32-bits float each component into
- * a complex vector of 16-bits integer each component.
- * Values are saturated to the limit values of the output data type.
+ * Converts a complex vector of 32-bit float samples into a complex vector of
+ * 16-bit integer samples. Each component (real and imaginary) is rounded to the
+ * nearest integer and saturated to the range [SHRT_MIN, SHRT_MAX].
+ *
+ * This kernel is commonly used when quantizing complex baseband samples from
+ * floating-point processing chains into fixed-point representation for storage,
+ * transmission over digital interfaces, or feeding into hardware accelerators
+ * that operate on 16-bit I/Q data.
  *
  * <b>Dispatcher Prototype</b>
  * \code
  * void volk_32fc_convert_16ic(lv_16sc_t* outputVector, const lv_32fc_t* inputVector,
- * unsigned int num_points); \endcode
+ * unsigned int num_points);
+ * \endcode
  *
  * \b Inputs
- * \li inputVector:  The complex 32-bit float input data buffer.
- * \li num_points:   The number of data values to be converted.
+ * \li inputVector: The complex 32-bit float input data buffer (lv_32fc_t).
+ * \li num_points: The number of complex samples to be converted.
  *
  * \b Outputs
- * \li outputVector: The complex 16-bit integer output data buffer.
+ * \li outputVector: The complex 16-bit integer output data buffer (lv_16sc_t).
  *
+ * \b Example
+ * Convert four complex float samples to complex 16-bit integers with saturation.
+ * \code
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
+ *
+ * lv_32fc_t* input = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t) * N, alignment);
+ * lv_16sc_t* output = (lv_16sc_t*)volk_malloc(sizeof(lv_16sc_t) * N, alignment);
+ *
+ * // Use values within int16 range and one that saturates
+ * input[0] = lv_cmake(100.0f, -200.0f);
+ * input[1] = lv_cmake(0.0f, 32767.0f);
+ * input[2] = lv_cmake(-32768.0f, 50000.0f);  // 50000 exceeds SHRT_MAX, will saturate
+ * input[3] = lv_cmake(-1.5f, 1.5f);
+ *
+ * volk_32fc_convert_16ic(output, input, N);
+ *
+ * // Expected: (100,-200), (0,32767), (-32768,32767), (-2,2)
+ * // Note: 50000 saturates to 32767; -1.5 and 1.5 round to -2 and 2
+ * printf("Expected: (100,-200) (0,32767) (-32768,32767) (-2,2)\n");
+ * printf("Result:   (%d,%d) (%d,%d) (%d,%d) (%d,%d)\n",
+ *        lv_creal(output[0]), lv_cimag(output[0]),
+ *        lv_creal(output[1]), lv_cimag(output[1]),
+ *        lv_creal(output[2]), lv_cimag(output[2]),
+ *        lv_creal(output[3]), lv_cimag(output[3]));
+ *
+ * volk_free(input);
+ * volk_free(output);
+ * \endcode
  */
 
 #ifndef INCLUDED_volk_32fc_convert_16ic_a_H

@@ -12,28 +12,55 @@
  *
  * \b Overview
  *
- * Calculates the log10 power value for each input point.
+ * Computes the log10 power spectrum from complex FFT output data. Each complex
+ * input sample is divided by the normalization factor, then the squared magnitude
+ * is converted to decibels: output = 10 * log10((real/norm)^2 + (imag/norm)^2).
+ *
+ * This kernel is commonly used in spectral analysis and power spectral density
+ * (PSD) estimation. After computing an FFT, the complex frequency-domain bins
+ * are passed through this kernel to produce a calibrated power spectrum in dB,
+ * suitable for display or further processing such as noise floor estimation.
  *
  * <b>Dispatcher Prototype</b>
  * \code
  * void volk_32fc_s32f_power_spectrum_32f(float* logPowerOutput, const lv_32fc_t*
- * complexFFTInput, const float normalizationFactor, unsigned int num_points) \endcode
+ * complexFFTInput, const float normalizationFactor, unsigned int num_points)
+ * \endcode
  *
  * \b Inputs
- * \li complexFFTInput The complex data output from the FFT point.
- * \li normalizationFactor: This value is divided against all the input values before the
- * power is calculated. \li num_points: The number of fft data points.
+ * \li complexFFTInput: The complex frequency-domain samples from an FFT (lv_32fc_t).
+ * \li normalizationFactor: Scale factor applied to each sample before computing power
+ * (float). \li num_points: The number of complex FFT data points.
  *
  * \b Outputs
- * \li logPowerOutput: The 10.0 * log10(r*r + i*i) for each data point.
+ * \li logPowerOutput: The 10.0 * log10(r*r + i*i) power in dB for each data point
+ * (float).
  *
  * \b Example
+ * Compute the power spectrum of four identical complex FFT bins with unit normalization.
  * \code
- * int N = 10000;
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
  *
- * volk_32fc_s32f_power_spectrum_32f();
+ * lv_32fc_t* input = (lv_32fc_t*)volk_malloc(sizeof(lv_32fc_t) * N, alignment);
+ * float* output = (float*)volk_malloc(sizeof(float) * N, alignment);
  *
- * volk_free(x);
+ * // Input: (3, 4) so magnitude^2 = 9 + 16 = 25
+ * for (unsigned int i = 0; i < N; ++i) {
+ *   input[i] = lv_cmake(3.0f, 4.0f);
+ * }
+ * float normFactor = 1.0f;
+ *
+ * // Expected: 10 * log10(25) = 10 * 1.39794 = 13.9794 dB
+ * float expected = 10.0f * log10f(25.0f);
+ *
+ * volk_32fc_s32f_power_spectrum_32f(output, input, normFactor, N);
+ *
+ * printf("Expected: %f\n", expected);
+ * printf("Result:   %f\n", output[0]);
+ *
+ * volk_free(input);
+ * volk_free(output);
  * \endcode
  */
 
