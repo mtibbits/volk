@@ -227,7 +227,7 @@ void read_results(std::vector<volk_test_results_t>* results, std::string path)
         std::ifstream config(path.c_str());
         char config_line[256];
         while (config.getline(config_line, 255)) {
-            // tokenize the input line by kernel_name unaligned aligned
+            // tokenize the input line by kernel_name aligned unaligned
             // then push back in the results vector with fields filled in
 
             std::vector<std::string> single_kernel_result;
@@ -257,8 +257,8 @@ void read_results(std::vector<volk_test_results_t>* results, std::string path)
                 volk_test_results_t kernel_result;
                 kernel_result.name = std::string(single_kernel_result[0]);
                 kernel_result.config_name = std::string(single_kernel_result[0]);
-                kernel_result.best_arch_u = std::string(single_kernel_result[1]);
-                kernel_result.best_arch_a = std::string(single_kernel_result[2]);
+                kernel_result.best_arch_a = std::string(single_kernel_result[1]);
+                kernel_result.best_arch_u = std::string(single_kernel_result[2]);
                 results->push_back(kernel_result);
             }
         }
