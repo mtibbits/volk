@@ -36,6 +36,23 @@
  * \b Outputs
  * \li bVector: The output vector of base-2 logarithms (float).
  *
+ * \b Numerical accuracy
+ *
+ * All implementations approximate log2. Measured over the QA input
+ * distribution (uniform in (-1, 1)): the SIMD tiers share a polynomial
+ * whose absolute error reaches 5.25e-6 vs IEEE log2 (worst near
+ * power-of-two inputs; larger than the polynomial's ~1.55e-6 design
+ * residual because float Horner evaluation and range reduction add
+ * rounding); generic uses volk_log2f_non_ieee (measured 9.5e-7). The QA
+ * tolerance (registered in lib/kernel_tests.h) bounds the impl-vs-generic
+ * difference, which can approach the sum of both errors, and is set to
+ * 8e-6 absolute. Outside that range the bound does not apply: subnormal
+ * inputs bypass the SIMD range reduction (raw exponent field 0) and return
+ * ~= -127 where generic returns IEEE log2f down to -149, and for
+ * |log2(x)| >~ 32 float representation granularity exceeds the stated
+ * bound. Inputs <= 0 follow the non-IEEE mapping above (0 -> -127.0f,
+ * negative -> NaN) uniformly across implementations.
+ *
  * \b Example
  * Compute log2 of powers of 2, where the expected result equals the exponent.
  * \code
