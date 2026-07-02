@@ -261,6 +261,141 @@ static inline void volk_32fc_s32fc_x2_rotator2_32fc_neon(lv_32fc_t* outVector,
 #endif /* LV_HAVE_NEON */
 
 
+#ifdef LV_HAVE_NEONV8
+#include <arm_neon.h>
+#include <volk/volk_neon_intrinsics.h>
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
+/*!
+ * \brief NEONv8 implementation with FMA-fused inner-loop complex multiply.
+ *
+ * Structurally identical to the NEONv7 _neon impl; substitutes the four
+ * `_vmultiply_complexq_f32` call sites with `_vmultiply_complexq_fma_f32`,
+ * saving 2 ops per call (8 ops/iter) and one rounding step per call.
+ */
+static inline void volk_32fc_s32fc_x2_rotator2_32fc_neonv8(lv_32fc_t* outVector,
+                                                           const lv_32fc_t* inVector,
+                                                           const lv_32fc_t* phase_inc,
+                                                           lv_32fc_t* phase,
+                                                           unsigned int num_points)
+{
+    lv_32fc_t* outputVectorPtr = outVector;
+    const lv_32fc_t* inputVectorPtr = inVector;
+
+    const double initial_angle =
+        atan2((double)lv_cimag(*phase), (double)lv_creal(*phase));
+    const double delta_angle =
+        atan2((double)lv_cimag(*phase_inc), (double)lv_creal(*phase_inc));
+
+    double angle_sum = initial_angle;
+    double angle_c = 0.0;
+
+    const double block_delta = (double)ROTATOR_RELOAD * delta_angle;
+
+    const double delta4 = 4.0 * delta_angle;
+    lv_32fc_t incr = lv_cmake((float)cos(delta4), (float)sin(delta4));
+
+    float32x4x2_t input_vec;
+    float32x4x2_t output_vec;
+    lv_32fc_t phasePtr[4];
+
+    const lv_32fc_t incrPtr[4] = { incr, incr, incr, incr };
+    const float32x4x2_t incr_vec = vld2q_f32((float*)incrPtr);
+    float32x4x2_t phase_vec;
+
+#define REDUCE_ANGLE(a)              \
+    do {                             \
+        (a) = fmod((a), 2.0 * M_PI); \
+        if ((a) > M_PI)              \
+            (a) -= 2.0 * M_PI;       \
+        else if ((a) < -M_PI)        \
+            (a) += 2.0 * M_PI;       \
+    } while (0)
+
+    for (unsigned int k = 0; k < 4; ++k) {
+        double a = angle_sum + (double)k * delta_angle;
+        REDUCE_ANGLE(a);
+        phasePtr[k] = lv_cmake((float)cos(a), (float)sin(a));
+    }
+    phase_vec = vld2q_f32((float*)phasePtr);
+
+    unsigned int i, j;
+
+    for (i = 0; i < (unsigned int)(num_points / ROTATOR_RELOAD); i++) {
+        for (j = 0; j < ROTATOR_RELOAD_4; j++) {
+            input_vec = vld2q_f32((float*)inputVectorPtr);
+            __VOLK_PREFETCH(inputVectorPtr + 4);
+
+            output_vec = _vmultiply_complexq_fma_f32(input_vec, phase_vec);
+            phase_vec = _vmultiply_complexq_fma_f32(phase_vec, incr_vec);
+            vst2q_f32((float*)outputVectorPtr, output_vec);
+
+            outputVectorPtr += 4;
+            inputVectorPtr += 4;
+        }
+
+        {
+            double y = block_delta - angle_c;
+            double t = angle_sum + y;
+            angle_c = (t - angle_sum) - y;
+            angle_sum = t;
+        }
+
+        for (unsigned int k = 0; k < 4; ++k) {
+            double a = angle_sum + (double)k * delta_angle;
+            REDUCE_ANGLE(a);
+            phasePtr[k] = lv_cmake((float)cos(a), (float)sin(a));
+        }
+        phase_vec = vld2q_f32((float*)phasePtr);
+    }
+
+    for (i = 0; i < (num_points % ROTATOR_RELOAD) / 4; i++) {
+        input_vec = vld2q_f32((float*)inputVectorPtr);
+        __VOLK_PREFETCH(inputVectorPtr + 4);
+
+        output_vec = _vmultiply_complexq_fma_f32(input_vec, phase_vec);
+        phase_vec = _vmultiply_complexq_fma_f32(phase_vec, incr_vec);
+        vst2q_f32((float*)outputVectorPtr, output_vec);
+
+        outputVectorPtr += 4;
+        inputVectorPtr += 4;
+
+        {
+            double y = (4.0 * delta_angle) - angle_c;
+            double t = angle_sum + y;
+            angle_c = (t - angle_sum) - y;
+            angle_sum = t;
+        }
+    }
+
+    {
+        double a = angle_sum;
+        REDUCE_ANGLE(a);
+        *phase = lv_cmake((float)cos(a), (float)sin(a));
+    }
+
+    for (i = 0; i < num_points % 4; i++) {
+        *outputVectorPtr++ = *inputVectorPtr++ * (*phase);
+        {
+            double y = delta_angle - angle_c;
+            double t = angle_sum + y;
+            angle_c = (t - angle_sum) - y;
+            angle_sum = t;
+        }
+        double a = angle_sum;
+        REDUCE_ANGLE(a);
+        *phase = lv_cmake((float)cos(a), (float)sin(a));
+    }
+
+#undef REDUCE_ANGLE
+}
+
+#endif /* LV_HAVE_NEONV8 */
+
+
 #ifdef LV_HAVE_AVX
 #include <immintrin.h>
 #include <volk/volk_avx_intrinsics.h>
