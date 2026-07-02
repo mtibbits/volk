@@ -37,7 +37,7 @@
  * relative error metric is ill-posed near +/-1; the QA tolerance
  * (registered in lib/kernel_tests.h) is therefore an ABSOLUTE bound of
  * 4e-6 on the impl-vs-generic difference, covering the sum of both
- * approximations' errors.
+ * approximations' errors (~3.7e-6).
  *
  * \b Example
  * \code
