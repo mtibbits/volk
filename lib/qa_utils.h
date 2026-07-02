@@ -10,12 +10,14 @@
 #ifndef VOLK_QA_UTILS_H
 #define VOLK_QA_UTILS_H
 
-#include <stdbool.h>   // for bool, false
-#include <volk/volk.h> // for volk_func_desc_t
-#include <cstdlib>     // for NULL
-#include <map>         // for map
-#include <string>      // for string, basic_string
-#include <vector>      // for vector
+#include <stdbool.h>          // for bool, false
+#include <volk/volk.h>        // for volk_func_desc_t
+#include <volk/volk_malloc.h> // for volk_malloc, volk_free
+#include <cstdlib>            // for NULL
+#include <cstring>            // for memset
+#include <map>                // for map
+#include <string>             // for string, basic_string
+#include <vector>             // for vector
 
 #include "volk/volk_complex.h" // for lv_32fc_t
 
@@ -168,10 +170,38 @@ public:
           _puppet_master_name(puppet_master_name){};
 };
 
+class volk_qa_aligned_mem_pool
+{
+public:
+    void* get_new(size_t size)
+    {
+        size_t alignment = volk_get_alignment();
+        void* ptr = volk_malloc(size, alignment);
+        memset(ptr, 0x00, size);
+        _mems.push_back(ptr);
+        return ptr;
+    }
+    ~volk_qa_aligned_mem_pool()
+    {
+        for (unsigned int ii = 0; ii < _mems.size(); ++ii) {
+            volk_free(_mems[ii]);
+        }
+    }
+
+private:
+    std::vector<void*> _mems;
+};
+
 /************************************************
  * VOLK QA functions                            *
  ************************************************/
 volk_type_t volk_type_from_string(std::string);
+
+std::vector<std::string> get_arch_list(volk_func_desc_t desc);
+
+void get_signatures_from_name(std::vector<volk_type_t>& inputsig,
+                              std::vector<volk_type_t>& outputsig,
+                              std::string name);
 
 float uniform(void);
 void random_floats(float* buf, unsigned n);
