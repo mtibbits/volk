@@ -150,7 +150,13 @@ std::vector<volk_test_case_t> init_test_list(volk_test_params_t test_params)
                                             0.707107f,
                                             -0.707107f });
     QA(VOLK_INIT_TEST(volk_32f_asin_32f, test_params_asin))
-    QA(VOLK_INIT_TEST(volk_32f_acos_32f, test_params_asin))
+    // acos = pi/2 - asin reflects the output through pi/2, so acos -> 0 as
+    // x -> 1 and a RELATIVE tol amplifies tiny impl-vs-generic deltas near
+    // +/-1 (measured 12x vs asin on the same inputs). Register acos with an
+    // absolute bound instead; split from test_params_asin so asin's contract
+    // is untouched. See the kernel's "Numerical accuracy" doc-comment. (#174)
+    volk_test_params_t test_params_acos(test_params_asin.make_absolute(4e-6));
+    QA(VOLK_INIT_TEST(volk_32f_acos_32f, test_params_acos))
     QA(VOLK_INIT_TEST(volk_32fc_s32f_power_32fc, test_params_power))
     QA(VOLK_INIT_TEST(volk_32f_s32f_calc_spectral_noise_floor_32f, test_params_snf))
 
