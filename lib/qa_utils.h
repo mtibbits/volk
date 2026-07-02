@@ -54,8 +54,8 @@ class volk_test_results_t
 public:
     std::string name;
     std::string config_name;
-    unsigned int vlen;
-    unsigned int iter;
+    unsigned int vlen = 0;
+    unsigned int iter = 0;
     std::map<std::string, volk_test_time_t> results;
     std::string best_arch_a;
     std::string best_arch_u;
