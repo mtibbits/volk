@@ -28,8 +28,9 @@
  * `_u` runs (#91) are the remaining epic-#85 children.
  */
 
-#include "kernel_tests.h" // for init_test_list
-#include "qa_utils.h"     // for volk_test_case_t, run_volk_tests
+#include "kernel_tests.h"     // for init_test_list
+#include "qa_canary_kernel.h" // for the planted output-canary negative controls (#89)
+#include "qa_utils.h"         // for volk_test_case_t, run_volk_tests
 #include "volk/volk_complex.h"
 #include "volk_reference.h" // for the independent double-precision oracle registry (#88)
 #include <volk/volk.h>
@@ -64,6 +65,20 @@
 #include <fcntl.h>  // open, O_WRONLY
 #include <unistd.h> // dup, dup2, close, STDOUT_FILENO
 #define VOLK_DEVNULL "/dev/null"
+#endif
+
+// Compile-time AddressSanitizer detection: the far-past ASan demo deliberately
+// writes past the guarded allocation, which is undefined behaviour unless ASan
+// is bracketing it, so it must only run in an ASan build.
+#if defined(__SANITIZE_ADDRESS__)
+#define VOLK_BUILT_WITH_ASAN 1
+#elif defined(__has_feature)
+#if __has_feature(address_sanitizer)
+#define VOLK_BUILT_WITH_ASAN 1
+#endif
+#endif
+#ifndef VOLK_BUILT_WITH_ASAN
+#define VOLK_BUILT_WITH_ASAN 0
 #endif
 
 // Adversarial edge values mixed into the random test data, so impls are exercised at
@@ -146,6 +161,50 @@ static bool quiet_run(volk_test_case_t& tc,
     return fail;
 }
 
+// #89: run the output-buffer canary for one (kernel, vlen) with stdout muted
+// (mirrors quiet_run). Returns the split summary so the driver can treat a buffer
+// over/under-write (always a defect) differently from an in-bounds unwritten
+// element (expected for reduction/index kernels). On an exception, the guarded
+// path could not complete -- reported as a guard violation to surface it.
+static volk_canary_summary quiet_canary_run(volk_test_case_t& tc, unsigned int v)
+{
+    std::vector<volk_test_results_t> results;
+    const bool verbose = (std::getenv("HARNESS_VERBOSE") != nullptr);
+    std::fflush(stdout);
+    std::cout.flush();
+    int saved = -1, devnull = -1;
+    if (!verbose) {
+        saved = dup(STDOUT_FILENO);
+        devnull = open(VOLK_DEVNULL, O_WRONLY);
+        if (saved >= 0 && devnull >= 0)
+            dup2(devnull, STDOUT_FILENO);
+    }
+    volk_canary_summary summary;
+    try {
+        summary = run_volk_canary_test(tc.desc(),
+                                       tc.kernel_ptr(),
+                                       tc.name(),
+                                       tc.test_parameters().scalar(),
+                                       v /*vlen*/,
+                                       &results,
+                                       kFloatEdges,
+                                       kComplexEdges);
+    } catch (...) {
+        summary.guard_violation = true;
+    }
+    std::fflush(stdout);
+    std::cout.flush();
+    if (!verbose) {
+        if (saved >= 0) {
+            dup2(saved, STDOUT_FILENO);
+            close(saved);
+        }
+        if (devnull >= 0)
+            close(devnull);
+    }
+    return summary;
+}
+
 int main(int argc, char* argv[])
 {
     const float tol = 1e-6f;
@@ -175,6 +234,195 @@ int main(int argc, char* argv[])
         else
             std::cerr << "HARNESS_REPORT: cannot open '" << rp
                       << "' — human output only\n";
+    }
+
+    // #89 output-buffer canary mode (opt-in via HARNESS_CANARY). This is a
+    // distinct mode: it replaces the impl-vs-impl / reference sweep with the
+    // guarded-buffer over/under-write + unwritten check. The default qa suite
+    // and the toggle-off correctness sweep are entirely unaffected.
+    const bool canary_mode = (std::getenv("HARNESS_CANARY") != nullptr);
+    if (canary_mode) {
+        // The far-past ASan demonstration: deliberately over-run the guarded
+        // own-malloc'd buffer far enough to hit the ASan redzone, proving the
+        // guarded path's buffers are ASan-bracketed (acceptance #89-2). This is
+        // undefined behaviour without ASan, so it is gated to ASan builds.
+        if (std::getenv("HARNESS_CANARY_ASAN_DEMO") != nullptr) {
+            if (report)
+                std::fclose(report);
+#if VOLK_BUILT_WITH_ASAN
+            std::cerr << "HARNESS_CANARY_ASAN_DEMO: over-running the guarded buffer "
+                         "via volk_32f_canaryfarpast_32f; expect an ASan "
+                         "heap-buffer-overflow abort.\n";
+            std::vector<volk_test_results_t> demo;
+            run_volk_canary_test(volk_canary_desc(),
+                                 (void (*)())(&volk_32f_canaryfarpast_32f),
+                                 "volk_32f_canaryfarpast_32f",
+                                 scalar,
+                                 127u,
+                                 &demo,
+                                 kFloatEdges,
+                                 kComplexEdges);
+            std::cerr << "WARNING: ASan did not abort on the far-past over-run.\n";
+            return 2;
+#else
+            std::cerr << "HARNESS_CANARY_ASAN_DEMO requested but this binary was NOT "
+                         "built with AddressSanitizer; refusing to run the far-past "
+                         "planted kernel (undefined behaviour without ASan). Rebuild "
+                         "under build-asan/.\n";
+            return 2;
+#endif
+        }
+
+        // Hard negative control (any build), exercising the SAME run_volk_canary_test
+        // path real kernels use. Three planted kernels prove BOTH detectors:
+        //   ok        -> no violation             (canary does not over-report)
+        //   one-past  -> GUARD violation          (the over-run detector)
+        //   unwritten -> UNWRITTEN finding         (the in-bounds-gap detector)
+        // Any deviation means the canary is broken — fail hard (exit 2), per #88.
+        const unsigned int nc_vlen = 127;
+        std::vector<volk_test_results_t> nc;
+        const volk_canary_summary ok_sum =
+            run_volk_canary_test(volk_canary_desc(),
+                                 (void (*)())(&volk_32f_canaryok_32f),
+                                 "volk_32f_canaryok_32f",
+                                 scalar,
+                                 nc_vlen,
+                                 &nc,
+                                 kFloatEdges,
+                                 kComplexEdges);
+        nc.clear();
+        const volk_canary_summary one_past_sum =
+            run_volk_canary_test(volk_canary_desc(),
+                                 (void (*)())(&volk_32f_canaryonepast_32f),
+                                 "volk_32f_canaryonepast_32f",
+                                 scalar,
+                                 nc_vlen,
+                                 &nc,
+                                 kFloatEdges,
+                                 kComplexEdges);
+        nc.clear();
+        const volk_canary_summary unwritten_sum =
+            run_volk_canary_test(volk_canary_desc(),
+                                 (void (*)())(&volk_32f_canaryunwritten_32f),
+                                 "volk_32f_canaryunwritten_32f",
+                                 scalar,
+                                 nc_vlen,
+                                 &nc,
+                                 kFloatEdges,
+                                 kComplexEdges);
+        nc.clear();
+        const char* nc_err = nullptr;
+        if (ok_sum.guard_violation || ok_sum.unwritten) {
+            nc_err = "the correct planted kernel volk_32f_canaryok_32f was flagged — "
+                     "the canary over-reports";
+        } else if (!one_past_sum.guard_violation) {
+            nc_err = "the planted one-past kernel volk_32f_canaryonepast_32f did not "
+                     "trip the guard — the canary is blind to output over-runs";
+        } else if (!unwritten_sum.unwritten) {
+            nc_err = "the planted kernel volk_32f_canaryunwritten_32f did not trip the "
+                     "unwritten check — the canary is blind to in-bounds gaps";
+        }
+        if (nc_err) {
+            std::cerr << "NEGATIVE CONTROL LOST: " << nc_err << ". Aborting.\n";
+            if (report)
+                std::fclose(report);
+            return 2;
+        }
+        std::cerr << "canary negative control OK: ok-kernel clean, one-past trips the "
+                     "guard, unwritten-kernel trips the unwritten check.\n";
+
+        // Best-effort per-kernel canary sweep over the real kernels.
+        //   FAIL    -> a GUARD violation (write past the end / before index 0): a
+        //              real buffer over/under-run, the issue's core blind spot.
+        //   partial -> an in-bounds element left unwritten with NO guard violation:
+        //              expected for reduction/index/accumulator kernels (fixed-size
+        //              scalar output, not num_points elements), which the signature
+        //              cannot distinguish from a real map under-write — surfaced for
+        //              triage, not counted as a failure.
+        // Puppets are skipped: their output-buffer semantics differ from a plain map.
+        std::cout << "# output-canary sweep: vlens 1..40, 131071, 1000003\n";
+        std::cout.flush();
+        int c_tested = 0, c_failed = 0, c_partial = 0;
+        for (auto& tc : test_cases) {
+            if (!filter.empty() && tc.name() != filter)
+                continue;
+            if (tc.puppet_master_name() != "NULL") {
+                std::cout << "skip  [canary] " << tc.name() << " (puppet)\n";
+                if (report)
+                    std::fprintf(report, "%s,canary,skip,\n", tc.name().c_str());
+                std::cout.flush();
+                continue;
+            }
+            std::vector<unsigned int> over_run;
+            std::vector<unsigned int> partial;
+            bool any_applied = false;
+            for (unsigned int v : vlens) {
+                const volk_canary_summary s = quiet_canary_run(tc, v);
+                if (s.applied)
+                    any_applied = true;
+                if (s.guard_violation)
+                    over_run.push_back(v);
+                else if (s.unwritten)
+                    partial.push_back(v);
+            }
+            // A kernel the canary could not guard (no output buffer / unsupported
+            // signature) is SKIPPED, not reported ok — an unguarded kernel must not
+            // masquerade as covered. But a guard violation (incl. an exception, which
+            // quiet_canary_run reports as guard_violation) is a real defect and must
+            // FAIL even when no impl was successfully guarded: skip only when nothing
+            // was observed at all (fail closed).
+            if (!any_applied && over_run.empty() && partial.empty()) {
+                std::cout << "skip  [canary] " << tc.name()
+                          << " (no guardable output buffer)\n";
+                if (report)
+                    std::fprintf(report, "%s,canary,skip,\n", tc.name().c_str());
+                std::cout.flush();
+                continue;
+            }
+            ++c_tested;
+            const char* status;
+            const std::vector<unsigned int>* vl;
+            if (!over_run.empty()) {
+                ++c_failed;
+                status = "FAIL";
+                vl = &over_run;
+                std::cout << "FAIL  [canary] " << tc.name() << "  over-run vlens:";
+            } else if (!partial.empty()) {
+                ++c_partial;
+                status = "partial";
+                vl = &partial;
+                std::cout << "part  [canary] " << tc.name()
+                          << "  unwritten (reduction?) vlens:";
+            } else {
+                status = "ok";
+                vl = nullptr;
+                std::cout << "ok    [canary] " << tc.name();
+            }
+            if (vl) {
+                for (unsigned int v : *vl)
+                    std::cout << " " << v;
+            }
+            std::cout << "\n";
+            if (report) {
+                std::string vs;
+                if (vl) {
+                    for (unsigned int v : *vl) {
+                        vs += std::to_string(v);
+                        vs += ' ';
+                    }
+                }
+                std::fprintf(
+                    report, "%s,canary,%s,%s\n", tc.name().c_str(), status, vs.c_str());
+            }
+            std::cout.flush();
+        }
+        if (report)
+            std::fclose(report);
+        std::cerr << "\noutput-canary sweep: " << c_failed << " / " << c_tested
+                  << " kernels over-ran the output buffer; " << c_partial
+                  << " left in-bounds elements unwritten (reduction/index kernels — "
+                     "triage)\n";
+        return c_failed > 0 ? 1 : 0;
     }
 
     std::cout << "# kernel-correctness remainder sweep: vlens 1..40, 131071, 1000003\n";
