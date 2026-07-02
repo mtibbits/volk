@@ -32,6 +32,7 @@ import os
 import signal
 import subprocess
 import sys
+import zlib
 
 MODES = {
     "sweep": {},  # default correctness sweep (ref|impl per registration)
@@ -69,7 +70,7 @@ def read_report_rows(report):
     return rows
 
 
-def run_one(binary, libdir, kernel, mode, timeout, tmpdir):
+def run_one(binary, libdir, kernel, mode, timeout, tmpdir, base_seed=None):
     report = os.path.join(tmpdir, f"{kernel}.{mode}.csv")
     # A process killed before fopen would otherwise merge a PRIOR invocation's
     # rows for this (kernel, mode).
@@ -80,6 +81,13 @@ def run_one(binary, libdir, kernel, mode, timeout, tmpdir):
     env = dict(os.environ)
     env["LD_LIBRARY_PATH"] = libdir + os.pathsep + env.get("LD_LIBRARY_PATH", "")
     env["HARNESS_REPORT"] = report
+    # #134: derive a distinct deterministic seed per (kernel, mode) child;
+    # zlib.crc32 is stable across runs/platforms (Python's hash() is salted).
+    if base_seed is not None:
+        child = (base_seed * 1000003 ^ zlib.crc32(f"{kernel}.{mode}".encode())) & 0x7FFFFFFF
+        env["HARNESS_SEED"] = str(child)
+    else:
+        env.pop("HARNESS_SEED", None)  # ambient export must not half-seed a run
     env.update(MODES[mode])
     if mode == "misaligned":
         # the misaligned mode's own SIGSEGV handler must win over ASan's
@@ -126,7 +134,20 @@ def main():
     ap.add_argument("--jobs", type=int, default=os.cpu_count() or 4)
     ap.add_argument("--timeout", type=int, default=900)
     ap.add_argument("--only", default="")
+    ap.add_argument(
+        "--seed",
+        type=int,
+        default=None,
+        help="pin qa data deterministically; per-(kernel,mode) child seeds are "
+        "derived from this value (falls back to HARNESS_SEED in the env)",
+    )
     args = ap.parse_args()
+    base_seed = args.seed
+    if base_seed is None and os.environ.get("HARNESS_SEED"):
+        try:
+            base_seed = int(os.environ["HARNESS_SEED"])
+        except ValueError:
+            sys.exit(f"HARNESS_SEED must be an integer, got: {os.environ['HARNESS_SEED']!r}")
 
     repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     libdir = os.path.join(os.path.abspath(args.build_dir), "lib")
@@ -153,7 +174,7 @@ def main():
     all_rows = []
     with cf.ThreadPoolExecutor(max_workers=args.jobs) as ex:
         futs = [
-            ex.submit(run_one, binary, libdir, k, m, args.timeout, tmpdir)
+            ex.submit(run_one, binary, libdir, k, m, args.timeout, tmpdir, base_seed)
             for (k, m) in jobs
         ]
         done = 0
@@ -173,6 +194,8 @@ def main():
         w.writerow(HEADER)
         w.writerows(all_rows)
     n_find = sum(1 for r in all_rows if r[3] in ("FAIL", "abort"))
+    seed_desc = base_seed if base_seed is not None else "none (re-randomized)"
+    print(f"# seed={seed_desc}", file=sys.stderr)
     print(
         f"# wrote {args.out}: {len(all_rows)} rows, "
         f"{n_find} FAIL/abort finding rows",
