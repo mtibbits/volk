@@ -33,6 +33,18 @@
  * \b Outputs
  * \li bVector: Output vector of arccosine results in radians (float).
  *
+ * \b Numerical accuracy
+ *
+ * All implementations (including generic) compute acos(x) = pi/2 - asin(x)
+ * over a shared two-range asin polynomial. Measured over uniform (-1, 1)
+ * plus a dense sweep approaching +/-1: absolute error vs IEEE acos reaches
+ * 1.9e-6 (worst near |x| = 0.5, the polynomial range handoff); the
+ * reflection itself adds only ~1.3e-7. Because acos -> 0 as x -> 1, a
+ * relative error metric is ill-posed near +/-1; the QA tolerance
+ * (registered in lib/kernel_tests.h) is therefore an ABSOLUTE bound of
+ * 4e-6 on the impl-vs-generic difference, covering the sum of both
+ * approximations' errors (~3.7e-6).
+ *
  * \b Example
  * Compute arccosine for known values and verify against expected results.
  * \code
