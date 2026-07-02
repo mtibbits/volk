@@ -59,11 +59,13 @@
  *
  * All implementations approximate log2. The SIMD tiers share a polynomial
  * whose measured absolute error reaches 5.25e-6 vs IEEE log2 (worst near
- * power-of-two inputs); generic uses volk_log2f_non_ieee (measured 9.5e-7).
- * The QA tolerance (registered in lib/kernel_tests.h) bounds the
- * impl-vs-generic difference, which can approach the sum of both errors,
- * and is set to 8e-6 absolute. Inputs <= 0 produce unspecified non-IEEE
- * values.
+ * power-of-two inputs; larger than the polynomial's ~1.55e-6 design residual
+ * because float Horner evaluation and range reduction add rounding);
+ * generic uses volk_log2f_non_ieee (measured 9.5e-7). The QA tolerance
+ * (registered in lib/kernel_tests.h) bounds the impl-vs-generic difference,
+ * which can approach the sum of both errors, and is set to 8e-6 absolute.
+ * Inputs <= 0 follow the non-IEEE mapping above (0 -> -127.0f, negative ->
+ * NaN) uniformly across implementations.
  *
  * \b Example
  * \code
