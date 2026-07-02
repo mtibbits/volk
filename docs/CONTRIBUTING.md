@@ -59,6 +59,20 @@ VOLK unit tests compare the results of each kernel version to the generic versio
 Keep the generic kernel version as simple as possible and verify your optimized
 kernels against the generic version.
 
+## Per-machine dispatch-table integrity check
+
+CMake invokes `cmake/check_dispatch_tables.py` after codegen and before
+compiling any `volk_machine_<name>.c`. The script verifies that every
+kernel implementation whose `LV_HAVE_*` source-gates are all defined by
+a machine's macro set is also present in that machine's per-kernel
+dispatch array. If you change anything under `gen/` or `tmpl/` and the
+build fails with `DISPATCH TABLE INTEGRITY CHECK FAILED`, your change
+silently dropped impls from the dispatch table on at least one machine
+— the failure message names the affected (machine, kernel, impl, gates).
+This is a class of bug VOLK's own ctest cannot detect, because the
+`qa_<kernel>` test harness bypasses the per-machine dispatch arrays
+production callers use. See mtibbits/volk#58 for background.
+
 ## The Buddy Principle: Submit One, Review One
 
 When you've submitted a pull request, please take the time to review another
