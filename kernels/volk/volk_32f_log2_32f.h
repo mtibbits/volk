@@ -55,13 +55,15 @@
  * \b Outputs
  * \li bVector: The output vector.
  *
- * \b Accuracy
- * All implementations approximate log2: the SIMD tiers share a polynomial whose
- * measured absolute error reaches 5.25e-6 vs IEEE log2 (worst near power-of-two
- * inputs), and generic uses volk_log2f_non_ieee (measured 9.5e-7). The QA
- * tolerance bounds the impl-vs-generic difference, which can approach the sum
- * of both errors; it is registered as 8e-6 absolute. Inputs <= 0 produce
- * unspecified non-IEEE values.
+ * \b Numerical accuracy
+ *
+ * All implementations approximate log2. The SIMD tiers share a polynomial
+ * whose measured absolute error reaches 5.25e-6 vs IEEE log2 (worst near
+ * power-of-two inputs); generic uses volk_log2f_non_ieee (measured 9.5e-7).
+ * The QA tolerance (registered in lib/kernel_tests.h) bounds the
+ * impl-vs-generic difference, which can approach the sum of both errors,
+ * and is set to 8e-6 absolute. Inputs <= 0 produce unspecified non-IEEE
+ * values.
  *
  * \b Example
  * \code
