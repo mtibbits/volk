@@ -66,6 +66,40 @@ install(
     DESTINATION bin
     COMPONENT "volk")
 
+# Round-trip regression test for the volk_config reader/writer (issue #158).
+# Drives the volk_profile binary; needs Python 3 (already required for codegen).
+if(ENABLE_TESTING)
+    set(volk_config_roundtrip_test
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_volk_config_roundtrip.py)
+
+    # The test drives the *uninstalled* build-tree volk_profile directly, so --
+    # unlike the QA tests, which run through VolkAddTest's generated wrappers --
+    # nothing puts the build-tree libvolk on the runtime loader path. When the
+    # target is cross-compiled, it must also be launched through the emulator.
+    # Pass the emulator (space-joined; the test re-splits it) and prepend the
+    # libvolk directory to the platform loader path below.
+    set(_volk_rt_emulator_arg "")
+    if(CMAKE_CROSSCOMPILING_EMULATOR)
+        string(REPLACE ";" " " _volk_rt_emulator "${CMAKE_CROSSCOMPILING_EMULATOR}")
+        set(_volk_rt_emulator_arg --emulator "${_volk_rt_emulator}")
+    endif()
+
+    add_test(
+        NAME volk_config_roundtrip
+        COMMAND ${PYTHON_EXECUTABLE} ${volk_config_roundtrip_test}
+                --binary $<TARGET_FILE:volk_profile> ${_volk_rt_emulator_arg})
+
+    # The test seeds the config so the kernel is skipped (no profiling) and runs
+    # in well under a second. Bound it so any future over-match that triggers real
+    # profiling fails closed instead of hanging CI. ENVIRONMENT_MODIFICATION
+    # prepends the libvolk dir to PATH (Windows DLL), LD_LIBRARY_PATH (Linux) and
+    # DYLD_LIBRARY_PATH (macOS); without it the binary aborts at image load.
+    set_tests_properties(volk_config_roundtrip PROPERTIES
+        TIMEOUT 60
+        ENVIRONMENT_MODIFICATION
+            "PATH=path_list_prepend:$<TARGET_FILE_DIR:volk>;LD_LIBRARY_PATH=path_list_prepend:$<TARGET_FILE_DIR:volk>;DYLD_LIBRARY_PATH=path_list_prepend:$<TARGET_FILE_DIR:volk>")
+endif(ENABLE_TESTING)
+
 # Launch volk_profile if requested to do so
 if(ENABLE_PROFILING)
     if(DEFINED VOLK_CONFIGPATH)
