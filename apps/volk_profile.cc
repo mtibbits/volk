@@ -32,6 +32,7 @@ namespace fs = std::filesystem;
 volk_test_params_t test_params(1e-6f, 327.f, 131071, 1987, false, "");
 
 void set_benchmark(bool val) { test_params.set_benchmark(val); }
+void set_with_minmax(bool val) { test_params.set_with_minmax(val); }
 void set_tolerance(float val)
 {
     if (val < 0) {
@@ -60,10 +61,20 @@ std::vector<std::string> kernel_patterns;
 void set_substr(std::string val) { kernel_patterns.push_back(val); }
 bool update_mode = false;
 void set_update(bool val) { update_mode = val; }
+void set_trials(int val)
+{
+    if (val < 1) {
+        std::cerr << "volk_profile: --trials must be at least 1\n";
+        std::exit(1);
+    }
+    test_params.set_trials((unsigned int)val);
+}
 bool dry_run = false;
 void set_dryrun(bool val) { dry_run = val; }
 std::string json_filename("");
 void set_json(std::string val) { json_filename = val; }
+std::string trial_csv_path("");
+void set_trial_csv_path(std::string val) { trial_csv_path = val; }
 std::string volk_config_path("");
 void set_volk_config(std::string val) { volk_config_path = val; }
 void set_warmup(int val)
@@ -82,11 +93,23 @@ int main(int argc, char* argv[])
     profile_options.add(
         option_t("benchmark", "b", "Run all kernels (benchmark mode)", set_benchmark));
     profile_options.add(
+        option_t("with-minmax",
+                 "",
+                 "Add per-arch min and max columns to the -T results table "
+                 "(requires -T >= 2)",
+                 set_with_minmax));
+    profile_options.add(
         option_t("tol", "t", "Set the default tolerance for all tests", set_tolerance));
     profile_options.add(
         option_t("vlen", "v", "Set the default vector length for tests", set_vlen));
     profile_options.add((option_t(
         "iter", "i", "Set the default number of test iterations per kernel", set_iter)));
+    profile_options.add(
+        (option_t("trials",
+                  "T",
+                  "Run the timed loop N times per kernel and report median + MAD "
+                  "(default 1; 10-30 recommended for a stable MAD estimate)",
+                  set_trials)));
     profile_options.add((option_t("tests-substr",
                                   "R",
                                   "Run tests matching substring (can be repeated)",
@@ -100,6 +123,11 @@ int main(int argc, char* argv[])
                   set_dryrun)));
     profile_options.add((option_t(
         "json", "j", "Write results to JSON file named as argument value", set_json)));
+    profile_options.add(option_t("trial-csv",
+                                 "",
+                                 "Write per-trial timings to FILE "
+                                 "(creates or truncates; existing content is lost)",
+                                 set_trial_csv_path));
     profile_options.add(
         (option_t("path", "p", "Specify the volk_config path", set_volk_config)));
     profile_options.add(
@@ -181,6 +209,17 @@ int main(int argc, char* argv[])
         json_file.open(json_filename.c_str());
     }
 
+    std::ofstream csv_file;
+    if (!trial_csv_path.empty()) {
+        csv_file.open(trial_csv_path);
+        if (!csv_file.is_open()) {
+            std::cerr << "error: cannot open --trial-csv target '" << trial_csv_path
+                      << "'\n";
+            return 1;
+        }
+        csv_file << "kernel,arch,trial,time_ms\n";
+    }
+
     if (volk_config_path != "") {
         config_file = volk_config_path + "/volk_config";
     }
@@ -231,7 +270,8 @@ int main(int argc, char* argv[])
                                test_case.name(),
                                test_case.test_parameters(),
                                &results,
-                               test_case.puppet_master_name());
+                               test_case.puppet_master_name(),
+                               csv_file.is_open() ? &csv_file : nullptr);
             } catch (std::string& error) {
                 std::cerr << "Caught Exception in 'run_volk_tests': " << error
                           << std::endl;

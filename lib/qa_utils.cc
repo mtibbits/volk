@@ -18,10 +18,12 @@
 #include <stdint.h>    // for uint16_t, uint64_t
 #include <sys/time.h>  // for CLOCKS_PER_SEC
 #include <sys/types.h> // for int16_t, int32_t
+#include <algorithm>   // for std::sort, std::minmax_element
 #include <chrono>
 #include <cmath>    // for sqrt, fabs, abs
 #include <cstring>  // for memcpy, memset
 #include <ctime>    // for clock
+#include <fstream>  // for std::ofstream (csv_out)
 #include <iostream> // for cerr
 #include <limits>   // for numeric_limits
 #include <map>      // for map, map<>::mappe...
@@ -29,6 +31,7 @@
 #include <vector> // for vector, _Bit_refe...
 
 #include <fmt/format.h>
+#include <fmt/ostream.h>
 
 // Warmup time for CPU frequency scaling (ms)
 static double g_warmup_ms = 2000.0;
@@ -37,6 +40,33 @@ static bool g_warmup_done = false;
 double volk_test_get_warmup_ms() { return g_warmup_ms; }
 void volk_test_set_warmup_ms(double ms) { g_warmup_ms = ms; }
 void volk_test_reset_warmup() { g_warmup_done = false; }
+
+static double compute_median(std::vector<double> v)
+{
+    std::sort(v.begin(), v.end());
+    const size_t n = v.size();
+    if (n == 0) {
+        return 0.0;
+    }
+    if (n % 2 == 1) {
+        return v[n / 2];
+    }
+    return 0.5 * (v[n / 2 - 1] + v[n / 2]);
+}
+
+static double compute_mad(const std::vector<double>& v, double median)
+{
+    if (v.size() < 2) {
+        return 0.0;
+    }
+    std::vector<double> deviations;
+    deviations.reserve(v.size());
+    for (double x : v) {
+        deviations.push_back(std::fabs(x - median));
+    }
+    // 1.4826 scales MAD to a consistent estimator of σ under normality
+    return 1.4826 * compute_median(std::move(deviations));
+}
 
 template <typename T>
 void random_floats(void* buf, unsigned int n, std::default_random_engine& rnd_engine)
@@ -761,7 +791,8 @@ bool run_volk_tests(volk_func_desc_t desc,
                     std::string name,
                     volk_test_params_t test_params,
                     std::vector<volk_test_results_t>* results,
-                    std::string puppet_master_name)
+                    std::string puppet_master_name,
+                    std::ofstream* csv_out)
 {
     return run_volk_tests(desc,
                           manual_func,
@@ -775,7 +806,10 @@ bool run_volk_tests(volk_func_desc_t desc,
                           test_params.absolute_mode(),
                           test_params.benchmark_mode(),
                           test_params.float_edge_cases(),
-                          test_params.complex_edge_cases());
+                          test_params.complex_edge_cases(),
+                          test_params.trials(),
+                          test_params.with_minmax(),
+                          csv_out);
 }
 
 bool run_volk_tests(volk_func_desc_t desc,
@@ -790,7 +824,10 @@ bool run_volk_tests(volk_func_desc_t desc,
                     bool absolute_mode,
                     bool benchmark_mode,
                     const std::vector<float>& float_edge_cases,
-                    const std::vector<lv_32fc_t>& complex_edge_cases)
+                    const std::vector<lv_32fc_t>& complex_edge_cases,
+                    unsigned int trials,
+                    bool with_minmax,
+                    std::ofstream* csv_out)
 {
     // Initialize this entry in results vector
     results->push_back(volk_test_results_t());
@@ -1089,43 +1126,50 @@ bool run_volk_tests(volk_func_desc_t desc,
         g_warmup_done = true;
     }
 
-    // Reset all test buffers after warmup
-    for (size_t i = 0; i < arch_list.size(); i++) {
-        for (size_t j = 0; j < outputsig.size(); j++) {
-            memset(test_data[i][j],
-                   0,
-                   vlen * outputsig[j].size * (outputsig[j].is_complex ? 2 : 1));
+    // Zero output buffers and reload input buffers from the original data
+    // for every arch. Used between warmup and timed runs.
+    auto reset_test_buffers = [&]() {
+        for (size_t i = 0; i < arch_list.size(); i++) {
+            for (size_t j = 0; j < outputsig.size(); j++) {
+                memset(test_data[i][j],
+                       0,
+                       vlen * outputsig[j].size * (outputsig[j].is_complex ? 2 : 1));
+            }
+            for (size_t j = 0; j < inputsig.size(); j++) {
+                memcpy(test_data[i][outputsig.size() + j],
+                       inbuffs[j],
+                       vlen * inputsig[j].size * (inputsig[j].is_complex ? 2 : 1));
+            }
         }
-        // Reload input buffers from original data
-        for (size_t j = 0; j < inputsig.size(); j++) {
-            memcpy(test_data[i][outputsig.size() + j],
-                   inbuffs[j],
-                   vlen * inputsig[j].size * (inputsig[j].is_complex ? 2 : 1));
-        }
-    }
+    };
 
-    for (size_t i = 0; i < arch_list.size(); i++) {
-        start = std::chrono::system_clock::now();
+    // Reset all test buffers after the global CPU-frequency warmup.
+    reset_test_buffers();
 
+    // Dispatch one timed run of arch index `i` with `n_iter` iterations.
+    auto run_one_arch = [&](size_t i, unsigned int n_iter) {
         switch (both_sigs.size()) {
         case 1:
             if (inputsc.size() == 0) {
-                run_cast_test1(
-                    (volk_fn_1arg)(manual_func), test_data[i], vlen, iter, arch_list[i]);
+                run_cast_test1((volk_fn_1arg)(manual_func),
+                               test_data[i],
+                               vlen,
+                               n_iter,
+                               arch_list[i]);
             } else if (inputsc.size() == 1 && inputsc[0].is_float) {
                 if (inputsc[0].is_complex) {
                     run_cast_test1_s32fc((volk_fn_1arg_s32fc)(manual_func),
                                          test_data[i],
                                          scalar,
                                          vlen,
-                                         iter,
+                                         n_iter,
                                          arch_list[i]);
                 } else {
                     run_cast_test1_s32f((volk_fn_1arg_s32f)(manual_func),
                                         test_data[i],
                                         scalar.real(),
                                         vlen,
-                                        iter,
+                                        n_iter,
                                         arch_list[i]);
                 }
             } else
@@ -1133,22 +1177,25 @@ bool run_volk_tests(volk_func_desc_t desc,
             break;
         case 2:
             if (inputsc.size() == 0) {
-                run_cast_test2(
-                    (volk_fn_2arg)(manual_func), test_data[i], vlen, iter, arch_list[i]);
+                run_cast_test2((volk_fn_2arg)(manual_func),
+                               test_data[i],
+                               vlen,
+                               n_iter,
+                               arch_list[i]);
             } else if (inputsc.size() == 1 && inputsc[0].is_float) {
                 if (inputsc[0].is_complex) {
                     run_cast_test2_s32fc((volk_fn_2arg_s32fc)(manual_func),
                                          test_data[i],
                                          scalar,
                                          vlen,
-                                         iter,
+                                         n_iter,
                                          arch_list[i]);
                 } else {
                     run_cast_test2_s32f((volk_fn_2arg_s32f)(manual_func),
                                         test_data[i],
                                         scalar.real(),
                                         vlen,
-                                        iter,
+                                        n_iter,
                                         arch_list[i]);
                 }
             } else
@@ -1156,22 +1203,25 @@ bool run_volk_tests(volk_func_desc_t desc,
             break;
         case 3:
             if (inputsc.size() == 0) {
-                run_cast_test3(
-                    (volk_fn_3arg)(manual_func), test_data[i], vlen, iter, arch_list[i]);
+                run_cast_test3((volk_fn_3arg)(manual_func),
+                               test_data[i],
+                               vlen,
+                               n_iter,
+                               arch_list[i]);
             } else if (inputsc.size() == 1 && inputsc[0].is_float) {
                 if (inputsc[0].is_complex) {
                     run_cast_test3_s32fc((volk_fn_3arg_s32fc)(manual_func),
                                          test_data[i],
                                          scalar,
                                          vlen,
-                                         iter,
+                                         n_iter,
                                          arch_list[i]);
                 } else {
                     run_cast_test3_s32f((volk_fn_3arg_s32f)(manual_func),
                                         test_data[i],
                                         scalar.real(),
                                         vlen,
-                                        iter,
+                                        n_iter,
                                         arch_list[i]);
                 }
             } else
@@ -1179,16 +1229,50 @@ bool run_volk_tests(volk_func_desc_t desc,
             break;
         case 4:
             run_cast_test4(
-                (volk_fn_4arg)(manual_func), test_data[i], vlen, iter, arch_list[i]);
+                (volk_fn_4arg)(manual_func), test_data[i], vlen, n_iter, arch_list[i]);
             break;
         default:
             throw "no function handler for this signature";
             break;
         }
+    };
 
-        end = std::chrono::system_clock::now();
-        std::chrono::duration<double> elapsed_seconds = end - start;
-        double arch_time = 1000.0 * elapsed_seconds.count();
+    // Per-arch warmup pass: run each arch once with iter=1 so ORC JIT
+    // compilation, instruction caches, and branch predictors are warm
+    // before the timed measurement. The generic arch is intentionally
+    // included even though g_warmup_done covers it; the cost is one
+    // extra single-iteration call. Fixes gnuradio/volk#203.
+    for (size_t i = 0; i < arch_list.size(); i++) {
+        run_one_arch(i, 1);
+    }
+
+    // Reset all test buffers after the per-arch warmup pass.
+    reset_test_buffers();
+
+    // Timed measurement pass.
+    std::vector<double> profile_mads(arch_list.size(), 0.0);
+    std::vector<double> profile_mins(arch_list.size(), 0.0);
+    std::vector<double> profile_maxes(arch_list.size(), 0.0);
+
+    for (size_t i = 0; i < arch_list.size(); i++) {
+        std::vector<double> arch_samples;
+        arch_samples.reserve(trials);
+
+        for (unsigned int t = 0; t < trials; t++) {
+            start = std::chrono::system_clock::now();
+            run_one_arch(i, iter);
+            end = std::chrono::system_clock::now();
+
+            std::chrono::duration<double> elapsed_seconds = end - start;
+            arch_samples.push_back(1000.0 * elapsed_seconds.count());
+        }
+
+        double arch_time = compute_median(arch_samples);
+        profile_mads[i] = compute_mad(arch_samples, arch_time);
+        auto [min_it, max_it] =
+            std::minmax_element(arch_samples.begin(), arch_samples.end());
+        profile_mins[i] = *min_it;
+        profile_maxes[i] = *max_it;
 
         volk_test_time_t result;
         result.name = arch_list[i];
@@ -1198,6 +1282,18 @@ bool run_volk_tests(volk_func_desc_t desc,
         results->back().results[result.name] = result;
 
         profile_times.push_back(arch_time);
+
+        // Write per-trial CSV rows if csv_out is active
+        if (csv_out) {
+            for (unsigned int t = 0; t < trials; t++) {
+                fmt::print(*csv_out,
+                           "{},{},{},{:.6g}\n",
+                           name,
+                           arch_list[i],
+                           t,
+                           arch_samples[t]);
+            }
+        }
     }
 
     // and now compare each output to the generic output
@@ -1440,6 +1536,7 @@ bool run_volk_tests(volk_func_desc_t desc,
     constexpr int w_tput = 14;
     constexpr int w_speedup = 8;
     constexpr int w_err = 10;
+    constexpr int w_mad = 6;
 
     // Column header depends on error mode
     // Integer outputs always use absolute comparison, so show "max_abs" for them
@@ -1461,31 +1558,98 @@ bool run_volk_tests(volk_func_desc_t desc,
         return fmt::format("{:.1f} MB/s", mbps);
     };
 
-    // Print table header
-    fmt::print("{:<{}} | {:>{}} | {:>{}} | {:>{}} | {:>{}} |\n",
-               "arch",
-               w_arch,
-               "time",
-               w_time,
-               "throughput",
-               w_tput,
-               "speedup",
-               w_speedup,
-               err_col,
-               w_err);
-    fmt::print("{:-<{}}-+-{:-<{}}-+-{:-<{}}-+-{:-<{}}-+-{:-<{}}-+\n",
-               "",
-               w_arch,
-               "",
-               w_time,
-               "",
-               w_tput,
-               "",
-               w_speedup,
-               "",
-               w_err);
+    // Print table header — Mode A, B, or C.
+    if (trials > 1 && with_minmax) {
+        fmt::print("{:<{}} | {:>{}} | {:>{}} | {:>{}} | {:>{}} "
+                   "| {:>{}} | {:>{}} | {:>{}} |\n",
+                   "arch",
+                   w_arch,
+                   "median",
+                   w_time,
+                   "MAD%",
+                   w_mad,
+                   "min",
+                   w_time,
+                   "max",
+                   w_time,
+                   "throughput",
+                   w_tput,
+                   "speedup",
+                   w_speedup,
+                   err_col,
+                   w_err);
+        fmt::print("{:-<{}}-+-{:-<{}}-+-{:-<{}}-+-{:-<{}}-+-{:-<{}}"
+                   "-+-{:-<{}}-+-{:-<{}}-+-{:-<{}}-+\n",
+                   "",
+                   w_arch,
+                   "",
+                   w_time,
+                   "",
+                   w_mad,
+                   "",
+                   w_time,
+                   "",
+                   w_time,
+                   "",
+                   w_tput,
+                   "",
+                   w_speedup,
+                   "",
+                   w_err);
+    } else if (trials > 1) {
+        fmt::print("{:<{}} | {:>{}} | {:>{}} | {:>{}} | {:>{}} | {:>{}} |\n",
+                   "arch",
+                   w_arch,
+                   "median",
+                   w_time,
+                   "MAD%",
+                   w_mad,
+                   "throughput",
+                   w_tput,
+                   "speedup",
+                   w_speedup,
+                   err_col,
+                   w_err);
+        fmt::print("{:-<{}}-+-{:-<{}}-+-{:-<{}}-+-{:-<{}}-+-{:-<{}}-+-{:-<{}}-+\n",
+                   "",
+                   w_arch,
+                   "",
+                   w_time,
+                   "",
+                   w_mad,
+                   "",
+                   w_tput,
+                   "",
+                   w_speedup,
+                   "",
+                   w_err);
+    } else {
+        fmt::print("{:<{}} | {:>{}} | {:>{}} | {:>{}} | {:>{}} |\n",
+                   "arch",
+                   w_arch,
+                   "time",
+                   w_time,
+                   "throughput",
+                   w_tput,
+                   "speedup",
+                   w_speedup,
+                   err_col,
+                   w_err);
+        fmt::print("{:-<{}}-+-{:-<{}}-+-{:-<{}}-+-{:-<{}}-+-{:-<{}}-+\n",
+                   "",
+                   w_arch,
+                   "",
+                   w_time,
+                   "",
+                   w_tput,
+                   "",
+                   w_speedup,
+                   "",
+                   w_err);
+    }
 
-    // Print each architecture row
+    // Print each architecture row — per-row computation is shared; only
+    // the fmt::print call differs (Mode B inserts the MAD% column).
     for (size_t i = 0; i < arch_list.size(); i++) {
         double time_seconds = profile_times[i] / 1000.0;
         double throughput_mbps = total_mb / time_seconds;
@@ -1504,18 +1668,65 @@ bool run_volk_tests(volk_func_desc_t desc,
         std::string win_str =
             (arch_list[i] == best_arch_a || arch_list[i] == best_arch_u) ? " *" : "";
 
-        fmt::print("{:<{}} | {:>{}} | {:>{}} | {:>{}} | {:>{}} |{}\n",
-                   arch_list[i],
-                   w_arch,
-                   time_str,
-                   w_time,
-                   tput_str,
-                   w_tput,
-                   speedup_str,
-                   w_speedup,
-                   err_str,
-                   w_err,
-                   win_str);
+        if (trials > 1 && with_minmax) {
+            std::string mad_str =
+                (profile_times[i] > 0.0)
+                    ? fmt::format("{:.1f}%", 100.0 * profile_mads[i] / profile_times[i])
+                    : std::string("-");
+            std::string min_str = format_time(profile_mins[i]);
+            std::string max_str = format_time(profile_maxes[i]);
+            fmt::print("{:<{}} | {:>{}} | {:>{}} | {:>{}} | {:>{}} "
+                       "| {:>{}} | {:>{}} | {:>{}} |{}\n",
+                       arch_list[i],
+                       w_arch,
+                       time_str,
+                       w_time,
+                       mad_str,
+                       w_mad,
+                       min_str,
+                       w_time,
+                       max_str,
+                       w_time,
+                       tput_str,
+                       w_tput,
+                       speedup_str,
+                       w_speedup,
+                       err_str,
+                       w_err,
+                       win_str);
+        } else if (trials > 1) {
+            std::string mad_str =
+                (profile_times[i] > 0.0)
+                    ? fmt::format("{:.1f}%", 100.0 * profile_mads[i] / profile_times[i])
+                    : std::string("-");
+            fmt::print("{:<{}} | {:>{}} | {:>{}} | {:>{}} | {:>{}} | {:>{}} |{}\n",
+                       arch_list[i],
+                       w_arch,
+                       time_str,
+                       w_time,
+                       mad_str,
+                       w_mad,
+                       tput_str,
+                       w_tput,
+                       speedup_str,
+                       w_speedup,
+                       err_str,
+                       w_err,
+                       win_str);
+        } else {
+            fmt::print("{:<{}} | {:>{}} | {:>{}} | {:>{}} | {:>{}} |{}\n",
+                       arch_list[i],
+                       w_arch,
+                       time_str,
+                       w_time,
+                       tput_str,
+                       w_tput,
+                       speedup_str,
+                       w_speedup,
+                       err_str,
+                       w_err,
+                       win_str);
+        }
     }
 
     // Print best arch summary (left-aligned, ":" at arch column width)
@@ -1542,7 +1753,13 @@ bool run_volk_tests(volk_func_desc_t desc,
                           tol_f);
     }
 
-    fmt::print("{:-<88}\n", "");
+    if (trials > 1 && with_minmax) {
+        fmt::print("{:-<131}\n", "");
+    } else if (trials > 1) {
+        fmt::print("{:-<97}\n", "");
+    } else {
+        fmt::print("{:-<88}\n", "");
+    }
 
     if (puppet_master_name == "NULL") {
         results->back().config_name = name;
