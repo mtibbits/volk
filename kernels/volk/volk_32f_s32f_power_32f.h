@@ -12,46 +12,52 @@
  *
  * \b Overview
  *
- * Takes each input vector value to the specified power and stores the
- * results in the return vector.
+ * Raises each element of the input vector to the specified scalar power
+ * and stores the results in the output vector: c[i] = powf(a[i], power).
+ *
+ * Element-wise exponentiation is used in signal processing for power-law
+ * compression and expansion, non-linear amplitude transformations, and
+ * computing signal statistics such as higher-order moments. For example,
+ * squaring a signal (power = 2) is a common step in energy detection and
+ * spectral analysis pipelines.
  *
  * <b>Dispatcher Prototype</b>
  * \code
  * void volk_32f_s32f_power_32f(float* cVector, const float* aVector, const float power,
- * unsigned int num_points) \endcode
+ * unsigned int num_points)
+ * \endcode
  *
  * \b Inputs
- * \li aVector: The input vector of floats.
- * \li power: The power to raise the input value to.
+ * \li aVector: The input vector of signal samples (float).
+ * \li power: The exponent to raise each input value to (float).
  * \li num_points: The number of data points.
  *
  * \b Outputs
- * \li cVector: The output vector.
+ * \li cVector: The output vector of transformed samples (float).
  *
  * \b Example
- * Square the numbers (0,9)
+ * Cube a constant vector and verify the result.
  * \code
- *   int N = 10;
- *   unsigned int alignment = volk_get_alignment();
- *   float* increasing = (float*)volk_malloc(sizeof(float)*N, alignment);
- *   float* out = (float*)volk_malloc(sizeof(float)*N, alignment);
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
+ * float* in = (float*)volk_malloc(sizeof(float) * N, alignment);
+ * float* out = (float*)volk_malloc(sizeof(float) * N, alignment);
  *
+ * for (unsigned int i = 0; i < N; ++i) {
+ *     in[i] = 2.0f;
+ * }
+ * float power = 3.0f;
  *
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       increasing[ii] = (float)ii;
- *   }
+ * // Expected: powf(2.0, 3.0) = 8.0 for each element
+ * float expected = 8.0f;
  *
- *   // Normalize by the smallest delta (0.2 in this example)
- *   float scale = 2.0f;
+ * volk_32f_s32f_power_32f(out, in, power, N);
  *
- *   volk_32f_s32f_power_32f(out, increasing, scale, N);
+ * printf("Expected: %f\n", expected);
+ * printf("Result:   %f\n", out[0]);
  *
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       printf("out[%u] = %f\n", ii, out[ii]);
- *   }
- *
- *   volk_free(increasing);
- *   volk_free(out);
+ * volk_free(in);
+ * volk_free(out);
  * \endcode
  */
 

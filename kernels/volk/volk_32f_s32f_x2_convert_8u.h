@@ -13,47 +13,56 @@
  *
  * \b Overview
  *
- * Converts a floating point number to an 8-bit unsigned int after applying a
- * multiplicative scaling factor and an additive bias.
+ * Converts floating-point samples to 8-bit unsigned integers after applying a
+ * multiplicative scaling factor and an additive bias. Each output sample is
+ * computed as round(input * scale + bias), clamped to [0, 255].
+ *
+ * This kernel is commonly used for quantization in signal processing pipelines,
+ * such as preparing baseband samples for transmission through a DAC or packing
+ * normalized signal data into unsigned byte format for hardware interfaces or
+ * file I/O. The scale and bias parameters allow mapping an arbitrary input range
+ * to the full 8-bit unsigned dynamic range.
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_32f_s32f_x2_convert_8u(uint8_t* outputVector, const float* inputVector,
- const float scale, const float bias, unsigned int num_points)
- * \endcode
+ * void volk_32f_s32f_x2_convert_8u(uint8_t* outputVector, const float* inputVector, const
+ * float scale, const float bias, unsigned int num_points) \endcode
  *
  * \b Inputs
- * \li inputVector: the input vector of floats.
- * \li scale: The value multiplied against each point in the input buffer.
- * \li bias: The value added to each multiplication by the scale.
+ * \li inputVector: The input vector of floating-point samples (float).
+ * \li scale: The multiplicative scaling factor applied to each input sample (float).
+ * \li bias: The additive offset applied after scaling (float).
  * \li num_points: The number of data points.
  *
  * \b Outputs
- * \li outputVector: The output vector.
+ * \li outputVector: The output vector of converted values (uint8_t).
  *
  * \b Example
- * Convert floats from [-1,1] to 8-bit unsigend integers with a scale of 128 and a bias of
- 128
- *  int N = 10;
- *   unsigned int alignment = volk_get_alignment();
- *   float* increasing = (float*)volk_malloc(sizeof(float)*N, alignment);
- *   uint8_t* out = (uint8_t*)volk_malloc(sizeof(uint8_t)*N, alignment);
+ * Scale and bias four constant floats, then verify one output by hand.
+ * \code
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
  *
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       increasing[ii] = 2.f * ((float)ii / (float)N) - 1.f;
- *   }
+ * float* in = (float*)volk_malloc(sizeof(float) * N, alignment);
+ * uint8_t* out = (uint8_t*)volk_malloc(sizeof(uint8_t) * N, alignment);
  *
- *   float scale = 128.0f;
- *   float bias = 128.0f;
+ * for (unsigned int i = 0; i < N; ++i) {
+ *     in[i] = 0.5f;
+ * }
  *
- *   volk_32f_s32f_x2_convert_8u(out, increasing, scale, bias, N);
+ * float scale = 100.0f;
+ * float bias = 50.0f;
  *
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       printf("out[%u] = %i\n", ii, out[ii]);
- *   }
+ * // Expected: round(0.5 * 100 + 50) = 100 for each element
+ * uint8_t expected = 100;
  *
- *   volk_free(increasing);
- *   volk_free(out);
+ * volk_32f_s32f_x2_convert_8u(out, in, scale, bias, N);
+ *
+ * printf("Expected: %u\n", expected);
+ * printf("Result:   %u\n", out[0]);
+ *
+ * volk_free(in);
+ * volk_free(out);
  * \endcode
  */
 

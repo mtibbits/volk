@@ -12,33 +12,56 @@
  *
  * \b Overview
  *
- * This block computes the dot product (or inner product) between two
- * vectors, the \p input and \p taps vectors. Given a set of \p
- * num_points taps, the result is the sum of products between the two
- * vectors. The result is a single value stored in the \p result
- * address and is conerted to a fixed-point short.
+ * Computes the dot product (inner product) of two float vectors and stores
+ * the result as a 16-bit integer:
+ * result = round(sum(input[i] * taps[i])).
+ *
+ * This kernel is commonly used in FIR filtering and matched filtering, where
+ * the \p input vector contains signal samples and the \p taps vector holds
+ * the filter coefficients. The fixed-point output is useful in systems that
+ * require integer arithmetic downstream, such as hardware interfaces or
+ * fixed-point processing chains.
  *
  * <b>Dispatcher Prototype</b>
  * \code
  * void volk_32f_x2_dot_prod_16i(int16_t* result, const float* input, const float* taps,
- * unsigned int num_points) \endcode
+ * unsigned int num_points)
+ * \endcode
  *
  * \b Inputs
- * \li input: vector of floats.
- * \li taps:  float taps.
- * \li num_points: number of samples in both \p input and \p taps.
+ * \li input: The input signal samples (float).
+ * \li taps: The filter tap coefficients (float).
+ * \li num_points: The number of samples in both \p input and \p taps.
  *
  * \b Outputs
- * \li result: pointer to a short value to hold the dot product result.
+ * \li result: The dot product result, rounded to nearest integer (int16_t).
  *
  * \b Example
+ * Dot product of constant vectors: 4 * (2.0 * 3.0) = 24.
  * \code
- * int N = 10000;
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
  *
- * <FIXME>
+ * float* input = (float*)volk_malloc(sizeof(float) * N, alignment);
+ * float* taps = (float*)volk_malloc(sizeof(float) * N, alignment);
+ * int16_t* result = (int16_t*)volk_malloc(sizeof(int16_t), alignment);
  *
- * volk_32f_x2_dot_prod_16i();
+ * for (unsigned int i = 0; i < N; ++i) {
+ *   input[i] = 2.0f;
+ *   taps[i] = 3.0f;
+ * }
  *
+ * // Expected: 4 * (2.0 * 3.0) = 24
+ * int16_t expected = 24;
+ *
+ * volk_32f_x2_dot_prod_16i(result, input, taps, N);
+ *
+ * printf("Expected: %d\n", expected);
+ * printf("Result:   %d\n", *result);
+ *
+ * volk_free(input);
+ * volk_free(taps);
+ * volk_free(result);
  * \endcode
  */
 

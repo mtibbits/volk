@@ -16,35 +16,77 @@
  *
  * \b Overview
  *
- * <FIXME>
+ * Adds a common 16-bit integer vector to each of four other vectors, producing
+ * four output vectors: target0[i] = src0[i] + src1[i], target1[i] = src0[i] +
+ * src2[i], target2[i] = src0[i] + src3[i], target3[i] = src0[i] + src4[i].
+ *
+ * In trellis-based decoding (e.g. Viterbi decoders), this operation adds a
+ * common accumulated path metric vector (src0) to four branch metric vectors
+ * (src1-src4) in a single pass, computing the candidate path metrics for each
+ * state transition in a 4-state trellis stage.
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_16i_x5_add_quad_16i_x4(short* target0, short* target1, short* target2, short*
- * target3, short* src0, short* src1, short* src2, short* src3, short* src4, unsigned int
- * num_points); \endcode
+ * void volk_16i_x5_add_quad_16i_x4(short* target0, short* target1, short* target2,
+ * short* target3, short* src0, short* src1, short* src2, short* src3, short* src4,
+ * unsigned int num_points)
+ * \endcode
  *
  * \b Inputs
- * \li src0: The input vector 0.
- * \li src1: The input vector 1.
- * \li src2: The input vector 2.
- * \li src3: The input vector 3.
- * \li src4: The input vector 4.
- * \li num_points: The number of data points.
+ * \li src0: The common input vector added to each of src1-src4 (short).
+ * \li src1: The first addend vector (short).
+ * \li src2: The second addend vector (short).
+ * \li src3: The third addend vector (short).
+ * \li src4: The fourth addend vector (short).
+ * \li num_points: The number of 16-bit integer samples.
  *
  * \b Outputs
- * \li target0: The output value 0.
- * \li target1: The output value 1.
- * \li target2: The output value 2.
- * \li target3: The output value 3.
+ * \li target0: Result of src0 + src1 (short).
+ * \li target1: Result of src0 + src2 (short).
+ * \li target2: Result of src0 + src3 (short).
+ * \li target3: Result of src0 + src4 (short).
  *
  * \b Example
+ * Add a constant-valued vector to four different vectors.
  * \code
- * int N = 10000;
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
  *
- * volk_16i_x5_add_quad_16i_x4();
+ * short* src0 = (short*)volk_malloc(sizeof(short) * N, alignment);
+ * short* src1 = (short*)volk_malloc(sizeof(short) * N, alignment);
+ * short* src2 = (short*)volk_malloc(sizeof(short) * N, alignment);
+ * short* src3 = (short*)volk_malloc(sizeof(short) * N, alignment);
+ * short* src4 = (short*)volk_malloc(sizeof(short) * N, alignment);
+ * short* target0 = (short*)volk_malloc(sizeof(short) * N, alignment);
+ * short* target1 = (short*)volk_malloc(sizeof(short) * N, alignment);
+ * short* target2 = (short*)volk_malloc(sizeof(short) * N, alignment);
+ * short* target3 = (short*)volk_malloc(sizeof(short) * N, alignment);
  *
- * volk_free(x);
+ * for (unsigned int i = 0; i < N; ++i) {
+ *   src0[i] = 10;
+ *   src1[i] = 1;
+ *   src2[i] = 2;
+ *   src3[i] = 3;
+ *   src4[i] = 4;
+ * }
+ *
+ * // Expected: target0=11, target1=12, target2=13, target3=14
+ *
+ * volk_16i_x5_add_quad_16i_x4(target0, target1, target2, target3,
+ *                              src0, src1, src2, src3, src4, N);
+ *
+ * printf("Expected: %d %d %d %d\n", 11, 12, 13, 14);
+ * printf("Result:   %d %d %d %d\n", target0[0], target1[0], target2[0], target3[0]);
+ *
+ * volk_free(src0);
+ * volk_free(src1);
+ * volk_free(src2);
+ * volk_free(src3);
+ * volk_free(src4);
+ * volk_free(target0);
+ * volk_free(target1);
+ * volk_free(target2);
+ * volk_free(target3);
  * \endcode
  */
 

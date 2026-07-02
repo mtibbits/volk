@@ -12,48 +12,54 @@
  *
  * \b Overview
  *
- * Converts a floating point number to a 8-bit int after applying a
- * scaling factor.
+ * Converts floating-point samples to 8-bit signed integers after applying a
+ * scaling factor, with rounding and saturation to the [-128, 127] range.
+ * That is, out[i] = clamp(round(in[i] * scalar)).
+ *
+ * This quantization step is common when preparing baseband samples for a DAC
+ * or for fixed-point digital transmission paths. The scalar sets the
+ * full-scale mapping so that the float dynamic range is preserved through the
+ * conversion, which is critical for maintaining signal fidelity in receivers
+ * and transmitters that interface with hardware at reduced bit widths.
  *
  * <b>Dispatcher Prototype</b>
  * \code
  * void volk_32f_s32f_convert_8i(int8_t* outputVector, const float* inputVector, const
- float scalar, unsigned int num_points)
- * \endcode
+ * float scalar, unsigned int num_points) \endcode
  *
  * \b Inputs
- * \li inputVector: the input vector of floats.
- * \li scalar: The value multiplied against each point in the input buffer.
+ * \li inputVector: The input vector of floating-point samples (float).
+ * \li scalar: The scaling factor applied to each input sample (float).
  * \li num_points: The number of data points.
  *
  * \b Outputs
- * \li outputVector: The output vector.
+ * \li outputVector: The output vector of quantized values (int8_t).
  *
  * \b Example
- * Convert floats from [-1,1] to 8-bit integers with a scale of 5 to maintain smallest
- delta
- *  int N = 10;
- *   unsigned int alignment = volk_get_alignment();
- *   float* increasing = (float*)volk_malloc(sizeof(float)*N, alignment);
- *   int8_t* out = (int8_t*)volk_malloc(sizeof(int8_t)*N, alignment);
+ * Scale four floats by 10 and convert to 8-bit integers.
+ * \code
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
  *
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       increasing[ii] = 2.f * ((float)ii / (float)N) - 1.f;
- *   }
+ * float* in = (float*)volk_malloc(sizeof(float) * N, alignment);
+ * int8_t* out = (int8_t*)volk_malloc(sizeof(int8_t) * N, alignment);
  *
- *   // Normalize by the smallest delta (0.2 in this example)
- *   // With float -> 8 bit ints be careful of scaling
-
- *   float scale = 5.1f;
+ * in[0] = 1.0f;
+ * in[1] = -2.5f;
+ * in[2] = 12.8f;
+ * in[3] = 0.0f;
  *
- *   volk_32f_s32f_convert_8i(out, increasing, scale, N);
+ * float scalar = 10.0f;
  *
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       printf("out[%u] = %i\n", ii, out[ii]);
- *   }
+ * // Expected: 1.0*10=10, -2.5*10=-25, 12.8*10=128 clamped to 127, 0.0*10=0
  *
- *   volk_free(increasing);
- *   volk_free(out);
+ * volk_32f_s32f_convert_8i(out, in, scalar, N);
+ *
+ * printf("Expected: 10, -25, 127, 0\n");
+ * printf("Result:   %d, %d, %d, %d\n", out[0], out[1], out[2], out[3]);
+ *
+ * volk_free(in);
+ * volk_free(out);
  * \endcode
  */
 

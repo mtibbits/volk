@@ -13,6 +13,14 @@
  * \b Overview
  *
  * Computes the standard deviation of the input buffer using the supplied mean.
+ * Calculates sqrt(E[x^2] - mean^2), where E[x^2] is the mean of the squared
+ * sample values.
+ *
+ * Standard deviation is a fundamental statistic in signal processing, used for
+ * noise power estimation, SNR measurement, and signal quality monitoring. In
+ * applications such as AGC and adaptive thresholding, knowing the spread of
+ * sample amplitudes allows the system to adjust gain or detection levels in
+ * real time.
  *
  * <b>Dispatcher Prototype</b>
  * \code
@@ -20,35 +28,37 @@
  * mean, unsigned int num_points) \endcode
  *
  * \b Inputs
- * \li inputBuffer: The input vector of floats.
- * \li mean: The mean of the input buffer.
- * \li num_points: The number of data points.
+ * \li inputBuffer: The input vector of samples (float).
+ * \li mean: The mean of the input buffer (float).
+ * \li num_points: The number of samples.
  *
  * \b Outputs
- * \li stddev: The output vector.
+ * \li stddev: The standard deviation result (single float).
  *
  * \b Example
- * Calculate the standard deviation from numbers generated with c++11's normal generator
+ * Compute the standard deviation of {1, 2, 3, 4} with known mean 2.5.
  * \code
- *   int N = 1000;
- *   unsigned int alignment = volk_get_alignment();
- *   float* increasing = (float*)volk_malloc(sizeof(float)*N, alignment);
- *   float mean = 0.0f;
- *   float* stddev = (float*)volk_malloc(sizeof(float), alignment);
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
+ * float* input = (float*)volk_malloc(sizeof(float) * N, alignment);
+ * float* stddev = (float*)volk_malloc(sizeof(float), alignment);
  *
- *   // Use a normal generator with 0 mean, stddev = 1
- *   std::default_random_engine generator;
- *   std::normal_distribution<float> distribution(mean,1);
+ * input[0] = 1.0f;
+ * input[1] = 2.0f;
+ * input[2] = 3.0f;
+ * input[3] = 4.0f;
+ * float mean = 2.5f;
  *
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       increasing[ii] =  distribution(generator);
- *   }
+ * // Expected: sqrt((1+4+9+16)/4 - 2.5^2) = sqrt(7.5 - 6.25) = sqrt(1.25) ~ 1.118034
+ * float expected = sqrtf(1.25f);
  *
- *   volk_32f_s32f_power_32f(stddev, increasing, mean, N);
+ * volk_32f_s32f_stddev_32f(stddev, input, mean, N);
  *
- *   printf("std. dev. = %f\n", *stddev);
+ * printf("Expected: %f\n", expected);
+ * printf("Result:   %f\n", *stddev);
  *
- *   volk_free(increasing);
+ * volk_free(input);
+ * volk_free(stddev);
  * \endcode
  */
 

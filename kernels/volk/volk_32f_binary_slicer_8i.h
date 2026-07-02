@@ -12,47 +12,49 @@
  *
  * \b Overview
  *
- * Slices input floats and and returns 1 when the input >= 0 and 0
- * when < 0. Results are converted to 8-bit chars.
+ * Performs binary slicing on floating-point samples, returning 1 when the
+ * input >= 0 and 0 when < 0. Results are stored as 8-bit integers.
+ *
+ * In digital communications, binary slicing implements the hard-decision
+ * step of a demodulator. After matched filtering and timing recovery produce
+ * soft symbol estimates, this kernel maps each sample to a hard bit decision
+ * suitable for downstream decoding or BER measurement.
  *
  * <b>Dispatcher Prototype</b>
  * \code
  * void volk_32f_binary_slicer_8i(int8_t* cVector, const float* aVector, unsigned int
- num_points)
- * \endcode
+ * num_points) \endcode
  *
  * \b Inputs
- * \li aVector: The input vector of floats.
- * \li num_points: The number of data points.
+ * \li aVector: The input vector of soft-decision float samples (float).
+ * \li num_points: The number of samples to slice.
  *
  * \b Outputs
- * \li cVector: The output vector of 8-bit chars.
+ * \li cVector: The output vector of hard-decision binary values (int8_t).
  *
  * \b Example
- * Generate bytes of a 7-bit barker code from floats.
+ * Slice four soft-decision samples and verify the binary output.
  * \code
-    int N = 7;
-    unsigned int alignment = volk_get_alignment();
-    float* in = (float*)volk_malloc(sizeof(float)*N, alignment);
-    int8_t* out = (int8_t*)volk_malloc(sizeof(int8_t)*N, alignment);
-
-    in[0] = 0.9f;
-    in[1] = 1.1f;
-    in[2] = 0.4f;
-    in[3] = -0.7f;
-    in[5] = -1.2f;
-    in[6] = 0.2f;
-    in[7] = -0.8f;
-
-    volk_32f_binary_slicer_8i(out, in, N);
-
-    for(unsigned int ii = 0; ii < N; ++ii){
-        printf("out(%i) = %i\n", ii, out[ii]);
-    }
-
-    volk_free(in);
-    volk_free(out);
-
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
+ * float* in = (float*)volk_malloc(sizeof(float) * N, alignment);
+ * int8_t* out = (int8_t*)volk_malloc(sizeof(int8_t) * N, alignment);
+ *
+ * in[0] =  1.5f;
+ * in[1] = -0.3f;
+ * in[2] =  0.0f;
+ * in[3] = -2.0f;
+ *
+ * // Expected: >= 0 -> 1, < 0 -> 0
+ * // out[0]=1, out[1]=0, out[2]=1, out[3]=0
+ *
+ * volk_32f_binary_slicer_8i(out, in, N);
+ *
+ * printf("Expected: 1, 0, 1, 0\n");
+ * printf("Result:   %d, %d, %d, %d\n", out[0], out[1], out[2], out[3]);
+ *
+ * volk_free(in);
+ * volk_free(out);
  * \endcode
  */
 

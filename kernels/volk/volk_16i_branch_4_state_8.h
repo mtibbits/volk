@@ -16,31 +16,88 @@
  *
  * \b Overview
  *
- * <FIXME>
+ * Computes 32 branch metrics (4 groups of 8) for a 4-state trellis by
+ * permuting source state metrics, adding group-dependent scalar offsets,
+ * and combining with masked control words. Each output element is:
+ * target[i*8+j] = src0[perm] + scalar_offset + (cntl2[k] & scalars[2]) +
+ * (cntl3[k] & scalars[3]).
+ *
+ * This kernel supports the add-compare-select (ACS) stage of a Viterbi
+ * decoder. In trellis-based decoding, branch metrics quantify how well
+ * each hypothesized state transition matches the received signal. The
+ * permuters select which predecessor state metrics to use, while the
+ * scalars and control words encode the trellis branch structure.
  *
  * <b>Dispatcher Prototype</b>
  * \code
- * void volk_16i_branch_4_state_8(short* target, short* src0, char** permuters, short*
- * cntl2, short* cntl3, short* scalars) \endcode
+ * void volk_16i_branch_4_state_8(short* target, short* src0, char** permuters,
+ * short* cntl2, short* cntl3, short* scalars)
+ * \endcode
  *
  * \b Inputs
- * \li src0: <FIXME>
- * \li permuters: <FIXME>
- * \li cntl2: <FIXME>
- * \li cntl3: <FIXME>
- * \li scalars: <FIXME>
+ * \li src0: Source state metrics, 8 elements (short).
+ * \li permuters: Four 16-byte permutation tables that index into src0 (char**).
+ * \li cntl2: Control word array, 32 elements, bitwise-ANDed with scalars[2] (short).
+ * \li cntl3: Control word array, 32 elements, bitwise-ANDed with scalars[3] (short).
+ * \li scalars: Four scalar values for group-dependent offsets and masking (short).
  *
  * \b Outputs
- * \li target: <FIXME>
+ * \li target: The 32 computed branch metrics, 4 groups of 8 (short).
  *
  * \b Example
+ * Compute branch metrics with identity permutation and zero control masks.
  * \code
- * int N = 10000;
+ * unsigned int alignment = volk_get_alignment();
  *
- * volk_16i_branch_4_state_8();
+ * short* target = (short*)volk_malloc(sizeof(short) * 32, alignment);
+ * short* src0 = (short*)volk_malloc(sizeof(short) * 8, alignment);
+ * short* cntl2 = (short*)volk_malloc(sizeof(short) * 32, alignment);
+ * short* cntl3 = (short*)volk_malloc(sizeof(short) * 32, alignment);
+ * short* scalars = (short*)volk_malloc(sizeof(short) * 4, alignment);
  *
- * volk_free(x);
- * volk_free(t);
+ * // 8 source state metrics
+ * for (unsigned int i = 0; i < 8; ++i) {
+ *   src0[i] = (short)(i + 1);
+ * }
+ *
+ * // Identity permutation tables (byte offsets into src0)
+ * char* perm0 = (char*)volk_malloc(16, alignment);
+ * char* perm1 = (char*)volk_malloc(16, alignment);
+ * char* perm2 = (char*)volk_malloc(16, alignment);
+ * char* perm3 = (char*)volk_malloc(16, alignment);
+ * for (int j = 0; j < 8; ++j) {
+ *   perm0[j * 2] = (char)(j * 2); perm0[j * 2 + 1] = (char)(j * 2 + 1);
+ *   perm1[j * 2] = (char)(j * 2); perm1[j * 2 + 1] = (char)(j * 2 + 1);
+ *   perm2[j * 2] = (char)(j * 2); perm2[j * 2 + 1] = (char)(j * 2 + 1);
+ *   perm3[j * 2] = (char)(j * 2); perm3[j * 2 + 1] = (char)(j * 2 + 1);
+ * }
+ * char* permuters[4] = { perm0, perm1, perm2, perm3 };
+ *
+ * // Zero controls so masked terms vanish
+ * for (unsigned int i = 0; i < 32; ++i) {
+ *   cntl2[i] = 0;
+ *   cntl3[i] = 0;
+ * }
+ *
+ * // scalars[0]=10, scalars[1]=20, scalars[2..3]=0
+ * scalars[0] = 10; scalars[1] = 20; scalars[2] = 0; scalars[3] = 0;
+ *
+ * volk_16i_branch_4_state_8(target, src0, permuters, cntl2, cntl3, scalars);
+ *
+ * // Group 0 (i=0): offset = ((0+1)%2)*10 + (((0>>1)^1))*20 = 10+20 = 30
+ * // target[0] = src0[0] + 30 = 1 + 30 = 31
+ * printf("Expected target[0]: 31\n");
+ * printf("Result   target[0]: %d\n", target[0]);
+ *
+ * volk_free(target);
+ * volk_free(src0);
+ * volk_free(cntl2);
+ * volk_free(cntl3);
+ * volk_free(scalars);
+ * volk_free(perm0);
+ * volk_free(perm1);
+ * volk_free(perm2);
+ * volk_free(perm3);
  * \endcode
  */
 

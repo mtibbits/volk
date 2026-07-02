@@ -12,24 +12,61 @@
  *
  * \b Overview
  *
- * Multiplies two input complex vectors (16-bit integer each component) and accumulates
- * them, storing the result. Results are saturated so never go beyond the limits of the
- * data type.
+ * Computes the complex inner product (dot product) of two 16-bit complex integer
+ * vectors with saturated accumulation: result = sum(in_a[i] * in_b[i]). The real
+ * and imaginary components are accumulated using saturation arithmetic so they
+ * never overflow the 16-bit range.
+ *
+ * This kernel is commonly used in matched filtering, correlation, and beamforming
+ * operations where one vector represents input signal samples and the other
+ * represents filter taps or reference coefficients. The saturated accumulation
+ * makes it suitable for fixed-point DSP pipelines where overflow protection is
+ * required without scaling.
  *
  * <b>Dispatcher Prototype</b>
  * \code
  * void volk_16ic_x2_dot_prod_16ic(lv_16sc_t* result, const lv_16sc_t* in_a, const
- * lv_16sc_t* in_b, unsigned int num_points); \endcode
+ * lv_16sc_t* in_b, unsigned int num_points);
+ * \endcode
  *
  * \b Inputs
- * \li in_a:          One of the vectors to be multiplied and accumulated.
- * \li in_b:          The other vector to be multiplied and accumulated.
- * \li num_points:    Number of complex values to be multiplied together, accumulated and
- * stored into \p result
+ * \li in_a: Input vector of complex samples (lv_16sc_t).
+ * \li in_b: Input vector of complex taps or coefficients (lv_16sc_t).
+ * \li num_points: The number of complex samples to multiply and accumulate.
  *
  * \b Outputs
- * \li result:        Value of the accumulated result.
+ * \li result: The complex inner product (lv_16sc_t).
  *
+ * \b Example
+ * Compute the inner product of two constant complex vectors and verify against
+ * a hand calculation.
+ * \code
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
+ *
+ * lv_16sc_t* in_a = (lv_16sc_t*)volk_malloc(sizeof(lv_16sc_t) * N, alignment);
+ * lv_16sc_t* in_b = (lv_16sc_t*)volk_malloc(sizeof(lv_16sc_t) * N, alignment);
+ * lv_16sc_t* result = (lv_16sc_t*)volk_malloc(sizeof(lv_16sc_t), alignment);
+ *
+ * for (unsigned int i = 0; i < N; ++i) {
+ *   in_a[i] = lv_cmake((int16_t)1, (int16_t)2);
+ *   in_b[i] = lv_cmake((int16_t)3, (int16_t)4);
+ * }
+ *
+ * // (1+2j)*(3+4j) = (1*3 - 2*4) + (1*4 + 2*3)j = -5 + 10j
+ * // Sum of 4: -20 + 40j
+ * int16_t expected_real = -20;
+ * int16_t expected_imag = 40;
+ *
+ * volk_16ic_x2_dot_prod_16ic(result, in_a, in_b, N);
+ *
+ * printf("Expected: (%d, %d)\n", expected_real, expected_imag);
+ * printf("Result:   (%d, %d)\n", lv_creal(*result), lv_cimag(*result));
+ *
+ * volk_free(in_a);
+ * volk_free(in_b);
+ * volk_free(result);
+ * \endcode
  */
 
 #ifndef INCLUDED_volk_16ic_x2_dot_prod_16ic_H

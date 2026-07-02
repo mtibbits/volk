@@ -12,44 +12,51 @@
  *
  * \b Overview
  *
- * Multiplies a floating point vector by a floating point scalar.
+ * Multiplies a floating point vector by a floating point scalar:
+ * cVector[i] = aVector[i] * scalar.
+ *
+ * Scalar-vector multiplication is a fundamental building block in signal
+ * processing, commonly used for gain control, amplitude scaling, and
+ * normalization. In an AGC loop, for example, this kernel applies the
+ * computed gain correction factor uniformly across a block of samples.
  *
  * <b>Dispatcher Prototype</b>
  * \code
  * void volk_32f_s32f_multiply_32f(float* cVector, const float* aVector, const float
- * scalar, unsigned int num_points) \endcode
+ * scalar, unsigned int num_points)
+ * \endcode
  *
  * \b Inputs
- * \li aVector: The input vector of floats.
- * \li scalar: the scalar value to multiply against \p aVector.
- * \li num_points: The number of data points.
+ * \li aVector: The input vector of samples (float).
+ * \li scalar: The scalar gain factor to multiply against \p aVector (float).
+ * \li num_points: The number of samples to process.
  *
  * \b Outputs
- * \li cVector: The output vector of floats.
+ * \li cVector: The output vector of scaled samples (float).
  *
  * \b Example
+ * Scale a constant vector by 3.0 and verify one element.
  * \code
- *  int N = 10;
- *   unsigned int alignment = volk_get_alignment();
- *   float* increasing = (float*)volk_malloc(sizeof(float)*N, alignment);
- *   float* out = (float*)volk_malloc(sizeof(float)*N, alignment);
+ * unsigned int N = 4;
+ * unsigned int alignment = volk_get_alignment();
+ * float* aVector = (float*)volk_malloc(sizeof(float) * N, alignment);
+ * float* cVector = (float*)volk_malloc(sizeof(float) * N, alignment);
  *
+ * for (unsigned int i = 0; i < N; ++i) {
+ *     aVector[i] = 2.0f;
+ * }
+ * float scalar = 3.0f;
  *
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       increasing[ii] = 2.f * ((float)ii / (float)N) - 1.f;
- *   }
+ * // Expected: each output element = 2.0 * 3.0 = 6.0
+ * float expected = 2.0f * 3.0f;
  *
- *   // Normalize by the smallest delta (0.2 in this example)
- *   float scale = 5.0f;
+ * volk_32f_s32f_multiply_32f(cVector, aVector, scalar, N);
  *
- *   volk_32f_s32f_multiply_32f(out, increasing, scale, N);
+ * printf("Expected: %f\n", expected);
+ * printf("Result:   %f\n", cVector[0]);
  *
- *   for(unsigned int ii = 0; ii < N; ++ii){
- *       printf("out[%u] = %f\n", ii, out[ii]);
- *   }
- *
- *   volk_free(increasing);
- *   volk_free(out);
+ * volk_free(aVector);
+ * volk_free(cVector);
  * \endcode
  */
 
