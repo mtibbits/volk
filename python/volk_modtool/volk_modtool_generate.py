@@ -8,8 +8,10 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
 #
 
+import fnmatch
 import os
 import re
+import sys
 import glob
 
 
@@ -87,13 +89,31 @@ class volk_modtool(object):
         need_ifdef_updates = ["constant.h", "volk_complex.h", "volk_malloc.h", "volk_prefs.h",
                               "volk_common.h", "volk_cpu.tmpl.h", "volk_config_fixed.tmpl.h",
                               "volk_typedefs.h", "volk.tmpl.h"]
+        # skip VCS metadata, Python bytecode caches, and CMake build dirs
+        skip_dirs = {'.git', '.hg', '.svn', '__pycache__'}
+        build_dir_patterns = ['build*', 'cmake-build-*']
         for root, dirnames, filenames in os.walk(self.my_dict['base']):
+            pruned = []
+            for d in dirnames:
+                if d in skip_dirs:
+                    continue
+                if os.path.isfile(os.path.join(root, d, 'CMakeCache.txt')):
+                    continue
+                if any(fnmatch.fnmatch(d, pat) for pat in build_dir_patterns):
+                    continue
+                pruned.append(d)
+            dirnames[:] = pruned
             for name in filenames:
                 t_table = [re.search(a, name) for a in current_kernel_names]
                 t_table = set(t_table)
                 if (t_table == set([None])) or (name == "volk_32f_null_32f.h"):
                     infile = os.path.join(root, name)
-                    instring = open(infile, 'r').read()
+                    try:
+                        instring = open(infile, 'r').read()
+                    except UnicodeDecodeError:
+                        print("volk_modtool: skipping non-UTF-8 file %s" % infile,
+                              file=sys.stderr)
+                        continue
                     outstring = re.sub(self.volk, 'volk_' + self.my_dict['name'], instring)
                     # Update the header ifdef guards only where needed
                     if name in need_ifdef_updates:
