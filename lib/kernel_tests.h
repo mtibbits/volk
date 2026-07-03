@@ -84,6 +84,11 @@ std::vector<volk_test_case_t> init_test_list(volk_test_params_t test_params)
     QA(VOLK_INIT_TEST(volk_16i_s32f_convert_32f, test_params))
     QA(VOLK_INIT_TEST(volk_16i_convert_8i, test_params))
     QA(VOLK_INIT_TEST(volk_16i_32fc_dot_prod_32fc, test_params.make_absolute(1e-1)))
+    // 2e-2 = ceil_1sf(2.5 x max measured impl-vs-generic delta at testqa's vlen
+    // 131071: 6.1e-3, x86 avx512f over 200 seeds). Re-derivation CONFIRMS the existing
+    // hand-tuned 2e-2 (a 10-seed sample undersampled the single-scalar tail ~3x). The
+    // 1000003 sweep is now oracle-governed (volk_reference); a CI arch that flickers
+    // triggers remeasure-and-rederive. See "Numerical accuracy". (#123)
     QA(VOLK_INIT_TEST(volk_32f_accumulator_s32f, test_params.make_absolute(2e-2)))
     QA(VOLK_INIT_TEST(volk_32f_x2_add_32f, test_params))
 

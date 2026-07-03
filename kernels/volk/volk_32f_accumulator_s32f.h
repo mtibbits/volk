@@ -26,6 +26,23 @@
  * \b Outputs
  * \li result The accumulated result.
  *
+ * \b Numerical accuracy
+ *
+ * A single-precision real reduction: absolute error vs the exact sum grows
+ * ~linearly with num_points (random-sign accumulation of rounding errors), while
+ * the sum magnitude grows only ~sqrt(num_points) for zero-mean data — no single
+ * relative bound is meaningful across sizes. The SIMD tiers use W-way partial sums
+ * and are measurably more accurate than the generic serial loop; measured at
+ * num_points = 1000003 over uniform(-1,1), generic <= 1.17e-2 absolute, the AVX
+ * tiers <= 4.2e-3. Because generic is the least accurate side, the fork harness
+ * checks every impl against a double-precision oracle. The QA metric is a single
+ * random scalar per run with a heavy tail (200-seed sampling put the 131071 delta at
+ * 6.1e-3 and the 1000003 both-sides error at 3.3e-2), so bounds carry a 2.5x
+ * extreme-value margin (lib/kernel_tests.h; derivation #123): impl-vs-generic 2e-2
+ * absolute at num_points 131071; the oracle check is 9e-2 absolute up to
+ * num_points 1000003. Sums of zero-mean inputs cross zero, so tolerances are
+ * absolute by doctrine.
+ *
  * \b Example
  * Calculate the sum of numbers  0 through 99
  * \code
