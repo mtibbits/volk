@@ -107,18 +107,14 @@ static void ref_log2_32f(const std::vector<const void*>& in,
 }
 
 // volk_32f_x2_dot_prod_32f: result = sum_i input[i]*taps[i]. The first REDUCTION
-// oracle: reads two inputs, accumulates in double, writes only element 0 of the
-// output (the harness zero-fills both sides, so the untouched tail compares
-// equal). Rationale for existence (#118): impl-vs-generic comparison judges the
-// WRONG side for reductions — generic's serial float accumulation error grows
-// ~linearly in vlen and is 4-6x LARGER than the SIMD partial-sum error, so the
-// delta is dominated by the reference. Only a truth oracle fixes the instrument.
+// oracle (see the reduction-oracle contract in volk_reference.h and the
+// tolerance methodology in docs/kernel_correctness_harness/README.md; full
+// rationale: the kernel's "Numerical accuracy" doc-comment, #118).
 static void ref_dot_prod_32f(const std::vector<const void*>& in,
                              const std::vector<void*>& out,
-                             lv_32fc_t scalar,
+                             lv_32fc_t /*scalar*/,
                              unsigned int vlen)
 {
-    (void)scalar;
     const float* input = static_cast<const float*>(in[0]);
     const float* taps = static_cast<const float*>(in[1]);
     float* result = static_cast<float*>(out[0]);
@@ -141,11 +137,10 @@ static const std::vector<volk_reference_entry> g_registry = {
     // envelope with margin while still catching gross defects (off by >>1e-4).
     { "volk_32f_log2_32f", ref_log2_32f, 2e-5f, true },
     // dot_prod abs tol = 3e-2 = ceil_1sf(1.5 x max BOTH-SIDES error vs the
-    // double oracle at the sweep's max vlen 1000003: generic's serial error
-    // reaches 1.41e-2 there (impls 2.4-4.5e-3); generic runs ref mode too, so
-    // the bound must cover it. ABSOLUTE because dot products of zero-mean data
-    // cross zero (relative-vs-oracle ill-posed at small |result|). Absolute
-    // error grows ~linearly in vlen; this bound is anchored at 1000003. (#118)
+    // oracle at the sweep's max vlen 1000003 (generic reaches 1.41e-2 there and
+    // runs ref mode too, so the bound must cover it; impls 2.4-4.5e-3). Mode
+    // and anchor per the reduction-tolerance methodology in
+    // docs/kernel_correctness_harness/README.md. (#118)
     { "volk_32f_x2_dot_prod_32f", ref_dot_prod_32f, 3e-2f, true },
 };
 

@@ -64,6 +64,27 @@ real sweep and exits 2 ("NEGATIVE CONTROL LOST") if its own detector is broken.
   oracles computed from the same inputs; every impl (generic included) is
   compared against the oracle. Registered kernels report mode `ref`.
 
+#### Reduction-tolerance methodology (#118 — the pattern the reduction family applies)
+
+For reductions (dot products, accumulators, stddev, noise floor), impl-vs-generic
+comparison judges the WRONG side: the serial generic's absolute error grows
+~linearly in vlen (random-sign accumulation of per-step roundings) and measures
+4–6× LARGER than the W-way SIMD partial sums'. Reductions therefore get a
+reference-registry oracle, and TWO tolerances, each derived — never hand-bumped —
+as `ceil_1sf(1.5 × max measured error)` at ITS consumer's max vlen:
+
+- **`ref.tol`** (the registry entry; consumed by this sweep at every vlen up to
+  1000003): covers max BOTH-SIDES error vs the oracle at 1000003 — generic runs
+  ref mode too.
+- **`kp.tol`** (`lib/kernel_tests.h`; consumed by single-vlen testqa): covers the
+  max impl-vs-generic delta at 131071.
+
+Both ABSOLUTE: zero-mean reductions cross zero, so relative bounds are ill-posed
+near |result| → 0 (the #174 doctrine), and no single relative number is honest
+across vlens anyway (relative error itself grows ~√vlen). Measurement recipe and
+derivation: devDoc Issue-Fork-118/adjudication.md; per-kernel comments carry only
+the kernel's numbers and cite this section.
+
 ### 3. Output canary + AddressSanitizer (#89)
 
 - **Blind spot:** qa checks only `[0, num_points)`; a one-past (or far-past)
