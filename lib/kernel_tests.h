@@ -186,7 +186,13 @@ std::vector<volk_test_case_t> init_test_list(volk_test_params_t test_params)
     QA(VOLK_INIT_TEST(volk_32fc_deinterleave_imag_32f, test_params))
     QA(VOLK_INIT_TEST(volk_32fc_deinterleave_real_32f, test_params))
     QA(VOLK_INIT_TEST(volk_32fc_deinterleave_real_64f, test_params))
-    QA(VOLK_INIT_TEST(volk_32fc_x2_dot_prod_32fc, test_params.make_absolute(2e-2)))
+    // 8e-3 = ceil_1sf(2.5 x max measured impl-vs-generic complex-magnitude delta at
+    // testqa's vlen 131071: 3.1e-3, x86 avx). Reduction QA is a SINGLE random scalar
+    // per run, so the margin uses the 2.5x extreme-value factor (not the per-element
+    // 1.5x). Tighter than the hand-tuned 2e-2 it replaces; the 1000003 sweep is
+    // oracle-governed (volk_reference). Contract is the FORMULA: remeasure-and-rederive,
+    // don't hand-bump. See the kernel's "Numerical accuracy" doc-comment. (#119)
+    QA(VOLK_INIT_TEST(volk_32fc_x2_dot_prod_32fc, test_params.make_absolute(8e-3)))
     QA(VOLK_INIT_TEST(volk_32fc_32f_dot_prod_32fc, test_params.make_absolute(1e-2)))
 
     // Complex index kernels: same magnitude values to test tie-breaking
