@@ -28,6 +28,12 @@
 //   inputs  : the kernel's input buffers (post load_random_data), in signature
 //             order, each already cast-able to the kernel's input element type.
 //   outputs : the golden output buffer(s) to fill, in signature order.
+//             REDUCTION oracles write only the contracted prefix (e.g.
+//             outputs[0][0]); the harness zero-fills both sides so untouched
+//             tails compare equal. A wrong-prefix oracle IS caught (fcompare
+//             runs the full vlen, so it diverges from the impl's zero tail);
+//             keep the count consistent with volk_buffer_roles.cc, which the
+//             canary side consults.
 //   scalar  : test_params.scalar() — real part carries an s32f scalar
 //             (e.g. power exponent, atan2 normalizeFactor); full value for s32fc.
 //   vlen    : the USER vlen (number of elements), not the twiddled buffer size.

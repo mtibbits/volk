@@ -37,6 +37,21 @@
  * \b Outputs
  * \li result: The dot product result (float).
  *
+ * \b Numerical accuracy
+ *
+ * A single-precision reduction: absolute error vs the exact dot product
+ * grows ~linearly with num_points (random-sign accumulation of rounding
+ * errors), while the result's magnitude grows only ~sqrt(num_points) for
+ * zero-mean data — no single relative bound is meaningful across sizes.
+ * The SIMD tiers use W-way partial sums and are measurably MORE accurate
+ * (4-6x) than the generic serial loop; measured at num_points = 1000003
+ * over uniform(-1,1): generic <= 1.41e-2 absolute, SIMD <= 4.6e-3. QA
+ * bounds (lib/kernel_tests.h; derivation #118): impl-vs-generic 3e-3
+ * absolute at num_points 131071; the fork harness additionally checks all
+ * impls against a double-precision oracle at 3e-2 absolute up to
+ * num_points 1000003. Results for zero-mean inputs cross zero, so
+ * tolerances are absolute by doctrine.
+ *
  * \b Example
  * Dot product of a constant-3 input vector with constant-2 taps of length 5.
  * \code

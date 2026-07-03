@@ -228,7 +228,14 @@ std::vector<volk_test_case_t> init_test_list(volk_test_params_t test_params)
     QA(VOLK_INIT_TEST(volk_32fc_x2_square_dist_32f, test_params))
     QA(VOLK_INIT_TEST(volk_32fc_x2_s32f_square_dist_scalar_mult_32f, test_params))
     QA(VOLK_INIT_TEST(volk_32f_x2_divide_32f, test_params))
-    QA(VOLK_INIT_TEST(volk_32f_x2_dot_prod_32f, test_params.make_absolute(1.5e-2)))
+    // 3e-3 = ceil_1sf(1.5 x max measured impl-vs-generic delta at testqa's vlen
+    // 131071). Was a hand-tuned 1.5e-2 that had to clear the correctness sweep's
+    // vlen 1000003 (delta ~7x larger there) — the sweep is now oracle-governed
+    // (volk_reference), so this bound serves only testqa. Derived on x86
+    // (gcc/clang) + armhf; other arches fall under the remeasure clause. The
+    // contract is the FORMULA: remeasure-and-rederive, don't hand-bump. See
+    // the kernel's "Numerical accuracy" doc-comment. (#118)
+    QA(VOLK_INIT_TEST(volk_32f_x2_dot_prod_32f, test_params.make_absolute(3e-3)))
     QA(VOLK_INIT_TEST(volk_32f_x2_s32f_interleave_16ic, test_params.make_tol(1)))
     QA(VOLK_INIT_TEST(volk_32f_x2_interleave_32fc, test_params))
     QA(VOLK_INIT_TEST(volk_32f_x2_max_32f, test_params))
