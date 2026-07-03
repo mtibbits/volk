@@ -182,6 +182,30 @@ static void ref_conjugate_dot_prod_32fc(const std::vector<const void*>& in,
     result[0] = lv_cmake(static_cast<float>(acc_re), static_cast<float>(acc_im));
 }
 
+// volk_32fc_32f_dot_prod_32fc: result = sum_i input[i]*taps[i], complex input with
+// a REAL tap vector. A complex REDUCTION oracle: double-precision accumulation of
+// the complex input scaled by the real tap (no cross terms), writing only element 0
+// of the complex output (the harness zero-fills both sides, so the untouched tail
+// compares equal). in[1] is a plain float* (real taps). Same rationale as the plain
+// dot_prod (#118/#119): only a double-precision truth oracle judges each impl.
+static void ref_32fc_32f_dot_prod_32fc(const std::vector<const void*>& in,
+                                       const std::vector<void*>& out,
+                                       lv_32fc_t /*scalar*/,
+                                       unsigned int vlen)
+{
+    const lv_32fc_t* input = static_cast<const lv_32fc_t*>(in[0]);
+    const float* taps = static_cast<const float*>(in[1]);
+    lv_32fc_t* result = static_cast<lv_32fc_t*>(out[0]);
+    double acc_re = 0.0;
+    double acc_im = 0.0;
+    for (unsigned int i = 0; i < vlen; i++) {
+        const double t = static_cast<double>(taps[i]);
+        acc_re += static_cast<double>(lv_creal(input[i])) * t;
+        acc_im += static_cast<double>(lv_cimag(input[i])) * t;
+    }
+    result[0] = lv_cmake(static_cast<float>(acc_re), static_cast<float>(acc_im));
+}
+
 static const std::vector<volk_reference_entry> g_registry = {
     // name                          oracle             tol      absolute
     { "volk_32fc_s32f_power_32fc", ref_power_32fc, 1e-4f, false },
@@ -216,6 +240,14 @@ static const std::vector<volk_reference_entry> g_registry = {
     // methodology. ABSOLUTE (zero-mean complex crosses zero). Derived on x86 +
     // armv7 NEON; aarch64/rvv fall under the remeasure clause. (#120)
     { "volk_32fc_x2_conjugate_dot_prod_32fc", ref_conjugate_dot_prod_32fc, 6e-2f, true },
+    // 32fc_32f_dot_prod abs tol = 4e-2 = ceil_1sf(2.5 x max BOTH-SIDES error vs the
+    // oracle at the sweep's max vlen 1000003: generic reaches 1.42e-2 (the driver;
+    // SIMD tiers are more accurate, avx <= 4.5e-3, armhf NEON <= 9.4e-3). Metric is
+    // the complex-magnitude error (ccompare abs mode). 2.5x extreme-value margin per
+    // docs/kernel_correctness_harness/README.md §Reduction-tolerance methodology.
+    // ABSOLUTE (zero-mean complex crosses zero). x86 + armv7 NEON; aarch64/rvv fall
+    // under the remeasure clause. (#121)
+    { "volk_32fc_32f_dot_prod_32fc", ref_32fc_32f_dot_prod_32fc, 4e-2f, true },
 };
 
 const std::vector<volk_reference_entry>& volk_reference_registry() { return g_registry; }

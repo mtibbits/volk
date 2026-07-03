@@ -35,6 +35,24 @@
  * \b Outputs
  * \li result: The complex dot product result (lv_32fc_t).
  *
+ * \b Numerical accuracy
+ *
+ * A single-precision complex reduction (complex input, real taps): absolute error
+ * vs the exact dot product grows ~linearly with num_points (random-sign
+ * accumulation of rounding errors), while the result magnitude grows only
+ * ~sqrt(num_points) for zero-mean data — no single relative bound is meaningful
+ * across sizes. The error metric is the complex-magnitude of the deviation. The
+ * SIMD tiers are measurably more accurate than the generic serial loop; measured at
+ * num_points = 1000003 over uniform(-1,1), generic <= 1.42e-2 absolute, the AVX
+ * tiers <= 4.5e-3, armhf NEON <= 9.4e-3 (some NEON variants accumulate in the same
+ * serial order as generic). Because generic is the least accurate side, the fork
+ * harness checks every impl against a double-precision oracle. The QA metric is a
+ * single random scalar per run with a heavy tail, so bounds carry a 2.5x
+ * extreme-value margin (lib/kernel_tests.h; derivation #121): impl-vs-generic 8e-3
+ * absolute at num_points 131071; the oracle check is 4e-2 absolute up to
+ * num_points 1000003. Results for zero-mean inputs cross zero, so tolerances are
+ * absolute by doctrine.
+ *
  * \b Example
  * Dot product of constant-valued vectors so the result equals N * input * tap.
  * \code
