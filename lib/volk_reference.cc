@@ -232,6 +232,26 @@ static void ref_16i_32fc_dot_prod_32fc(const std::vector<const void*>& in,
     result[0] = lv_cmake(static_cast<float>(acc_re), static_cast<float>(acc_im));
 }
 
+// volk_32f_accumulator_s32f: result = sum_i input[i], a single-input REAL reduction
+// (scalar float output). A REDUCTION oracle: accumulates the input in double and
+// writes only element 0 of the output (the harness zero-fills both sides, so the
+// untouched tail compares equal). Same rationale as the dot products (#118/#119):
+// the generic serial float sum has accumulation-order-dependent error, so only a
+// double-precision truth oracle judges each impl on its own merit.
+static void ref_accumulator_s32f(const std::vector<const void*>& in,
+                                 const std::vector<void*>& out,
+                                 lv_32fc_t /*scalar*/,
+                                 unsigned int vlen)
+{
+    const float* input = static_cast<const float*>(in[0]);
+    float* result = static_cast<float*>(out[0]);
+    double acc = 0.0;
+    for (unsigned int i = 0; i < vlen; i++) {
+        acc += static_cast<double>(input[i]);
+    }
+    result[0] = static_cast<float>(acc);
+}
+
 static const std::vector<volk_reference_entry> g_registry = {
     // name                          oracle             tol      absolute
     { "volk_32fc_s32f_power_32fc", ref_power_32fc, 1e-4f, false },
@@ -282,6 +302,13 @@ static const std::vector<volk_reference_entry> g_registry = {
     // docs/kernel_correctness_harness/README.md §Reduction-tolerance methodology.
     // ABSOLUTE. x86 + armv7 NEON; aarch64/rvv fall under the remeasure clause. (#122)
     { "volk_16i_32fc_dot_prod_32fc", ref_16i_32fc_dot_prod_32fc, 2e-1f, true },
+    // accumulator_s32f abs tol = 9e-2 = ceil_1sf(2.5 x max BOTH-SIDES error vs the
+    // oracle at the sweep's max vlen 1000003: 3.28e-2 over 60 seeds (generic is the
+    // driver; a 10-seed sample undersampled this tail ~2.8x). Scalar (real) reduction
+    // metric. 2.5x extreme-value margin per docs/kernel_correctness_harness/README.md
+    // §Reduction-tolerance methodology. ABSOLUTE. x86 + armv7 NEON; aarch64/rvv fall
+    // under the remeasure clause. (#123)
+    { "volk_32f_accumulator_s32f", ref_accumulator_s32f, 9e-2f, true },
 };
 
 const std::vector<volk_reference_entry>& volk_reference_registry() { return g_registry; }
