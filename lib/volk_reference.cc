@@ -206,6 +206,32 @@ static void ref_32fc_32f_dot_prod_32fc(const std::vector<const void*>& in,
     result[0] = lv_cmake(static_cast<float>(acc_re), static_cast<float>(acc_im));
 }
 
+// volk_16i_32fc_dot_prod_32fc: result = sum_i input[i]*taps[i], a 16-bit INTEGER
+// real input scaled by complex float taps. A complex REDUCTION oracle: the int16
+// samples are exact integers (no input quantization), promoted to double and scaled
+// by the complex tap, accumulated in double, writing only element 0 of the complex
+// output (the harness zero-fills both sides, so the untouched tail compares equal).
+// in[0] is short* (real int input), in[1] is lv_32fc_t* (complex taps). The error is
+// float ACCUMULATION error (not quantization) — same #118 reduction rationale; only
+// a double-precision truth oracle judges each impl.
+static void ref_16i_32fc_dot_prod_32fc(const std::vector<const void*>& in,
+                                       const std::vector<void*>& out,
+                                       lv_32fc_t /*scalar*/,
+                                       unsigned int vlen)
+{
+    const short* input = static_cast<const short*>(in[0]);
+    const lv_32fc_t* taps = static_cast<const lv_32fc_t*>(in[1]);
+    lv_32fc_t* result = static_cast<lv_32fc_t*>(out[0]);
+    double acc_re = 0.0;
+    double acc_im = 0.0;
+    for (unsigned int i = 0; i < vlen; i++) {
+        const double s = static_cast<double>(input[i]);
+        acc_re += s * static_cast<double>(lv_creal(taps[i]));
+        acc_im += s * static_cast<double>(lv_cimag(taps[i]));
+    }
+    result[0] = lv_cmake(static_cast<float>(acc_re), static_cast<float>(acc_im));
+}
+
 static const std::vector<volk_reference_entry> g_registry = {
     // name                          oracle             tol      absolute
     { "volk_32fc_s32f_power_32fc", ref_power_32fc, 1e-4f, false },
@@ -248,6 +274,14 @@ static const std::vector<volk_reference_entry> g_registry = {
     // ABSOLUTE (zero-mean complex crosses zero). x86 + armv7 NEON; aarch64/rvv fall
     // under the remeasure clause. (#121)
     { "volk_32fc_32f_dot_prod_32fc", ref_32fc_32f_dot_prod_32fc, 4e-2f, true },
+    // 16i_32fc_dot_prod abs tol = 2e-1 = ceil_1sf(2.5 x max BOTH-SIDES error vs the
+    // oracle at the sweep's max vlen 1000003: generic reaches 4.53e-2 (the driver;
+    // SIMD tiers are more accurate, <= 4.0e-2). Errors are ~6x the pure-float dot
+    // products because the int16 input ranges over [-6,6] (harness data). Metric is
+    // the complex-magnitude error (ccompare abs mode). 2.5x extreme-value margin per
+    // docs/kernel_correctness_harness/README.md §Reduction-tolerance methodology.
+    // ABSOLUTE. x86 + armv7 NEON; aarch64/rvv fall under the remeasure clause. (#122)
+    { "volk_16i_32fc_dot_prod_32fc", ref_16i_32fc_dot_prod_32fc, 2e-1f, true },
 };
 
 const std::vector<volk_reference_entry>& volk_reference_registry() { return g_registry; }
