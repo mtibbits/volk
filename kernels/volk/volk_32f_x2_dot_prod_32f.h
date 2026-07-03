@@ -39,7 +39,7 @@
  * zero-mean data — no single relative bound is meaningful across sizes.
  * The SIMD tiers use W-way partial sums and are measurably MORE accurate
  * (4-6x) than the generic serial loop; measured at num_points = 1000003
- * over uniform(-1,1): generic <= 1.5e-2 absolute, SIMD <= 4.6e-3. QA
+ * over uniform(-1,1): generic <= 1.41e-2 absolute, SIMD <= 4.6e-3. QA
  * bounds (lib/kernel_tests.h; derivation #118): impl-vs-generic 3e-3
  * absolute at num_points 131071; the fork harness additionally checks all
  * impls against a double-precision oracle at 3e-2 absolute up to
