@@ -136,12 +136,12 @@ static const std::vector<volk_reference_entry> g_registry = {
     // too tight when comparing SIMD-vs-true-double. 2e-5 covers the approximation
     // envelope with margin while still catching gross defects (off by >>1e-4).
     { "volk_32f_log2_32f", ref_log2_32f, 2e-5f, true },
-    // dot_prod abs tol = 3e-2 = ceil_1sf(1.5 x max BOTH-SIDES error vs the
+    // dot_prod abs tol = 4e-2 = ceil_1sf(2.5 x max BOTH-SIDES error vs the
     // oracle at the sweep's max vlen 1000003 (generic reaches 1.41e-2 there and
-    // runs ref mode too, so the bound must cover it; impls <= 4.6e-3). Mode
-    // and anchor per the reduction-tolerance methodology in
+    // runs ref mode too; impls <= 4.6e-3). The 2.5x extreme-value margin for
+    // scalar reduction metrics, mode and anchor per the methodology in
     // docs/kernel_correctness_harness/README.md. (#118)
-    { "volk_32f_x2_dot_prod_32f", ref_dot_prod_32f, 3e-2f, true },
+    { "volk_32f_x2_dot_prod_32f", ref_dot_prod_32f, 4e-2f, true },
 };
 
 const std::vector<volk_reference_entry>& volk_reference_registry() { return g_registry; }

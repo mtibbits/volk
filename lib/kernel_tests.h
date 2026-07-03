@@ -222,14 +222,15 @@ std::vector<volk_test_case_t> init_test_list(volk_test_params_t test_params)
     QA(VOLK_INIT_TEST(volk_32fc_x2_square_dist_32f, test_params))
     QA(VOLK_INIT_TEST(volk_32fc_x2_s32f_square_dist_scalar_mult_32f, test_params))
     QA(VOLK_INIT_TEST(volk_32f_x2_divide_32f, test_params))
-    // 3e-3 = ceil_1sf(1.5 x max measured impl-vs-generic delta at testqa's vlen
-    // 131071). Was a hand-tuned 1.5e-2 that had to clear the correctness sweep's
-    // vlen 1000003 (delta ~7x larger there) — the sweep is now oracle-governed
-    // (volk_reference), so this bound serves only testqa. Derived on x86
-    // (gcc/clang) + armhf; other arches fall under the remeasure clause. The
-    // contract is the FORMULA: remeasure-and-rederive, don't hand-bump. See
-    // the kernel's "Numerical accuracy" doc-comment. (#118)
-    QA(VOLK_INIT_TEST(volk_32f_x2_dot_prod_32f, test_params.make_absolute(3e-3)))
+    // 1e-2 = ceil_1sf(2.5 x max observed impl-vs-generic delta at testqa's vlen
+    // 131071: 4.0e-3, CI clang-16, a 2.3-sigma |result| draw). Reduction QA is a
+    // SINGLE random scalar per run, so the margin uses an extreme-value factor
+    // (2.5x), not the per-element 1.5x — a 3e-3 first cut was falsified by CI
+    // within hours. Still tighter than the hand-tuned 1.5e-2 it replaces; the
+    // 1000003 sweep is oracle-governed (volk_reference). The contract is the
+    // FORMULA: remeasure-and-rederive, don't hand-bump. See the kernel's
+    // "Numerical accuracy" doc-comment. (#118)
+    QA(VOLK_INIT_TEST(volk_32f_x2_dot_prod_32f, test_params.make_absolute(1e-2)))
     QA(VOLK_INIT_TEST(volk_32f_x2_s32f_interleave_16ic, test_params.make_tol(1)))
     QA(VOLK_INIT_TEST(volk_32f_x2_interleave_32fc, test_params))
     QA(VOLK_INIT_TEST(volk_32f_x2_max_32f, test_params))

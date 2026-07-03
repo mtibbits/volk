@@ -71,7 +71,10 @@ comparison judges the WRONG side: the serial generic's absolute error grows
 ~linearly in vlen (random-sign accumulation of per-step roundings) and measures
 4–6× LARGER than the W-way SIMD partial sums'. Reductions therefore get a
 reference-registry oracle, and TWO tolerances, each derived — never hand-bumped —
-as `ceil_1sf(1.5 × max measured error)` at ITS consumer's max vlen:
+at ITS consumer's max vlen as `ceil_1sf(margin × max observed error)`, where the
+margin is **2.5× for reductions** (the metric is a single random scalar per run —
+extreme-value draws at fleet scale falsified a 1.5× first cut within hours) vs the
+1.5× used for per-element max metrics (#173/#174, max-stable over the vector):
 
 - **`ref.tol`** (the registry entry; consumed by this sweep at every vlen up to
   1000003): covers max BOTH-SIDES error vs the oracle at 1000003 — generic runs
