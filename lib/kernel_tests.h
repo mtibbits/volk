@@ -177,8 +177,14 @@ std::vector<volk_test_case_t> init_test_list(volk_test_params_t test_params)
           lv_cmake(nan, 1.0f),    // atan2(1, nan) = nan (propagate)
           lv_cmake(1.0f, nan) }); // atan2(nan, 1) = nan (propagate)
     QA(VOLK_INIT_TEST(volk_32fc_s32f_atan2_32f, test_params_atan2))
+    // 8e-3 = ceil_1sf(2.5 x max measured impl-vs-generic complex-magnitude delta at
+    // testqa's vlen 131071: 3.0e-3, x86 sse3). Reduction QA is a SINGLE random scalar
+    // per run, so the 2.5x extreme-value margin (not the per-element 1.5x). Tighter
+    // than the hand-tuned 2e-2; the 1000003 sweep is oracle-governed (volk_reference).
+    // Local basis (x86 + armv7 NEON); a CI arch that flickers triggers remeasure-and-
+    // rederive, not a hand-bump. See the kernel's "Numerical accuracy" comment. (#120)
     QA(VOLK_INIT_TEST(volk_32fc_x2_conjugate_dot_prod_32fc,
-                      test_params.make_absolute(2e-2)))
+                      test_params.make_absolute(8e-3)))
     QA(VOLK_INIT_TEST(volk_32fc_deinterleave_32f_x2, test_params))
     QA(VOLK_INIT_TEST(volk_32fc_accumulator_s32fc, test_params.make_absolute(3e-2)))
     QA(VOLK_INIT_TEST(volk_32fc_deinterleave_64f_x2, test_params))
