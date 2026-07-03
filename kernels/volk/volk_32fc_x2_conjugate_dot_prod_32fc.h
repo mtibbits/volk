@@ -35,6 +35,24 @@
  * \b Outputs
  * \li result: Pointer to a complex float (lv_32fc_t) to hold the conjugate dot product.
  *
+ * \b Numerical accuracy
+ *
+ * A single-precision complex reduction: absolute error vs the exact conjugate dot
+ * product grows ~linearly with num_points (random-sign accumulation of rounding
+ * errors), while the result magnitude grows only ~sqrt(num_points) for zero-mean
+ * data — no single relative bound is meaningful across sizes. The error metric is
+ * the complex-magnitude of the deviation. The SIMD tiers (sse3, avx, avx512dq) are
+ * measurably more accurate than the generic serial loop; measured at
+ * num_points = 1000003 over uniform(-1,1), generic <= 2.16e-2 absolute (the
+ * generic-class `block` impl is similar, <= 2.0e-2), the SIMD tiers 6.4e-3 (avx512dq)
+ * to ~1e-2, and armhf NEON <= 1.5e-2. Because generic is the least accurate side,
+ * the fork harness checks every impl against a double-precision oracle. The QA
+ * metric is a single random scalar per run with a heavy tail, so bounds carry a
+ * 2.5x extreme-value margin (lib/kernel_tests.h; derivation #120): impl-vs-generic
+ * 8e-3 absolute at num_points 131071; the oracle check is 6e-2 absolute up to
+ * num_points 1000003. Results for zero-mean inputs cross zero, so tolerances are
+ * absolute by doctrine.
+ *
  * \b Example
  * Conjugate dot product of two constant-valued complex vectors of length 4.
  * \code
