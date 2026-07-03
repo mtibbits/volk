@@ -7,29 +7,6 @@
  * SPDX-License-Identifier: LGPL-3.0-or-later
  */
 
-#ifndef INCLUDED_VOLK_RUNTIME
-#define INCLUDED_VOLK_RUNTIME
-
-#include <volk/volk_typedefs.h>
-#include <volk/volk_config_fixed.h>
-#include <volk/volk_common.h>
-#include <volk/volk_complex.h>
-#include <volk/volk_malloc.h>
-#include <volk/volk_version.h>
-
-#include <stdlib.h>
-#include <stdbool.h>
-
-__VOLK_DECL_BEGIN
-
-typedef struct volk_func_desc
-{
-    const char **impl_names;
-    const int *impl_deps;
-    const bool *impl_alignment;
-    size_t n_impls;
-} volk_func_desc_t;
-
 //! Prints a list of machines available
 VOLK_API void volk_list_machines(void);
 
@@ -40,20 +17,10 @@ VOLK_API const char* volk_get_machine(void);
 VOLK_API size_t volk_get_alignment(void);
 
 /*!
- * The VOLK_OR_PTR macro is a convenience macro
- * for checking the alignment of a set of pointers.
- * Example usage:
- * volk_is_aligned(VOLK_OR_PTR((VOLK_OR_PTR(p0, p1), p2)))
- */
-#define VOLK_OR_PTR(ptr0, ptr1) \
-    (const void *)(((intptr_t)(ptr0)) | ((intptr_t)(ptr1)))
-
-/*!
  * Is the pointer on a machine alignment boundary?
  *
- * Note: for performance reasons, this function
- * is not usable until another volk API call is made
- * which will perform certain initialization tasks.
+ * Note: for performance reasons, this function is not usable until another
+ * volk API call is made which will perform certain initialization tasks.
  *
  * \param ptr the pointer to some memory buffer
  * \return 1 for alignment boundary, else 0
@@ -107,7 +74,3 @@ extern VOLK_API volk_func_desc_t ${kern.name}_get_func_desc(void);
 % endif
 
 %endfor
-
-__VOLK_DECL_END
-
-#endif /*INCLUDED_VOLK_RUNTIME*/

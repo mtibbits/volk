@@ -322,8 +322,6 @@ static inline float volk_arcsin(const float x)
 {
 #if defined(__cplusplus)
     using std::copysignf;
-    using std::fabsf;
-    using std::sqrtf;
 #endif
     const float pi_2 = 0x1.921fb6p0f;
 
