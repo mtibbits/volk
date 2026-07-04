@@ -55,7 +55,6 @@ std::vector<volk_test_case_t> init_test_list(volk_test_params_t test_params)
 
     volk_test_params_t test_params_snf(test_params);
     test_params_snf.set_scalar(0.5);
-    test_params_snf.set_tol(1e-4);
 
     std::vector<volk_test_case_t> test_cases;
     QA(VOLK_INIT_PUPP(volk_64u_popcntpuppet_64u, volk_64u_popcnt, test_params))
@@ -170,7 +169,16 @@ std::vector<volk_test_case_t> init_test_list(volk_test_params_t test_params)
     volk_test_params_t test_params_acos(test_params_asin.make_absolute(4e-6));
     QA(VOLK_INIT_TEST(volk_32f_acos_32f, test_params_acos))
     QA(VOLK_INIT_TEST(volk_32fc_s32f_power_32fc, test_params_power))
-    QA(VOLK_INIT_TEST(volk_32f_s32f_calc_spectral_noise_floor_32f, test_params_snf))
+    // 1e-5 ABSOLUTE = ceil_1sf(2.5 x max measured impl-vs-generic delta at testqa's
+    // vlen 131071: 3.9e-6, x86 sse over 200 seeds — the README tail-sampling rule).
+    // Replaces the relative 1e-4 (~2.5e-5 effective at the QA result's |res|~0.25,
+    // only ~2.4x above the 1M delta tail). Unlike the raw dot products, this output
+    // is a MEAN, so its absolute error is ~vlen-stable; the wrong-side pathology
+    // still holds (generic 5-10x less accurate than SIMD), so the 1000003 sweep is
+    // oracle-governed (volk_reference). Absolute: small edge-only sweep vlens can
+    // land exactly on 0, where relative is ill-posed. Scalar 0.5 preserved. (#126)
+    QA(VOLK_INIT_TEST(volk_32f_s32f_calc_spectral_noise_floor_32f,
+                      test_params_snf.make_absolute(1e-5)))
 
     volk_test_params_t test_params_atan2(test_params);
     test_params_atan2.add_complex_edge_cases(
