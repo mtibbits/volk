@@ -162,7 +162,10 @@ static const std::vector<volk_reference_entry> g_registry = {
     // docs/kernel_correctness_harness/README.md. ABSOLUTE (small edge-only sweep
     // vlens can land exactly on 0). x86 + armv7 NEON; aarch64/rvv fall under the
     // remeasure clause. (#126)
-    { "volk_32f_s32f_calc_spectral_noise_floor_32f", ref_spectral_noise_floor_32f, 3e-5f, true },
+    { "volk_32f_s32f_calc_spectral_noise_floor_32f",
+      ref_spectral_noise_floor_32f,
+      3e-5f,
+      true },
 };
 
 const std::vector<volk_reference_entry>& volk_reference_registry() { return g_registry; }
