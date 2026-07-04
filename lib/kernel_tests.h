@@ -180,7 +180,13 @@ std::vector<volk_test_case_t> init_test_list(volk_test_params_t test_params)
     QA(VOLK_INIT_TEST(volk_32fc_x2_conjugate_dot_prod_32fc,
                       test_params.make_absolute(2e-2)))
     QA(VOLK_INIT_TEST(volk_32fc_deinterleave_32f_x2, test_params))
-    QA(VOLK_INIT_TEST(volk_32fc_accumulator_s32fc, test_params.make_absolute(3e-2)))
+    // 2e-2 = ceil_1sf(2.5 x max measured impl-vs-generic complex-magnitude delta at
+    // testqa's vlen 131071: 7.75e-3, x86 sse over 200 seeds (the README tail-sampling
+    // rule). Single-scalar reduction metric → 2.5x extreme-value margin. Tighter than
+    // the hand-tuned 3e-2; the 1000003 sweep is oracle-governed (volk_reference).
+    // Contract is the FORMULA: remeasure-and-rederive, not hand-bumping. See the
+    // kernel's "Numerical accuracy" comment. (#124)
+    QA(VOLK_INIT_TEST(volk_32fc_accumulator_s32fc, test_params.make_absolute(2e-2)))
     QA(VOLK_INIT_TEST(volk_32fc_deinterleave_64f_x2, test_params))
     QA(VOLK_INIT_TEST(volk_32fc_s32f_deinterleave_real_16i, test_params.make_tol(1)))
     QA(VOLK_INIT_TEST(volk_32fc_deinterleave_imag_32f, test_params))
