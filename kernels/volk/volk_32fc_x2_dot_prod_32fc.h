@@ -31,6 +31,29 @@
  * \b Outputs
  * \li result: pointer to a complex float value to hold the dot product result.
  *
+ * \b Numerical accuracy
+ *
+ * A single-precision complex reduction: absolute error vs the exact dot product
+ * grows ~linearly with num_points (random-sign accumulation of rounding errors),
+ * while the result's magnitude grows only ~sqrt(num_points) for zero-mean data —
+ * no single relative bound is meaningful across sizes. The error metric is the
+ * complex-magnitude of the deviation. Unlike the real dot product, the SIMD tiers
+ * are NOT uniformly more accurate than the generic loop, and the comparison is
+ * per-arch: at num_points = 1000003 over uniform(-1,1) (60-seed tail maxima), on
+ * x86 generic reaches 1.83e-2 absolute with SSE3 essentially equal (1.82e-2) and
+ * the AVX tiers more accurate (<= 1.4e-2); on armhf the generic loop is tighter
+ * (<= 7.9e-3) and the NEON tiers are less accurate than it (<= 1.27e-2). Accuracy
+ * tracks each
+ * impl's accumulation order, not its width. Because the ordering is mixed,
+ * impl-vs-generic comparison
+ * is unreliable in both directions, so the fork harness checks every impl against
+ * a double-precision oracle. The QA metric is a single random scalar per run with
+ * a heavy tail (bounds derive from 200-seed/60-seed tail maxima), so they carry a
+ * 2.5x extreme-value margin (lib/kernel_tests.h; derivation #119): impl-vs-generic
+ * 2e-2 absolute at num_points 131071; the oracle check is 5e-2 absolute up to
+ * num_points 1000003. Results for zero-mean inputs cross zero, so tolerances are
+ * absolute by doctrine.
+ *
  * \b Example
  * \code
  * int N = 10000;

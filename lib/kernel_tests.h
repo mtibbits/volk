@@ -186,6 +186,13 @@ std::vector<volk_test_case_t> init_test_list(volk_test_params_t test_params)
     QA(VOLK_INIT_TEST(volk_32fc_deinterleave_imag_32f, test_params))
     QA(VOLK_INIT_TEST(volk_32fc_deinterleave_real_32f, test_params))
     QA(VOLK_INIT_TEST(volk_32fc_deinterleave_real_64f, test_params))
+    // 2e-2 = ceil_1sf(2.5 x max measured impl-vs-generic complex-magnitude delta at
+    // testqa's vlen 131071: 4.4e-3, x86 avx over 200 seeds. Reduction QA is a SINGLE
+    // random scalar per run with a heavy tail — a 10-seed sample undersampled it ~3x
+    // and a first cut at 8e-3 left too little margin. The re-derivation lands ON the
+    // pre-existing hand-tuned 2e-2; the 1000003 sweep is oracle-governed
+    // (volk_reference). Contract is the FORMULA: remeasure-and-rederive, don't
+    // hand-bump. See the kernel's "Numerical accuracy" doc-comment. (#119)
     QA(VOLK_INIT_TEST(volk_32fc_x2_dot_prod_32fc, test_params.make_absolute(2e-2)))
     QA(VOLK_INIT_TEST(volk_32fc_32f_dot_prod_32fc, test_params.make_absolute(1e-2)))
 
