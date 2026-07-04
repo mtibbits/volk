@@ -64,6 +64,37 @@ real sweep and exits 2 ("NEGATIVE CONTROL LOST") if its own detector is broken.
   oracles computed from the same inputs; every impl (generic included) is
   compared against the oracle. Registered kernels report mode `ref`.
 
+#### Reduction-tolerance methodology (#118 — the pattern the reduction family applies)
+
+For reductions (dot products, accumulators, stddev, noise floor), impl-vs-generic
+comparison judges the WRONG side: the serial generic's absolute error grows
+~linearly in vlen (random-sign accumulation of per-step roundings) and measures
+4–6× LARGER than the W-way SIMD partial sums'. Reductions therefore get a
+reference-registry oracle, and TWO tolerances, each derived — never hand-bumped —
+at ITS consumer's max vlen as `ceil_1sf(margin × max observed error)`, where the
+margin is **2.5× for reductions** (the metric is a single random scalar per run —
+extreme-value draws at fleet scale falsified a 1.5× first cut within hours) vs the
+1.5× used for per-element max metrics (#173/#174, max-stable over the vector):
+
+- **`ref.tol`** (the registry entry; consumed by this sweep at every vlen up to
+  1000003): covers max BOTH-SIDES error vs the oracle at 1000003 — generic runs
+  ref mode too.
+- **`kp.tol`** (`lib/kernel_tests.h`; consumed by single-vlen testqa): covers the
+  max impl-vs-generic delta at 131071.
+
+The "max observed" must be TAIL-SAMPLED: at least **200 seeds for `kp.tol`
+(131071) and 60 seeds for `ref.tol` (1000003)**, taking the maximum over BOTH
+sides and ALL impls (generic included; the widest accumulation-order spread is
+sometimes generic-vs-`block`, not generic-vs-SIMD). A 10-seed max undersamples
+this single-random-scalar tail ~3× — measured across the #119–#123 family, where
+a 10-seed first cut left two bounds below their observed 200/60-seed tails.
+
+Both ABSOLUTE: zero-mean reductions cross zero, so relative bounds are ill-posed
+near |result| → 0 (the #174 doctrine), and no single relative number is honest
+across vlens anyway (relative error itself grows ~√vlen). Measurement recipe and
+derivation: devDoc Issue-Fork-118/adjudication.md; per-kernel comments carry only
+the kernel's numbers and cite this section.
+
 ### 3. Output canary + AddressSanitizer (#89)
 
 - **Blind spot:** qa checks only `[0, num_points)`; a one-past (or far-past)
