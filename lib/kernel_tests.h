@@ -177,8 +177,15 @@ std::vector<volk_test_case_t> init_test_list(volk_test_params_t test_params)
           lv_cmake(nan, 1.0f),    // atan2(1, nan) = nan (propagate)
           lv_cmake(1.0f, nan) }); // atan2(nan, 1) = nan (propagate)
     QA(VOLK_INIT_TEST(volk_32fc_s32f_atan2_32f, test_params_atan2))
+    // 3e-2 = ceil_1sf(2.5 x max measured impl-vs-generic complex-magnitude delta at
+    // testqa's vlen 131071: 8.7e-3, the generic-class `block` impl over 200 seeds
+    // (the widest accumulation-order spread is generic-vs-block, not generic-vs-SIMD).
+    // Reduction QA is a SINGLE random scalar per run with a heavy tail — a 10-seed
+    // sample undersampled it ~3x and a first cut at 8e-3 sat BELOW block's tail. The
+    // 1000003 sweep is oracle-governed (volk_reference). Contract is the FORMULA:
+    // remeasure-and-rederive, not hand-bumping. See "Numerical accuracy". (#120)
     QA(VOLK_INIT_TEST(volk_32fc_x2_conjugate_dot_prod_32fc,
-                      test_params.make_absolute(2e-2)))
+                      test_params.make_absolute(3e-2)))
     QA(VOLK_INIT_TEST(volk_32fc_deinterleave_32f_x2, test_params))
     QA(VOLK_INIT_TEST(volk_32fc_accumulator_s32fc, test_params.make_absolute(3e-2)))
     QA(VOLK_INIT_TEST(volk_32fc_deinterleave_64f_x2, test_params))

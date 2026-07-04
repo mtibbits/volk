@@ -106,6 +106,34 @@ static void ref_log2_32f(const std::vector<const void*>& in,
     }
 }
 
+// volk_32fc_x2_conjugate_dot_prod_32fc: result = sum_i input[i]*conj(taps[i]) (the
+// FIR inner product). A complex REDUCTION oracle: double-precision accumulation of
+// input * conj(taps), writing only element 0 of the complex output (the harness
+// zero-fills both sides, so the untouched tail compares equal). conj(taps) negates
+// the taps' imaginary part: (ar+ai*i)(br-bi*i) = (ar*br+ai*bi) + (ai*br-ar*bi)*i.
+// Same rationale as the plain dot_prod (#118/#119): only a double-precision truth
+// oracle judges each impl, not the accumulation-order-dependent generic.
+static void ref_conjugate_dot_prod_32fc(const std::vector<const void*>& in,
+                                        const std::vector<void*>& out,
+                                        lv_32fc_t /*scalar*/,
+                                        unsigned int vlen)
+{
+    const lv_32fc_t* input = static_cast<const lv_32fc_t*>(in[0]);
+    const lv_32fc_t* taps = static_cast<const lv_32fc_t*>(in[1]);
+    lv_32fc_t* result = static_cast<lv_32fc_t*>(out[0]);
+    double acc_re = 0.0;
+    double acc_im = 0.0;
+    for (unsigned int i = 0; i < vlen; i++) {
+        const double ar = static_cast<double>(lv_creal(input[i]));
+        const double ai = static_cast<double>(lv_cimag(input[i]));
+        const double br = static_cast<double>(lv_creal(taps[i]));
+        const double bi = static_cast<double>(lv_cimag(taps[i]));
+        acc_re += ar * br + ai * bi;
+        acc_im += ai * br - ar * bi;
+    }
+    result[0] = lv_cmake(static_cast<float>(acc_re), static_cast<float>(acc_im));
+}
+
 static const std::vector<volk_reference_entry> g_registry = {
     // name                          oracle             tol      absolute
     { "volk_32fc_s32f_power_32fc", ref_power_32fc, 1e-4f, false },
@@ -117,6 +145,15 @@ static const std::vector<volk_reference_entry> g_registry = {
     // too tight when comparing SIMD-vs-true-double. 2e-5 covers the approximation
     // envelope with margin while still catching gross defects (off by >>1e-4).
     { "volk_32f_log2_32f", ref_log2_32f, 2e-5f, true },
+    // conjugate_dot_prod_32fc abs tol = 9e-2 = ceil_1sf(2.5 x max BOTH-SIDES error
+    // vs the oracle at the sweep's max vlen 1000003, sampled over 60 seeds: generic
+    // reaches 3.38e-2 (the driver; block <= 2.1e-2, sse3 <= 1.6e-2, avx512dq
+    // <= 7.7e-3). Metric is the complex-magnitude error (ccompare abs mode). 2.5x
+    // extreme-value margin, mode/anchor/sampling per the reduction-tolerance
+    // methodology in docs/kernel_correctness_harness/README.md. ABSOLUTE (zero-mean
+    // complex crosses zero). Derived on x86 + armv7 NEON; aarch64/rvv fall under
+    // the remeasure clause. (#120)
+    { "volk_32fc_x2_conjugate_dot_prod_32fc", ref_conjugate_dot_prod_32fc, 9e-2f, true },
 };
 
 const std::vector<volk_reference_entry>& volk_reference_registry() { return g_registry; }
