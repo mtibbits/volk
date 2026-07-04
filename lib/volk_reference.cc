@@ -141,14 +141,15 @@ static const std::vector<volk_reference_entry> g_registry = {
     // too tight when comparing SIMD-vs-true-double. 2e-5 covers the approximation
     // envelope with margin while still catching gross defects (off by >>1e-4).
     { "volk_32f_log2_32f", ref_log2_32f, 2e-5f, true },
-    // 32fc_32f_dot_prod abs tol = 4e-2 = ceil_1sf(2.5 x max BOTH-SIDES error vs the
-    // oracle at the sweep's max vlen 1000003: generic reaches 1.42e-2 (the driver;
-    // SIMD tiers are more accurate, avx <= 4.5e-3, armhf NEON <= 9.4e-3). Metric is
-    // the complex-magnitude error (ccompare abs mode). 2.5x extreme-value margin per
-    // docs/kernel_correctness_harness/README.md §Reduction-tolerance methodology.
-    // ABSOLUTE (zero-mean complex crosses zero). x86 + armv7 NEON; aarch64/rvv fall
-    // under the remeasure clause. (#121)
-    { "volk_32fc_32f_dot_prod_32fc", ref_32fc_32f_dot_prod_32fc, 4e-2f, true },
+    // 32fc_32f_dot_prod abs tol = 2e-1 = ceil_1sf(2.5 x max BOTH-SIDES error vs the
+    // oracle at the sweep's max vlen 1000003, sampled over 60 seeds: generic reaches
+    // 4.25e-2 (the driver, with a notably heavy tail — the 10-seed max was 1.42e-2;
+    // SIMD tiers are far more accurate, avx <= 4.5e-3, armhf NEON <= 9.4e-3). Metric
+    // is the complex-magnitude error (ccompare abs mode). 2.5x extreme-value margin,
+    // mode/anchor/sampling per the reduction-tolerance methodology in
+    // docs/kernel_correctness_harness/README.md. ABSOLUTE (zero-mean complex crosses
+    // zero). x86 + armv7 NEON; aarch64/rvv fall under the remeasure clause. (#121)
+    { "volk_32fc_32f_dot_prod_32fc", ref_32fc_32f_dot_prod_32fc, 2e-1f, true },
 };
 
 const std::vector<volk_reference_entry>& volk_reference_registry() { return g_registry; }
