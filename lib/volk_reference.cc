@@ -106,6 +106,42 @@ static void ref_log2_32f(const std::vector<const void*>& in,
     }
 }
 
+// volk_32f_s32f_calc_spectral_noise_floor_32f: a two-pass SELECTION reduction.
+// Pass 1: mean of all points; threshold = mean + spectralExclusionValue (the s32f
+// scalar, real part of `scalar`). Pass 2: mean of the points <= threshold; if no
+// point survives (all amplitudes equal edge case), the threshold itself. Computed
+// exactly in double, including the threshold comparison — an impl whose
+// float-rounded mean flips a near-threshold bin is charged for it, per the
+// exact-math contract. Writes only element 0 (harness zero-fills both sides).
+// Unlike the raw dot products the output is normalized (a mean), so its absolute
+// error is ~vlen-stable; the #118 wrong-side pathology still holds at that scale
+// (generic 5-10x less accurate than SIMD), so the oracle judges each impl. (#126)
+static void ref_spectral_noise_floor_32f(const std::vector<const void*>& in,
+                                         const std::vector<void*>& out,
+                                         lv_32fc_t scalar,
+                                         unsigned int vlen)
+{
+    const float* data = static_cast<const float*>(in[0]);
+    float* result = static_cast<float*>(out[0]);
+    const double excl = static_cast<double>(lv_creal(scalar));
+    double sum = 0.0;
+    for (unsigned int i = 0; i < vlen; i++) {
+        sum += static_cast<double>(data[i]);
+    }
+    const double threshold = sum / vlen + excl;
+    double kept_sum = 0.0;
+    unsigned int kept = vlen;
+    for (unsigned int i = 0; i < vlen; i++) {
+        if (static_cast<double>(data[i]) <= threshold) {
+            kept_sum += static_cast<double>(data[i]);
+        } else {
+            kept--;
+        }
+    }
+    const double nf = (kept == 0) ? threshold : kept_sum / kept;
+    result[0] = static_cast<float>(nf);
+}
+
 static const std::vector<volk_reference_entry> g_registry = {
     // name                          oracle             tol      absolute
     { "volk_32fc_s32f_power_32fc", ref_power_32fc, 1e-4f, false },
@@ -117,6 +153,19 @@ static const std::vector<volk_reference_entry> g_registry = {
     // too tight when comparing SIMD-vs-true-double. 2e-5 covers the approximation
     // envelope with margin while still catching gross defects (off by >>1e-4).
     { "volk_32f_log2_32f", ref_log2_32f, 2e-5f, true },
+    // spectral_noise_floor abs tol = 3e-5 = ceil_1sf(2.5 x max BOTH-SIDES error vs
+    // the oracle at the sweep's max vlen 1000003, sampled over 60 seeds: generic
+    // reaches 1.01e-5 (the driver; SIMD tiers are more accurate, sse <= 2.3e-6,
+    // avx <= 9.0e-7; armhf serial-order, <= 1.4e-6). The output is a mean, so the
+    // error is ~vlen-stable rather than linear in N. 2.5x extreme-value margin,
+    // mode/anchor/sampling per the reduction-tolerance methodology in
+    // docs/kernel_correctness_harness/README.md. ABSOLUTE (small edge-only sweep
+    // vlens can land exactly on 0). x86 + armv7 NEON; aarch64/rvv fall under the
+    // remeasure clause. (#126)
+    { "volk_32f_s32f_calc_spectral_noise_floor_32f",
+      ref_spectral_noise_floor_32f,
+      3e-5f,
+      true },
 };
 
 const std::vector<volk_reference_entry>& volk_reference_registry() { return g_registry; }

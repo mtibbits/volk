@@ -35,6 +35,26 @@
  * \b Outputs
  * \li noiseFloorAmplitude: The noise floor of the input spectrum, in dB.
  *
+ * \b Numerical accuracy
+ *
+ * A two-pass selection reduction: a mean sets a threshold (mean +
+ * spectralExclusionValue), then the surviving bins are averaged. Because the
+ * output is a mean, its absolute error is roughly INDEPENDENT of num_points (the
+ * accumulated sum error divides by N) — unlike the raw dot products, whose error
+ * grows linearly. Two error sources: float accumulation in each pass, and
+ * near-threshold bins flipping in or out when a float-rounded mean lands on the
+ * other side of a bin (folded into the measured bounds). The SIMD tiers use
+ * W-way partial sums and are measurably more accurate than the generic serial
+ * loop; at num_points = 1000003 over the QA data (60-seed tail maxima), generic
+ * reaches 1.01e-5 absolute, sse <= 2.3e-6, avx <= 9.0e-7. Because generic is the
+ * least accurate side, the fork harness checks every impl against a
+ * double-precision oracle. Bounds carry a 2.5x extreme-value margin over
+ * 200-seed/60-seed tail maxima (lib/kernel_tests.h; derivation #126):
+ * impl-vs-generic 1e-5 absolute at num_points 131071 (replacing a relative 1e-4);
+ * the oracle check is 3e-5 absolute up to num_points 1000003. Absolute because
+ * the sweep's small edge-only vlens can produce a result of exactly zero, where a
+ * relative bound is ill-posed.
+ *
  * \b Example
  * \code
  * int N = 10000;
