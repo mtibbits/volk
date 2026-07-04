@@ -83,13 +83,14 @@ std::vector<volk_test_case_t> init_test_list(volk_test_params_t test_params)
     QA(VOLK_INIT_TEST(volk_16ic_x2_dot_prod_16ic, test_params))
     QA(VOLK_INIT_TEST(volk_16i_s32f_convert_32f, test_params))
     QA(VOLK_INIT_TEST(volk_16i_convert_8i, test_params))
-    // 2e-2 = ceil_1sf(2.5 x max measured impl-vs-generic complex-magnitude delta at
-    // testqa's vlen 131071: 7.4e-3, x86 avx2). Single-scalar reduction metric → 2.5x
-    // extreme-value margin. Tighter than the hand-tuned 1e-1; the 1000003 sweep is
-    // oracle-governed (volk_reference). int16 input is exact (no quantization); the
-    // error is float accumulation. Local basis (x86 + armv7 NEON); a CI arch that
-    // flickers triggers remeasure-and-rederive. See "Numerical accuracy". (#122)
-    QA(VOLK_INIT_TEST(volk_16i_32fc_dot_prod_32fc, test_params.make_absolute(2e-2)))
+    // 3e-2 = ceil_1sf(2.5 x max measured impl-vs-generic complex-magnitude delta at
+    // testqa's vlen 131071: 1.14e-2, x86 avx2 over 200 seeds (a 10-seed sample
+    // undersampled the single-random-scalar tail ~1.5x here). Still ~3x tighter than
+    // the hand-tuned 1e-1 it replaces; the 1000003 sweep is oracle-governed
+    // (volk_reference). int16 input is exact (no quantization); the error is float
+    // accumulation. Contract is the FORMULA: remeasure-and-rederive, not
+    // hand-bumping. See "Numerical accuracy". (#122)
+    QA(VOLK_INIT_TEST(volk_16i_32fc_dot_prod_32fc, test_params.make_absolute(3e-2)))
     // 2e-2 = ceil_1sf(2.5 x max measured impl-vs-generic delta at testqa's vlen
     // 131071: 6.1e-3, x86 avx512f over 200 seeds). Re-derivation CONFIRMS the existing
     // hand-tuned 2e-2 (a 10-seed sample undersampled the single-scalar tail ~3x). The
@@ -194,14 +195,15 @@ std::vector<volk_test_case_t> init_test_list(volk_test_params_t test_params)
           lv_cmake(nan, 1.0f),    // atan2(1, nan) = nan (propagate)
           lv_cmake(1.0f, nan) }); // atan2(nan, 1) = nan (propagate)
     QA(VOLK_INIT_TEST(volk_32fc_s32f_atan2_32f, test_params_atan2))
-    // 8e-3 = ceil_1sf(2.5 x max measured impl-vs-generic complex-magnitude delta at
-    // testqa's vlen 131071: 3.0e-3, x86 sse3). Reduction QA is a SINGLE random scalar
-    // per run, so the 2.5x extreme-value margin (not the per-element 1.5x). Tighter
-    // than the hand-tuned 2e-2; the 1000003 sweep is oracle-governed (volk_reference).
-    // Local basis (x86 + armv7 NEON); a CI arch that flickers triggers remeasure-and-
-    // rederive, not a hand-bump. See the kernel's "Numerical accuracy" comment. (#120)
+    // 3e-2 = ceil_1sf(2.5 x max measured impl-vs-generic complex-magnitude delta at
+    // testqa's vlen 131071: 8.7e-3, the generic-class `block` impl over 200 seeds
+    // (the widest accumulation-order spread is generic-vs-block, not generic-vs-SIMD).
+    // Reduction QA is a SINGLE random scalar per run with a heavy tail — a 10-seed
+    // sample undersampled it ~3x and a first cut at 8e-3 sat BELOW block's tail. The
+    // 1000003 sweep is oracle-governed (volk_reference). Contract is the FORMULA:
+    // remeasure-and-rederive, not hand-bumping. See "Numerical accuracy". (#120)
     QA(VOLK_INIT_TEST(volk_32fc_x2_conjugate_dot_prod_32fc,
-                      test_params.make_absolute(8e-3)))
+                      test_params.make_absolute(3e-2)))
     QA(VOLK_INIT_TEST(volk_32fc_deinterleave_32f_x2, test_params))
     QA(VOLK_INIT_TEST(volk_32fc_accumulator_s32fc, test_params.make_absolute(3e-2)))
     QA(VOLK_INIT_TEST(volk_32fc_deinterleave_64f_x2, test_params))
@@ -209,20 +211,22 @@ std::vector<volk_test_case_t> init_test_list(volk_test_params_t test_params)
     QA(VOLK_INIT_TEST(volk_32fc_deinterleave_imag_32f, test_params))
     QA(VOLK_INIT_TEST(volk_32fc_deinterleave_real_32f, test_params))
     QA(VOLK_INIT_TEST(volk_32fc_deinterleave_real_64f, test_params))
-    // 8e-3 = ceil_1sf(2.5 x max measured impl-vs-generic complex-magnitude delta at
-    // testqa's vlen 131071: 3.1e-3, x86 avx). Reduction QA is a SINGLE random scalar
-    // per run, so the margin uses the 2.5x extreme-value factor (not the per-element
-    // 1.5x). Tighter than the hand-tuned 2e-2 it replaces; the 1000003 sweep is
-    // oracle-governed (volk_reference). Contract is the FORMULA: remeasure-and-rederive,
-    // don't hand-bump. See the kernel's "Numerical accuracy" doc-comment. (#119)
-    QA(VOLK_INIT_TEST(volk_32fc_x2_dot_prod_32fc, test_params.make_absolute(8e-3)))
-    // 8e-3 = ceil_1sf(2.5 x max measured impl-vs-generic complex-magnitude delta at
-    // testqa's vlen 131071: 2.9e-3, x86 avx). Single-scalar reduction metric → 2.5x
-    // extreme-value margin (not the per-element 1.5x). Tighter than the hand-tuned
-    // 1e-2; the 1000003 sweep is oracle-governed (volk_reference). Local basis
-    // (x86 + armv7 NEON); a CI arch that flickers triggers remeasure-and-rederive,
-    // not a hand-bump. See the kernel's "Numerical accuracy" comment. (#121)
-    QA(VOLK_INIT_TEST(volk_32fc_32f_dot_prod_32fc, test_params.make_absolute(8e-3)))
+    // 2e-2 = ceil_1sf(2.5 x max measured impl-vs-generic complex-magnitude delta at
+    // testqa's vlen 131071: 4.4e-3, x86 avx over 200 seeds. Reduction QA is a SINGLE
+    // random scalar per run with a heavy tail — a 10-seed sample undersampled it ~3x
+    // and a first cut at 8e-3 left too little margin. The re-derivation lands ON the
+    // pre-existing hand-tuned 2e-2; the 1000003 sweep is oracle-governed
+    // (volk_reference). Contract is the FORMULA: remeasure-and-rederive, don't
+    // hand-bump. See the kernel's "Numerical accuracy" doc-comment. (#119)
+    QA(VOLK_INIT_TEST(volk_32fc_x2_dot_prod_32fc, test_params.make_absolute(2e-2)))
+    // 1e-2 = ceil_1sf(2.5 x max measured impl-vs-generic complex-magnitude delta at
+    // testqa's vlen 131071: 4.0e-3, x86 avx512f over 200 seeds. Reduction QA is a
+    // SINGLE random scalar per run with a heavy tail — a 10-seed sample undersampled
+    // it ~3x and a first cut at 8e-3 left too little margin. The re-derivation lands
+    // ON the pre-existing hand-tuned 1e-2; the 1000003 sweep is oracle-governed
+    // (volk_reference). Contract is the FORMULA: remeasure-and-rederive, not
+    // hand-bumping. See the kernel's "Numerical accuracy" comment. (#121)
+    QA(VOLK_INIT_TEST(volk_32fc_32f_dot_prod_32fc, test_params.make_absolute(1e-2)))
 
     // Complex index kernels: same magnitude values to test tie-breaking
     volk_test_params_t test_params_index_fc(test_params.make_tol(0));

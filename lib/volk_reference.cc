@@ -269,38 +269,41 @@ static const std::vector<volk_reference_entry> g_registry = {
     // scalar reduction metrics, mode and anchor per the methodology in
     // docs/kernel_correctness_harness/README.md. (#118)
     { "volk_32f_x2_dot_prod_32f", ref_dot_prod_32f, 4e-2f, true },
-    // dot_prod_32fc abs tol = 4e-2 = ceil_1sf(2.5 x max BOTH-SIDES error vs the
-    // oracle at the sweep's max vlen 1000003: generic reaches 1.44e-2, the a_sse3
-    // impl 1.47e-2 (the driver), armhf NEON 1.15e-2; every impl incl generic runs
-    // ref mode. Metric is the complex-magnitude error (ccompare abs mode). The
-    // 2.5x extreme-value margin for scalar reduction metrics, mode and anchor per
-    // the reduction-tolerance methodology in
-    // docs/kernel_correctness_harness/README.md. ABSOLUTE: complex dot products of
-    // zero-mean data cross zero. (#119)
-    { "volk_32fc_x2_dot_prod_32fc", ref_dot_prod_32fc, 4e-2f, true },
-    // conjugate_dot_prod_32fc abs tol = 6e-2 = ceil_1sf(2.5 x max BOTH-SIDES error
-    // vs the oracle at the sweep's max vlen 1000003: generic reaches 2.16e-2 (the
-    // driver; SIMD tiers are more accurate, <= 2.0e-2 block ... 6.4e-3 avx512dq).
-    // Metric is the complex-magnitude error (ccompare abs mode). 2.5x extreme-value
-    // margin per docs/kernel_correctness_harness/README.md §Reduction-tolerance
-    // methodology. ABSOLUTE (zero-mean complex crosses zero). Derived on x86 +
-    // armv7 NEON; aarch64/rvv fall under the remeasure clause. (#120)
-    { "volk_32fc_x2_conjugate_dot_prod_32fc", ref_conjugate_dot_prod_32fc, 6e-2f, true },
-    // 32fc_32f_dot_prod abs tol = 4e-2 = ceil_1sf(2.5 x max BOTH-SIDES error vs the
-    // oracle at the sweep's max vlen 1000003: generic reaches 1.42e-2 (the driver;
-    // SIMD tiers are more accurate, avx <= 4.5e-3, armhf NEON <= 9.4e-3). Metric is
-    // the complex-magnitude error (ccompare abs mode). 2.5x extreme-value margin per
-    // docs/kernel_correctness_harness/README.md §Reduction-tolerance methodology.
-    // ABSOLUTE (zero-mean complex crosses zero). x86 + armv7 NEON; aarch64/rvv fall
-    // under the remeasure clause. (#121)
-    { "volk_32fc_32f_dot_prod_32fc", ref_32fc_32f_dot_prod_32fc, 4e-2f, true },
+    // dot_prod_32fc abs tol = 5e-2 = ceil_1sf(2.5 x max BOTH-SIDES error vs the
+    // oracle at the sweep's max vlen 1000003, sampled over 60 seeds: generic
+    // reaches 1.83e-2 (the driver; sse3 1.82e-2, AVX <= 1.4e-2, armhf NEON
+    // <= 1.27e-2); every impl incl generic runs ref mode. Metric is the
+    // complex-magnitude error (ccompare abs mode). 2.5x extreme-value margin for
+    // scalar reduction metrics, mode/anchor/sampling per the reduction-tolerance
+    // methodology in docs/kernel_correctness_harness/README.md. ABSOLUTE: complex
+    // dot products of zero-mean data cross zero. (#119)
+    { "volk_32fc_x2_dot_prod_32fc", ref_dot_prod_32fc, 5e-2f, true },
+    // conjugate_dot_prod_32fc abs tol = 9e-2 = ceil_1sf(2.5 x max BOTH-SIDES error
+    // vs the oracle at the sweep's max vlen 1000003, sampled over 60 seeds: generic
+    // reaches 3.38e-2 (the driver; block <= 2.1e-2, sse3 <= 1.6e-2, avx512dq
+    // <= 7.7e-3). Metric is the complex-magnitude error (ccompare abs mode). 2.5x
+    // extreme-value margin, mode/anchor/sampling per the reduction-tolerance
+    // methodology in docs/kernel_correctness_harness/README.md. ABSOLUTE (zero-mean
+    // complex crosses zero). Derived on x86 + armv7 NEON; aarch64/rvv fall under
+    // the remeasure clause. (#120)
+    { "volk_32fc_x2_conjugate_dot_prod_32fc", ref_conjugate_dot_prod_32fc, 9e-2f, true },
+    // 32fc_32f_dot_prod abs tol = 2e-1 = ceil_1sf(2.5 x max BOTH-SIDES error vs the
+    // oracle at the sweep's max vlen 1000003, sampled over 60 seeds: generic reaches
+    // 4.25e-2 (the driver, with a notably heavy tail — the 10-seed max was 1.42e-2;
+    // SIMD tiers are far more accurate, avx <= 4.5e-3, armhf NEON <= 9.4e-3). Metric
+    // is the complex-magnitude error (ccompare abs mode). 2.5x extreme-value margin,
+    // mode/anchor/sampling per the reduction-tolerance methodology in
+    // docs/kernel_correctness_harness/README.md. ABSOLUTE (zero-mean complex crosses
+    // zero). x86 + armv7 NEON; aarch64/rvv fall under the remeasure clause. (#121)
+    { "volk_32fc_32f_dot_prod_32fc", ref_32fc_32f_dot_prod_32fc, 2e-1f, true },
     // 16i_32fc_dot_prod abs tol = 2e-1 = ceil_1sf(2.5 x max BOTH-SIDES error vs the
-    // oracle at the sweep's max vlen 1000003: generic reaches 4.53e-2 (the driver;
-    // SIMD tiers are more accurate, <= 4.0e-2). Errors are ~6x the pure-float dot
-    // products because the int16 input ranges over [-6,6] (harness data). Metric is
-    // the complex-magnitude error (ccompare abs mode). 2.5x extreme-value margin per
-    // docs/kernel_correctness_harness/README.md §Reduction-tolerance methodology.
-    // ABSOLUTE. x86 + armv7 NEON; aarch64/rvv fall under the remeasure clause. (#122)
+    // oracle at the sweep's max vlen 1000003, sampled over 60 seeds: generic reaches
+    // 6.54e-2 (the driver; SIMD tiers are more accurate, <= 4.0e-2). Errors are ~6x
+    // the pure-float dot products because the int16 input ranges over [-6,6]
+    // (harness data). Metric is the complex-magnitude error (ccompare abs mode).
+    // 2.5x extreme-value margin, mode/anchor/sampling per the reduction-tolerance
+    // methodology in docs/kernel_correctness_harness/README.md. ABSOLUTE. x86 +
+    // armv7 NEON; aarch64/rvv fall under the remeasure clause. (#122)
     { "volk_16i_32fc_dot_prod_32fc", ref_16i_32fc_dot_prod_32fc, 2e-1f, true },
     // accumulator_s32f abs tol = 9e-2 = ceil_1sf(2.5 x max BOTH-SIDES error vs the
     // oracle at the sweep's max vlen 1000003: 3.28e-2 over 60 seeds (generic is the
