@@ -82,6 +82,13 @@ extreme-value draws at fleet scale falsified a 1.5× first cut within hours) vs 
 - **`kp.tol`** (`lib/kernel_tests.h`; consumed by single-vlen testqa): covers the
   max impl-vs-generic delta at 131071.
 
+The "max observed" must be TAIL-SAMPLED: at least **200 seeds for `kp.tol`
+(131071) and 60 seeds for `ref.tol` (1000003)**, taking the maximum over BOTH
+sides and ALL impls (generic included; the widest accumulation-order spread is
+sometimes generic-vs-`block`, not generic-vs-SIMD). A 10-seed max undersamples
+this single-random-scalar tail ~3× — measured across the #119–#123 family, where
+a 10-seed first cut left two bounds below their observed 200/60-seed tails.
+
 Both ABSOLUTE: zero-mean reductions cross zero, so relative bounds are ill-posed
 near |result| → 0 (the #174 doctrine), and no single relative number is honest
 across vlens anyway (relative error itself grows ~√vlen). Measurement recipe and
