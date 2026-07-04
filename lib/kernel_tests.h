@@ -83,13 +83,14 @@ std::vector<volk_test_case_t> init_test_list(volk_test_params_t test_params)
     QA(VOLK_INIT_TEST(volk_16ic_x2_dot_prod_16ic, test_params))
     QA(VOLK_INIT_TEST(volk_16i_s32f_convert_32f, test_params))
     QA(VOLK_INIT_TEST(volk_16i_convert_8i, test_params))
-    // 2e-2 = ceil_1sf(2.5 x max measured impl-vs-generic complex-magnitude delta at
-    // testqa's vlen 131071: 7.4e-3, x86 avx2). Single-scalar reduction metric → 2.5x
-    // extreme-value margin. Tighter than the hand-tuned 1e-1; the 1000003 sweep is
-    // oracle-governed (volk_reference). int16 input is exact (no quantization); the
-    // error is float accumulation. Local basis (x86 + armv7 NEON); a CI arch that
-    // flickers triggers remeasure-and-rederive. See "Numerical accuracy". (#122)
-    QA(VOLK_INIT_TEST(volk_16i_32fc_dot_prod_32fc, test_params.make_absolute(2e-2)))
+    // 3e-2 = ceil_1sf(2.5 x max measured impl-vs-generic complex-magnitude delta at
+    // testqa's vlen 131071: 1.14e-2, x86 avx2 over 200 seeds (a 10-seed sample
+    // undersampled the single-random-scalar tail ~1.5x here). Still ~3x tighter than
+    // the hand-tuned 1e-1 it replaces; the 1000003 sweep is oracle-governed
+    // (volk_reference). int16 input is exact (no quantization); the error is float
+    // accumulation. Contract is the FORMULA: remeasure-and-rederive, not
+    // hand-bumping. See "Numerical accuracy". (#122)
+    QA(VOLK_INIT_TEST(volk_16i_32fc_dot_prod_32fc, test_params.make_absolute(3e-2)))
     QA(VOLK_INIT_TEST(volk_32f_accumulator_s32f, test_params.make_absolute(2e-2)))
     QA(VOLK_INIT_TEST(volk_32f_x2_add_32f, test_params))
 

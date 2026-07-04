@@ -144,12 +144,13 @@ static const std::vector<volk_reference_entry> g_registry = {
     // envelope with margin while still catching gross defects (off by >>1e-4).
     { "volk_32f_log2_32f", ref_log2_32f, 2e-5f, true },
     // 16i_32fc_dot_prod abs tol = 2e-1 = ceil_1sf(2.5 x max BOTH-SIDES error vs the
-    // oracle at the sweep's max vlen 1000003: generic reaches 4.53e-2 (the driver;
-    // SIMD tiers are more accurate, <= 4.0e-2). Errors are ~6x the pure-float dot
-    // products because the int16 input ranges over [-6,6] (harness data). Metric is
-    // the complex-magnitude error (ccompare abs mode). 2.5x extreme-value margin per
-    // docs/kernel_correctness_harness/README.md §Reduction-tolerance methodology.
-    // ABSOLUTE. x86 + armv7 NEON; aarch64/rvv fall under the remeasure clause. (#122)
+    // oracle at the sweep's max vlen 1000003, sampled over 60 seeds: generic reaches
+    // 6.54e-2 (the driver; SIMD tiers are more accurate, <= 4.0e-2). Errors are ~6x
+    // the pure-float dot products because the int16 input ranges over [-6,6]
+    // (harness data). Metric is the complex-magnitude error (ccompare abs mode).
+    // 2.5x extreme-value margin, mode/anchor/sampling per the reduction-tolerance
+    // methodology in docs/kernel_correctness_harness/README.md. ABSOLUTE. x86 +
+    // armv7 NEON; aarch64/rvv fall under the remeasure clause. (#122)
     { "volk_16i_32fc_dot_prod_32fc", ref_16i_32fc_dot_prod_32fc, 2e-1f, true },
 };
 
