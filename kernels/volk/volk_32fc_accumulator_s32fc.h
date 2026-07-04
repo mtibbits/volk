@@ -35,6 +35,24 @@
  * \b Outputs
  * \li result: The accumulated complex sum (lv_32fc_t).
  *
+ * \b Numerical accuracy
+ *
+ * A single-precision complex reduction: absolute error vs the exact sum grows
+ * ~linearly with num_points (random-sign accumulation of rounding errors in each
+ * component), while the sum magnitude grows only ~sqrt(num_points) for zero-mean
+ * data — no single relative bound is meaningful across sizes. The error metric is
+ * the complex-magnitude of the deviation. The SIMD tiers use W-way partial sums
+ * and are measurably more accurate than the generic serial loop; at
+ * num_points = 1000003 over uniform(-1,1) (60-seed tail maxima), generic reaches
+ * 5.4e-2 absolute, sse <= 2.5e-2, avx512f <= 9.6e-3, armhf NEON <= 9.0e-3.
+ * Because generic is the least accurate side, the fork harness checks every impl
+ * against a double-precision oracle. The QA metric is a single random scalar per
+ * run with a heavy tail (bounds derive from 200-seed/60-seed tail maxima), so they
+ * carry a 2.5x extreme-value margin (lib/kernel_tests.h; derivation #124):
+ * impl-vs-generic 2e-2 absolute at num_points 131071; the oracle check is 2e-1
+ * absolute up to num_points 1000003. Sums of zero-mean inputs cross zero, so
+ * tolerances are absolute by doctrine.
+ *
  * \b Example
  * Sum four identical complex values and verify the result.
  * \code

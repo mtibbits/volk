@@ -252,6 +252,29 @@ static void ref_accumulator_s32f(const std::vector<const void*>& in,
     result[0] = static_cast<float>(acc);
 }
 
+// volk_32fc_accumulator_s32fc: result = sum_i input[i], a single-input COMPLEX
+// reduction (scalar complex output; real and imaginary parts sum independently).
+// A REDUCTION oracle: accumulates both components in double and writes only
+// element 0 of the output (the harness zero-fills both sides, so the untouched
+// tail compares equal). Same rationale as the dot products (#118/#119): the
+// generic serial float sum has accumulation-order-dependent error, so only a
+// double-precision truth oracle judges each impl on its own merit.
+static void ref_accumulator_s32fc(const std::vector<const void*>& in,
+                                  const std::vector<void*>& out,
+                                  lv_32fc_t /*scalar*/,
+                                  unsigned int vlen)
+{
+    const lv_32fc_t* input = static_cast<const lv_32fc_t*>(in[0]);
+    lv_32fc_t* result = static_cast<lv_32fc_t*>(out[0]);
+    double acc_re = 0.0;
+    double acc_im = 0.0;
+    for (unsigned int i = 0; i < vlen; i++) {
+        acc_re += static_cast<double>(lv_creal(input[i]));
+        acc_im += static_cast<double>(lv_cimag(input[i]));
+    }
+    result[0] = lv_cmake(static_cast<float>(acc_re), static_cast<float>(acc_im));
+}
+
 static const std::vector<volk_reference_entry> g_registry = {
     // name                          oracle             tol      absolute
     { "volk_32fc_s32f_power_32fc", ref_power_32fc, 1e-4f, false },
@@ -312,6 +335,15 @@ static const std::vector<volk_reference_entry> g_registry = {
     // §Reduction-tolerance methodology. ABSOLUTE. x86 + armv7 NEON; aarch64/rvv fall
     // under the remeasure clause. (#123)
     { "volk_32f_accumulator_s32f", ref_accumulator_s32f, 9e-2f, true },
+    // accumulator_s32fc abs tol = 2e-1 = ceil_1sf(2.5 x max BOTH-SIDES error vs the
+    // oracle at the sweep's max vlen 1000003, sampled over 60 seeds: generic reaches
+    // 5.36e-2 (the driver; SIMD tiers are more accurate, sse <= 2.5e-2, avx512f
+    // <= 9.6e-3; armhf generic <= 1.8e-2). Metric is the complex-magnitude error
+    // (ccompare abs mode). 2.5x extreme-value margin, mode/anchor/sampling per the
+    // reduction-tolerance methodology in docs/kernel_correctness_harness/README.md.
+    // ABSOLUTE (zero-mean complex sums cross zero). x86 + armv7 NEON; aarch64/rvv
+    // fall under the remeasure clause. (#124)
+    { "volk_32fc_accumulator_s32fc", ref_accumulator_s32fc, 2e-1f, true },
 };
 
 const std::vector<volk_reference_entry>& volk_reference_registry() { return g_registry; }
