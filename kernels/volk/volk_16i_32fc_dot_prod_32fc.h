@@ -31,6 +31,26 @@
  * \b Outputs
  * \li result: pointer to a complex value to hold the dot product result.
  *
+ * \b Numerical accuracy
+ *
+ * A complex reduction with an integer input: the 16-bit samples are exact integers,
+ * so there is NO input quantization error and the output is full-precision complex
+ * float. The absolute error vs the exact dot product is therefore pure float
+ * accumulation error, growing ~linearly with num_points (random-sign accumulation of
+ * rounding), while the result magnitude grows ~sqrt(num_points) — no single relative
+ * bound is meaningful across sizes. The error metric is the complex-magnitude of the
+ * deviation. Absolute errors run ~6x larger than the pure-float dot products because
+ * the QA input ranges over [-6,6]. The SIMD tiers are more accurate than the generic
+ * loop; at num_points = 1000003 over that data (60-seed tail maxima), generic
+ * reaches 6.54e-2 absolute, the SIMD tiers <= 4.0e-2. Because generic is the least
+ * accurate side, the
+ * fork harness checks every impl against a double-precision oracle. The QA metric is
+ * a single random scalar per run with a heavy tail (bounds derive from 200-seed/
+ * 60-seed tail maxima), so they carry a 2.5x extreme-value margin
+ * (lib/kernel_tests.h; derivation #122): impl-vs-generic 3e-2 absolute at
+ * num_points 131071; the oracle check is 2e-1 absolute up to num_points 1000003.
+ * Tolerances are absolute (the metric spans zero).
+ *
  * \b Example
  * \code
  * int N = 10000;
