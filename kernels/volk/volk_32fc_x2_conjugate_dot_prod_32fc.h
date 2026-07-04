@@ -39,14 +39,15 @@
  * errors), while the result magnitude grows only ~sqrt(num_points) for zero-mean
  * data — no single relative bound is meaningful across sizes. The error metric is
  * the complex-magnitude of the deviation. The SIMD tiers (sse3, avx, avx512dq) are
- * measurably more accurate than the generic serial loop; measured at
- * num_points = 1000003 over uniform(-1,1), generic <= 2.16e-2 absolute (the
- * generic-class `block` impl is similar, <= 2.0e-2), the SIMD tiers 6.4e-3 (avx512dq)
- * to ~1e-2, and armhf NEON <= 1.5e-2. Because generic is the least accurate side,
+ * measurably more accurate than the generic serial loop; at num_points = 1000003
+ * over uniform(-1,1) (60-seed tail maxima), generic reaches 3.38e-2 absolute (the
+ * generic-class `block` impl <= 2.1e-2), the SIMD tiers 7.7e-3 (avx512dq) to
+ * ~1.6e-2, and armhf NEON <= 1.5e-2. Because generic is the least accurate side,
  * the fork harness checks every impl against a double-precision oracle. The QA
  * metric is a single random scalar per run with a heavy tail, so bounds carry a
- * 2.5x extreme-value margin (lib/kernel_tests.h; derivation #120): impl-vs-generic
- * 8e-3 absolute at num_points 131071; the oracle check is 6e-2 absolute up to
+ * 2.5x extreme-value margin over 200-seed/60-seed tail maxima (lib/kernel_tests.h;
+ * derivation #120): impl-vs-generic 3e-2 absolute at num_points 131071 (driven by
+ * the block impl's spread vs generic); the oracle check is 9e-2 absolute up to
  * num_points 1000003. Results for zero-mean inputs cross zero, so tolerances are
  * absolute by doctrine.
  *
