@@ -39,18 +39,20 @@
  * no single relative bound is meaningful across sizes. The error metric is the
  * complex-magnitude of the deviation. Unlike the real dot product, the SIMD tiers
  * are NOT uniformly more accurate than the generic loop, and the comparison is
- * per-arch: measured at num_points = 1000003 over uniform(-1,1), on x86 generic is
- * <= 1.44e-2 absolute while the AVX tiers are more accurate (<= 1.18e-2) and SSE3
- * marginally less (1.47e-2); on armhf the generic loop is tighter (<= 4.3e-3) and
- * the NEON tiers are less accurate than it (<= 1.15e-2). Accuracy tracks each
+ * per-arch: at num_points = 1000003 over uniform(-1,1) (60-seed tail maxima), on
+ * x86 generic reaches 1.83e-2 absolute with SSE3 essentially equal (1.82e-2) and
+ * the AVX tiers more accurate (<= 1.4e-2); on armhf the generic loop is tighter
+ * (<= 7.9e-3) and the NEON tiers are less accurate than it (<= 1.27e-2). Accuracy
+ * tracks each
  * impl's accumulation order, not its width. Because the ordering is mixed,
  * impl-vs-generic comparison
  * is unreliable in both directions, so the fork harness checks every impl against
  * a double-precision oracle. The QA metric is a single random scalar per run with
- * a heavy tail, so bounds carry a 2.5x extreme-value margin (lib/kernel_tests.h;
- * derivation #119): impl-vs-generic 8e-3 absolute at num_points 131071; the oracle
- * check is 4e-2 absolute up to num_points 1000003. Results for zero-mean inputs
- * cross zero, so tolerances are absolute by doctrine.
+ * a heavy tail (bounds derive from 200-seed/60-seed tail maxima), so they carry a
+ * 2.5x extreme-value margin (lib/kernel_tests.h; derivation #119): impl-vs-generic
+ * 2e-2 absolute at num_points 131071; the oracle check is 5e-2 absolute up to
+ * num_points 1000003. Results for zero-mean inputs cross zero, so tolerances are
+ * absolute by doctrine.
  *
  * \b Example
  * \code

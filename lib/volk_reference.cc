@@ -146,15 +146,15 @@ static const std::vector<volk_reference_entry> g_registry = {
     // too tight when comparing SIMD-vs-true-double. 2e-5 covers the approximation
     // envelope with margin while still catching gross defects (off by >>1e-4).
     { "volk_32f_log2_32f", ref_log2_32f, 2e-5f, true },
-    // dot_prod_32fc abs tol = 4e-2 = ceil_1sf(2.5 x max BOTH-SIDES error vs the
-    // oracle at the sweep's max vlen 1000003: generic reaches 1.44e-2, the a_sse3
-    // impl 1.47e-2 (the driver), armhf NEON 1.15e-2; every impl incl generic runs
-    // ref mode. Metric is the complex-magnitude error (ccompare abs mode). The
-    // 2.5x extreme-value margin for scalar reduction metrics, mode and anchor per
-    // the reduction-tolerance methodology in
-    // docs/kernel_correctness_harness/README.md. ABSOLUTE: complex dot products of
-    // zero-mean data cross zero. (#119)
-    { "volk_32fc_x2_dot_prod_32fc", ref_dot_prod_32fc, 4e-2f, true },
+    // dot_prod_32fc abs tol = 5e-2 = ceil_1sf(2.5 x max BOTH-SIDES error vs the
+    // oracle at the sweep's max vlen 1000003, sampled over 60 seeds: generic
+    // reaches 1.83e-2 (the driver; sse3 1.82e-2, AVX <= 1.4e-2, armhf NEON
+    // <= 1.27e-2); every impl incl generic runs ref mode. Metric is the
+    // complex-magnitude error (ccompare abs mode). 2.5x extreme-value margin for
+    // scalar reduction metrics, mode/anchor/sampling per the reduction-tolerance
+    // methodology in docs/kernel_correctness_harness/README.md. ABSOLUTE: complex
+    // dot products of zero-mean data cross zero. (#119)
+    { "volk_32fc_x2_dot_prod_32fc", ref_dot_prod_32fc, 5e-2f, true },
 };
 
 const std::vector<volk_reference_entry>& volk_reference_registry() { return g_registry; }
