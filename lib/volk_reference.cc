@@ -311,6 +311,46 @@ static void ref_spectral_noise_floor_32f(const std::vector<const void*>& in,
     result[0] = static_cast<float>(nf);
 }
 
+// volk_32f_stddev_and_mean_32f_x2: a TWO-OUTPUT reduction — population standard
+// deviation (sqrt(M2/N)) and mean (sum/N) of one input buffer. The first
+// multi-output oracle: writes the contracted prefix of EACH output buffer
+// (outputs[0][0] = stddev, outputs[1][0] = mean, matching the kernel's argument
+// order; the harness zero-fills both sides so the untouched tails compare
+// equal). Computed as the exact double two-pass — which also makes the ref
+// sweep a continuously enforced STABILITY guard: the shipped kernel uses the
+// stable Youngs-Cramer updating form, and a regression to a naive
+// E[x^2]-mean^2 formulation would blow past the registered bound. Kernel edge
+// contract mirrored: N==1 -> (0, x[0]); N==0 -> no write. (#125)
+static void ref_stddev_and_mean_32f_x2(const std::vector<const void*>& in,
+                                       const std::vector<void*>& out,
+                                       lv_32fc_t /*scalar*/,
+                                       unsigned int vlen)
+{
+    const float* input = static_cast<const float*>(in[0]);
+    float* stddev = static_cast<float*>(out[0]);
+    float* mean = static_cast<float*>(out[1]);
+    if (vlen == 0) {
+        return;
+    }
+    if (vlen == 1) {
+        stddev[0] = 0.0f;
+        mean[0] = input[0];
+        return;
+    }
+    double sum = 0.0;
+    for (unsigned int i = 0; i < vlen; i++) {
+        sum += static_cast<double>(input[i]);
+    }
+    const double m = sum / vlen;
+    double m2 = 0.0;
+    for (unsigned int i = 0; i < vlen; i++) {
+        const double d = static_cast<double>(input[i]) - m;
+        m2 += d * d;
+    }
+    stddev[0] = static_cast<float>(std::sqrt(m2 / vlen));
+    mean[0] = static_cast<float>(m);
+}
+
 static const std::vector<volk_reference_entry> g_registry = {
     // name                          oracle             tol      absolute
     { "volk_32fc_s32f_power_32fc", ref_power_32fc, 1e-4f, false },
@@ -393,6 +433,17 @@ static const std::vector<volk_reference_entry> g_registry = {
       ref_spectral_noise_floor_32f,
       3e-5f,
       true },
+    // stddev_and_mean abs tol = 2e-4 = ceil_1sf(2.5 x max BOTH-SIDES error vs the
+    // oracle at the sweep's max vlen 1000003, sampled over 60 seeds and over BOTH
+    // outputs: generic's stddev reaches 4.46e-5 (the driver; SIMD stddev <= 6.5e-6;
+    // mean errors are ~1e-8, three orders below — the shared bound is effectively a
+    // stddev bound). The stddev error GROWS ~linearly with vlen (M2 accumulation
+    // outpaces the /N normalization). 2.5x extreme-value margin, mode/anchor/
+    // sampling per the reduction-tolerance methodology in
+    // docs/kernel_correctness_harness/README.md. ABSOLUTE: the mean output crosses
+    // zero on zero-mean data and one mode covers both outputs. x86 + armv7 NEON;
+    // aarch64/rvv fall under the remeasure clause. (#125)
+    { "volk_32f_stddev_and_mean_32f_x2", ref_stddev_and_mean_32f_x2, 2e-4f, true },
 };
 
 const std::vector<volk_reference_entry>& volk_reference_registry() { return g_registry; }
