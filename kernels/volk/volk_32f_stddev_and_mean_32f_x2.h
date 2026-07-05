@@ -28,6 +28,27 @@
  * \li stddev: The calculated standard deviation.
  * \li mean: The mean of the input buffer.
  *
+ * \b Numerical accuracy
+ *
+ * A two-output reduction computing the POPULATION standard deviation
+ * (sqrt(M2/num_points)) and the mean. The implementations use the numerically
+ * stable Youngs-Cramer updating form (interleaved accumulator lanes merged at
+ * the end), not the cancellation-prone E[x^2]-mean^2 formulation; the fork
+ * harness checks every impl against an exact double-precision two-pass oracle,
+ * which doubles as a continuously enforced stability guard. The stddev output
+ * dominates the error budget: its absolute error grows ~linearly with
+ * num_points (the M2 accumulation error outpaces the /N normalization), while
+ * the mean output's error is ~1e-8-scale (sum error divided by N). Measured at
+ * num_points = 1000003 over uniform(-1,1) (60-seed tail maxima), generic stddev
+ * reaches 4.5e-5 absolute, the SIMD tiers <= 6.5e-6 — generic is the least
+ * accurate side. QA bounds carry a 2.5x extreme-value margin over
+ * 200-seed/60-seed tail maxima and are shared across both outputs
+ * (lib/kernel_tests.h; derivation #125): impl-vs-generic 1e-5 absolute at
+ * num_points 131071 (the tail re-derivation lands on the pre-existing value);
+ * the oracle check is 2e-4 absolute up to num_points 1000003. Absolute because
+ * the mean output crosses zero on zero-mean data and one mode covers both
+ * outputs.
+ *
  * \b Example
  * Generate random numbers with c++11's normal distribution and estimate the mean and
  * standard deviation

@@ -240,6 +240,13 @@ std::vector<volk_test_case_t> init_test_list(volk_test_params_t test_params)
         { -1.f, 1.f, 0.f, inf, 1e-2f, 1e2f, 1e-10, 1e10 });
     QA(VOLK_INIT_TEST(volk_32f_invsqrt_32f, test_params_invsqrt))
     QA(VOLK_INIT_TEST(volk_32f_s32f_stddev_32f, test_params_inacc))
+    // 1e-5 = ceil_1sf(2.5 x max measured impl-vs-generic delta at testqa's vlen
+    // 131071 over BOTH outputs: 3.9e-6, the stddev output, x86 sse over 200 seeds
+    // (the README tail-sampling rule; the mean output's deltas are ~4.6e-8, three
+    // orders below). Re-derivation lands ON the pre-existing hand-tuned 1e-5 —
+    // kept. The 1000003 sweep is oracle-governed (volk_reference). Contract is the
+    // FORMULA: remeasure-and-rederive, not hand-bumping. See the kernel's
+    // "Numerical accuracy" comment. (#125)
     QA(VOLK_INIT_TEST(volk_32f_stddev_and_mean_32f_x2, test_params.make_absolute(1e-5)))
     QA(VOLK_INIT_TEST(volk_32f_x2_subtract_32f, test_params))
     QA(VOLK_INIT_TEST(volk_32f_x3_sum_of_poly_32f, test_params.make_absolute(1e+3)))
