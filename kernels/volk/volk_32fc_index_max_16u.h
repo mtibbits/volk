@@ -15,6 +15,9 @@
  * Returns Argmax_i mag(x[i]). Finds and returns the index which contains the
  * maximum magnitude for complex points in the given vector.
  *
+ * Tie-break: when several points share the maximum magnitude, the kernel returns
+ * the FIRST (lowest) such index.
+ *
  * Note that num_points is a uint32_t, but the return value is
  * uint16_t. Providing a vector larger than the max of a uint16_t
  * (65536) would miss anything outside of this boundary. The kernel
@@ -232,13 +235,15 @@ static inline void volk_32fc_index_max_16u_a_sse3(uint16_t* target,
 
         xmm1 = _mm_hadd_ps(xmm1, xmm2);
 
+        // First-index tie-break: a lane adopts the NEW index only where the new
+        // magnitude STRICTLY exceeds the running max (compared before the update);
+        // on an equal magnitude the earlier index is kept.
+        xmm4.float_vec = _mm_cmpgt_ps(xmm1, xmm3);
+
         xmm3 = _mm_max_ps(xmm1, xmm3);
 
-        xmm4.float_vec = _mm_cmplt_ps(xmm1, xmm3);
-        xmm5.float_vec = _mm_cmpeq_ps(xmm1, xmm3);
-
-        xmm11 = _mm_and_si128(xmm8, xmm5.int_vec);
-        xmm12 = _mm_and_si128(xmm9, xmm4.int_vec);
+        xmm11 = _mm_and_si128(xmm8, xmm4.int_vec);
+        xmm12 = _mm_andnot_si128(xmm4.int_vec, xmm9);
 
         xmm9 = _mm_add_epi32(xmm11, xmm12);
 
@@ -257,15 +262,16 @@ static inline void volk_32fc_index_max_16u_a_sse3(uint16_t* target,
 
         xmm1 = _mm_hadd_ps(xmm2, xmm2);
 
+        // First-index tie-break (see the main loop): strict-greater takes the new
+        // index; an equal magnitude keeps the earlier index.
+        xmm4.float_vec = _mm_cmpgt_ps(xmm1, xmm3);
+
         xmm3 = _mm_max_ps(xmm1, xmm3);
 
         xmm10 = _mm_setr_epi32(2, 2, 2, 2);
 
-        xmm4.float_vec = _mm_cmplt_ps(xmm1, xmm3);
-        xmm5.float_vec = _mm_cmpeq_ps(xmm1, xmm3);
-
-        xmm11 = _mm_and_si128(xmm8, xmm5.int_vec);
-        xmm12 = _mm_and_si128(xmm9, xmm4.int_vec);
+        xmm11 = _mm_and_si128(xmm8, xmm4.int_vec);
+        xmm12 = _mm_andnot_si128(xmm4.int_vec, xmm9);
 
         xmm9 = _mm_add_epi32(xmm11, xmm12);
 
@@ -296,14 +302,19 @@ static inline void volk_32fc_index_max_16u_a_sse3(uint16_t* target,
     _mm_store_ps((float*)&(holderf.f), xmm3);
     _mm_store_si128(&(holderi.int_vec), xmm9);
 
+    // Horizontal reduce with a first-index tie-break: a lane replaces the running
+    // winner only on a strictly greater magnitude, or on an equal magnitude with a
+    // smaller index (the per-lane accumulators can hold non-monotonic indices).
     target[0] = holderi.i[0];
     sq_dist = holderf.f[0];
-    target[0] = (holderf.f[1] > sq_dist) ? holderi.i[1] : target[0];
-    sq_dist = (holderf.f[1] > sq_dist) ? holderf.f[1] : sq_dist;
-    target[0] = (holderf.f[2] > sq_dist) ? holderi.i[2] : target[0];
-    sq_dist = (holderf.f[2] > sq_dist) ? holderf.f[2] : sq_dist;
-    target[0] = (holderf.f[3] > sq_dist) ? holderi.i[3] : target[0];
-    sq_dist = (holderf.f[3] > sq_dist) ? holderf.f[3] : sq_dist;
+    for (int lane = 1; lane < 4; ++lane) {
+        if (holderf.f[lane] > sq_dist) {
+            sq_dist = holderf.f[lane];
+            target[0] = holderi.i[lane];
+        } else if (holderf.f[lane] == sq_dist && holderi.i[lane] < target[0]) {
+            target[0] = holderi.i[lane];
+        }
+    }
 }
 
 #endif /*LV_HAVE_SSE3*/
