@@ -75,6 +75,27 @@ static inline int maximum_frame_size(const int elements)
     return next_lower_power_of_two(frame_size / frame_exp);
 }
 
+// A frame of size `frame_size` (depth frame_exp = log2(frame_size)) drives these
+// accesses into the harness's `elements`-sized buffers:
+//   llrs : (frame_exp+1)*frame_size floats -- the LLR decode tree
+//   u    : 3*frame_size bytes of encode scratch (memset[0,fs) + frame[fs,2fs) +
+//          temp[2fs,3fs)); the decode butterfly's recursion writes a little past 3*fs at
+//          frame_exp>=4 but stays under (frame_exp+1)*frame_size, so the llrs clause
+//          bounds `u` too. BOTH clauses below are load-bearing: 3*fs binds at fs=2 (where
+//          llrs needs only 4), (frame_exp+1)*fs binds everywhere else -- do not drop
+//          either.
+// At tiny `elements` no power-of-two frame fits (the smallest, fs=2, already needs u>=6),
+// so the caller no-ops rather than overrunning the buffers. (#116: the overflow landed in
+// volk_malloc allocator slack -- invisible to ASan -- but fed the compared llrs, a
+// nondeterministic FAIL at vlens 2-4; vlen 5 passed only by allocator-slack luck.)
+static inline int frame_fits_elements(const unsigned int frame_size,
+                                      const unsigned int frame_exp,
+                                      const int elements)
+{
+    return 3u * frame_size <= (unsigned int)elements &&
+           (frame_exp + 1u) * frame_size <= (unsigned int)elements;
+}
+
 #ifdef LV_HAVE_GENERIC
 static inline void volk_32f_8u_polarbutterflypuppet_32f_generic(float* llrs,
                                                                 const float* input,
@@ -89,6 +110,10 @@ static inline void volk_32f_8u_polarbutterflypuppet_32f_generic(float* llrs,
 
     unsigned int frame_size = maximum_frame_size(elements);
     unsigned int frame_exp = log2_of_power_of_2(frame_size);
+
+    if (!frame_fits_elements(frame_size, frame_exp, elements)) {
+        return;
+    }
 
     sanitize_bytes(u, elements);
     clean_up_intermediate_values(llrs, u, frame_size, elements);
@@ -119,6 +144,10 @@ static inline void volk_32f_8u_polarbutterflypuppet_32f_u_avx(float* llrs,
     unsigned int frame_size = maximum_frame_size(elements);
     unsigned int frame_exp = log2_of_power_of_2(frame_size);
 
+    if (!frame_fits_elements(frame_size, frame_exp, elements)) {
+        return;
+    }
+
     sanitize_bytes(u, elements);
     clean_up_intermediate_values(llrs, u, frame_size, elements);
     generate_error_free_input_vector(llrs + frame_exp * frame_size, u, frame_size);
@@ -147,6 +176,10 @@ static inline void volk_32f_8u_polarbutterflypuppet_32f_u_avx2(float* llrs,
 
     unsigned int frame_size = maximum_frame_size(elements);
     unsigned int frame_exp = log2_of_power_of_2(frame_size);
+
+    if (!frame_fits_elements(frame_size, frame_exp, elements)) {
+        return;
+    }
 
     sanitize_bytes(u, elements);
     clean_up_intermediate_values(llrs, u, frame_size, elements);
@@ -177,6 +210,10 @@ static inline void volk_32f_8u_polarbutterflypuppet_32f_rvv(float* llrs,
     unsigned int frame_size = maximum_frame_size(elements);
     unsigned int frame_exp = log2_of_power_of_2(frame_size);
 
+    if (!frame_fits_elements(frame_size, frame_exp, elements)) {
+        return;
+    }
+
     sanitize_bytes(u, elements);
     clean_up_intermediate_values(llrs, u, frame_size, elements);
     generate_error_free_input_vector(llrs + frame_exp * frame_size, u, frame_size);
@@ -205,6 +242,10 @@ static inline void volk_32f_8u_polarbutterflypuppet_32f_rvvseg(float* llrs,
 
     unsigned int frame_size = maximum_frame_size(elements);
     unsigned int frame_exp = log2_of_power_of_2(frame_size);
+
+    if (!frame_fits_elements(frame_size, frame_exp, elements)) {
+        return;
+    }
 
     sanitize_bytes(u, elements);
     clean_up_intermediate_values(llrs, u, frame_size, elements);
