@@ -1288,6 +1288,21 @@ int main(int argc, char* argv[])
         const lv_32fc_t kscalar = kp.scalar();
         const float ktol = ref ? tol : kp.tol();
         const bool kabs = ref ? false : kp.absolute_mode();
+        // Edge cases complete the per-kernel contract (#109/#112, the edge analog
+        // of #106's tol): an impl-mode kernel that registers edge cases in
+        // kernel_tests.h is judged on THOSE (they encode its documented input
+        // domain — e.g. invsqrt deliberately samples x>0 and excludes -0.0, whose
+        // out-of-domain result is formulation-dependent); kernels without a
+        // registered set keep the shared adversarial edges. Ref-mode kernels
+        // always keep the shared edges: their oracle bounds were derived with
+        // them (README reduction-tolerance methodology), so swapping the data
+        // distribution would invalidate the derived tolerances.
+        const std::vector<float>& kfedges = (!ref && !kp.float_edge_cases().empty())
+                                                ? kp.float_edge_cases()
+                                                : kFloatEdges;
+        const std::vector<lv_32fc_t>& kcedges = (!ref && !kp.complex_edge_cases().empty())
+                                                    ? kp.complex_edge_cases()
+                                                    : kComplexEdges;
         std::vector<unsigned int> bad;
         std::set<std::string> impls_seen;
         std::map<std::string, std::vector<unsigned int>> impl_fails;
@@ -1304,8 +1319,8 @@ int main(int argc, char* argv[])
                           kabs,
                           iter,
                           v,
-                          kFloatEdges,
-                          kComplexEdges,
+                          kfedges,
+                          kcedges,
                           report ? &impls_seen : nullptr,
                           report ? &impl_fails : nullptr,
                           &ref_applied,
