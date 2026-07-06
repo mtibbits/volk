@@ -20,6 +20,20 @@
  * the digital domain. It is also used in coordinate transformations and
  * phase-related computations in signal processing pipelines.
  *
+ * Numerical accuracy (measured on x86 SIMD implementations against libm tanf,
+ * relative error): at most ~5e-7 for |x| <= 1, and within the registered QA
+ * tolerance of 1e-2 out to several periods EXCEPT (a) narrow slivers around the
+ * poles (odd multiples of pi/2; at 1e-2 the sliver is within ~7e-6 of the pole,
+ * where tan is astronomically ill-conditioned anyway) and (b) slivers around the
+ * zeros (multiples of pi) that widen as |x| grows. The SIMD paths use a 2-term
+ * single-precision Cody-Waite reduction, so absolute reduction error grows with
+ * |x|: errors beyond 1e-2 away from poles/zeros appear from |x| ~ 3pi upward and
+ * dominate by |x| ~ 1e6; for |x| beyond ~5e8 the vector paths can return NaN
+ * (quadrant accumulator overflow). The scalar tail path calls libm tanf and is
+ * accurate everywhere. The NEON/RVV implementations are separate code paths and
+ * are not covered by these measurements. For accuracy-critical use away from
+ * [-pi/2, pi/2], prefer the generic implementation.
+ *
  * <b>Dispatcher Prototype</b>
  * \code
  * void volk_32f_tan_32f(float* bVector, const float* aVector, unsigned int num_points)
@@ -138,11 +152,15 @@ volk_32f_tan_32f_a_avx2_fma(float* bVector, const float* aVector, unsigned int n
             _mm256_cvtepi32_ps(_mm256_and_si256(_mm256_add_epi32(q, ones), twos)),
             fzeroes,
             _CMP_NEQ_UQ);
-        condition2 = _mm256_cmp_ps(
+        // Sine-sign fixup: flip iff exactly ONE of {sin(|x|) < 0 (q&4), x < 0}
+        // holds -- a bitwise XOR of the two masks. Comparing the masks with
+        // _CMP_NEQ_UQ degenerated to OR: an all-ones mask is NaN, and NaN
+        // compares UNORDERED (true) against everything, so tan(-x) returned
+        // +tan(x) for every negative x with |x| in [pi,2pi) mod 2pi.
+        condition2 = _mm256_xor_ps(
             _mm256_cmp_ps(
                 _mm256_cvtepi32_ps(_mm256_and_si256(q, fours)), fzeroes, _CMP_NEQ_UQ),
-            _mm256_cmp_ps(aVal, fzeroes, _CMP_LT_OS),
-            _CMP_NEQ_UQ);
+            _mm256_cmp_ps(aVal, fzeroes, _CMP_LT_OS));
         condition3 = _mm256_cmp_ps(
             _mm256_cvtepi32_ps(_mm256_and_si256(_mm256_add_epi32(q, twos), fours)),
             fzeroes,
@@ -249,11 +267,15 @@ volk_32f_tan_32f_a_avx2(float* bVector, const float* aVector, unsigned int num_p
             _mm256_cvtepi32_ps(_mm256_and_si256(_mm256_add_epi32(q, ones), twos)),
             fzeroes,
             _CMP_NEQ_UQ);
-        condition2 = _mm256_cmp_ps(
+        // Sine-sign fixup: flip iff exactly ONE of {sin(|x|) < 0 (q&4), x < 0}
+        // holds -- a bitwise XOR of the two masks. Comparing the masks with
+        // _CMP_NEQ_UQ degenerated to OR: an all-ones mask is NaN, and NaN
+        // compares UNORDERED (true) against everything, so tan(-x) returned
+        // +tan(x) for every negative x with |x| in [pi,2pi) mod 2pi.
+        condition2 = _mm256_xor_ps(
             _mm256_cmp_ps(
                 _mm256_cvtepi32_ps(_mm256_and_si256(q, fours)), fzeroes, _CMP_NEQ_UQ),
-            _mm256_cmp_ps(aVal, fzeroes, _CMP_LT_OS),
-            _CMP_NEQ_UQ);
+            _mm256_cmp_ps(aVal, fzeroes, _CMP_LT_OS));
         condition3 = _mm256_cmp_ps(
             _mm256_cvtepi32_ps(_mm256_and_si256(_mm256_add_epi32(q, twos), fours)),
             fzeroes,
@@ -354,9 +376,14 @@ volk_32f_tan_32f_a_sse4_1(float* bVector, const float* aVector, unsigned int num
 
         condition1 = _mm_cmpneq_ps(
             _mm_cvtepi32_ps(_mm_and_si128(_mm_add_epi32(q, ones), twos)), fzeroes);
-        condition2 = _mm_cmpneq_ps(
-            _mm_cmpneq_ps(_mm_cvtepi32_ps(_mm_and_si128(q, fours)), fzeroes),
-            _mm_cmplt_ps(aVal, fzeroes));
+        // Sine-sign fixup: flip iff exactly ONE of {sin(|x|) < 0 (q&4), x < 0}
+        // holds -- a bitwise XOR of the two masks. Comparing the masks with
+        // _mm_cmpneq_ps degenerated to OR: an all-ones mask is NaN, and NaN
+        // compares UNORDERED (true) against everything, so tan(-x) returned
+        // +tan(x) for every negative x with |x| in [pi,2pi) mod 2pi.
+        condition2 =
+            _mm_xor_ps(_mm_cmpneq_ps(_mm_cvtepi32_ps(_mm_and_si128(q, fours)), fzeroes),
+                       _mm_cmplt_ps(aVal, fzeroes));
         condition3 = _mm_cmpneq_ps(
             _mm_cvtepi32_ps(_mm_and_si128(_mm_add_epi32(q, twos), fours)), fzeroes);
 
@@ -458,11 +485,15 @@ volk_32f_tan_32f_u_avx2_fma(float* bVector, const float* aVector, unsigned int n
             _mm256_cvtepi32_ps(_mm256_and_si256(_mm256_add_epi32(q, ones), twos)),
             fzeroes,
             _CMP_NEQ_UQ);
-        condition2 = _mm256_cmp_ps(
+        // Sine-sign fixup: flip iff exactly ONE of {sin(|x|) < 0 (q&4), x < 0}
+        // holds -- a bitwise XOR of the two masks. Comparing the masks with
+        // _CMP_NEQ_UQ degenerated to OR: an all-ones mask is NaN, and NaN
+        // compares UNORDERED (true) against everything, so tan(-x) returned
+        // +tan(x) for every negative x with |x| in [pi,2pi) mod 2pi.
+        condition2 = _mm256_xor_ps(
             _mm256_cmp_ps(
                 _mm256_cvtepi32_ps(_mm256_and_si256(q, fours)), fzeroes, _CMP_NEQ_UQ),
-            _mm256_cmp_ps(aVal, fzeroes, _CMP_LT_OS),
-            _CMP_NEQ_UQ);
+            _mm256_cmp_ps(aVal, fzeroes, _CMP_LT_OS));
         condition3 = _mm256_cmp_ps(
             _mm256_cvtepi32_ps(_mm256_and_si256(_mm256_add_epi32(q, twos), fours)),
             fzeroes,
@@ -569,11 +600,15 @@ volk_32f_tan_32f_u_avx2(float* bVector, const float* aVector, unsigned int num_p
             _mm256_cvtepi32_ps(_mm256_and_si256(_mm256_add_epi32(q, ones), twos)),
             fzeroes,
             _CMP_NEQ_UQ);
-        condition2 = _mm256_cmp_ps(
+        // Sine-sign fixup: flip iff exactly ONE of {sin(|x|) < 0 (q&4), x < 0}
+        // holds -- a bitwise XOR of the two masks. Comparing the masks with
+        // _CMP_NEQ_UQ degenerated to OR: an all-ones mask is NaN, and NaN
+        // compares UNORDERED (true) against everything, so tan(-x) returned
+        // +tan(x) for every negative x with |x| in [pi,2pi) mod 2pi.
+        condition2 = _mm256_xor_ps(
             _mm256_cmp_ps(
                 _mm256_cvtepi32_ps(_mm256_and_si256(q, fours)), fzeroes, _CMP_NEQ_UQ),
-            _mm256_cmp_ps(aVal, fzeroes, _CMP_LT_OS),
-            _CMP_NEQ_UQ);
+            _mm256_cmp_ps(aVal, fzeroes, _CMP_LT_OS));
         condition3 = _mm256_cmp_ps(
             _mm256_cvtepi32_ps(_mm256_and_si256(_mm256_add_epi32(q, twos), fours)),
             fzeroes,
@@ -675,9 +710,14 @@ volk_32f_tan_32f_u_sse4_1(float* bVector, const float* aVector, unsigned int num
 
         condition1 = _mm_cmpneq_ps(
             _mm_cvtepi32_ps(_mm_and_si128(_mm_add_epi32(q, ones), twos)), fzeroes);
-        condition2 = _mm_cmpneq_ps(
-            _mm_cmpneq_ps(_mm_cvtepi32_ps(_mm_and_si128(q, fours)), fzeroes),
-            _mm_cmplt_ps(aVal, fzeroes));
+        // Sine-sign fixup: flip iff exactly ONE of {sin(|x|) < 0 (q&4), x < 0}
+        // holds -- a bitwise XOR of the two masks. Comparing the masks with
+        // _mm_cmpneq_ps degenerated to OR: an all-ones mask is NaN, and NaN
+        // compares UNORDERED (true) against everything, so tan(-x) returned
+        // +tan(x) for every negative x with |x| in [pi,2pi) mod 2pi.
+        condition2 =
+            _mm_xor_ps(_mm_cmpneq_ps(_mm_cvtepi32_ps(_mm_and_si128(q, fours)), fzeroes),
+                       _mm_cmplt_ps(aVal, fzeroes));
         condition3 = _mm_cmpneq_ps(
             _mm_cvtepi32_ps(_mm_and_si128(_mm_add_epi32(q, twos), fours)), fzeroes);
 
