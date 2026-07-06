@@ -16,6 +16,29 @@
  * Computes the inverse square root of the input vector and stores
  * result in the output vector.
  *
+ * Domain contract (measured on x86): for POSITIVE NORMAL inputs
+ * (FLT_MIN <= x <= FLT_MAX) every implementation agrees with 1/sqrt(x) to
+ * within ~2.4e-7 relative error, and x = +0.0 returns +inf everywhere.
+ * Outside that domain the implementations use three different formulations --
+ * generic computes sqrtf(1.0f/x), the recip_sqrt implementation and every SIMD
+ * tail compute 1.0f/sqrtf(x), and the SIMD vector lanes use a hardware
+ * reciprocal-square-root with one Newton-Raphson step -- and their IEEE
+ * special-value results legitimately DIFFER:
+ * \li x = -0.0: NaN (generic: sqrtf(-inf)) vs -inf (1/sqrtf paths) vs NaN
+ *     (vector lanes; the NR step produces NaN, which matches generic).
+ * \li x = -inf: -0.0 (generic: sqrtf(1/-inf) = sqrtf(-0.0)) vs NaN (all others).
+ * \li negative finite x: NaN everywhere (agreement).
+ * \li x = +inf: +0.0 everywhere (agreement). NaN propagates everywhere.
+ * \li denormals and x < FLT_MIN: generic overflows to +inf below 1/FLT_MAX
+ *     (its 1/x overflows); sse/avx/avx2 vector lanes return -inf below
+ *     ~FLT_MIN (rsqrtps flushes the input, the NR step drives the sign);
+ *     the scalar 1/sqrtf paths and avx512f stay finite and accurate.
+ * The registered QA edge cases deliberately sample the agreement domain
+ * (positive normals plus the agreed specials -1, 0, +inf); results for -0.0,
+ * -inf, and sub-FLT_MIN inputs are formulation-dependent and NOT part of the
+ * kernel's cross-implementation contract. The NEON/RVV implementations are
+ * separate code paths and are not covered by these measurements.
+ *
  * <b>Dispatcher Prototype</b>
  * \code
  * void volk_32f_invsqrt_32f(float* cVector, const float* aVector, unsigned int
