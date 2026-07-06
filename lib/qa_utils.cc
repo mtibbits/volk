@@ -2129,12 +2129,22 @@ volk_canary_summary run_volk_canary_test(volk_func_desc_t desc,
     fmt::print("\nRUN_VOLK_CANARY_TEST: {}(vlen={})\n", name, vlen);
 
     volk_qa_aligned_mem_pool mem_pool;
-    // Inputs are sized exactly `vlen` (no twiddle) and drawn from the pool; the
-    // canary only guards the OUTPUT write side (input immutability / over-read is
-    // #90, best-effort via ASan). benchmark_mode=true bypasses the ">=2 arch"
-    // guard so single-impl kernels are still checked.
-    qa_test_data d = setup_test_data(
-        desc, name, vlen, true, float_edge_cases, complex_edge_cases, mem_pool);
+    // Inputs are over-allocated and seeded with vlen_twiddle extra elements (as
+    // run_volk_tests does), so a kernel that reads a fixed-size pointer argument
+    // past `vlen` (e.g. sum_of_poly's 5-element coefficient array) hits seeded data
+    // rather than unseeded slack at vlen < that fixed size (#98). The kernel is still
+    // RUN at `vlen`; the extra elements only pad the input allocations. The canary
+    // guards the OUTPUT write side (input immutability / over-read is #90, best-effort
+    // via ASan). benchmark_mode=true bypasses the ">=2 arch" guard so single-impl
+    // kernels are still checked.
+    const unsigned int vlen_twiddle = 5;
+    qa_test_data d = setup_test_data(desc,
+                                     name,
+                                     vlen + vlen_twiddle,
+                                     true,
+                                     float_edge_cases,
+                                     complex_edge_cases,
+                                     mem_pool);
     if (!d.ok) {
         return summary;
     }
@@ -2372,8 +2382,18 @@ run_volk_immutability_test(volk_func_desc_t desc,
     fmt::print("\nRUN_VOLK_IMMUTABILITY_TEST: {}(vlen={})\n", name, vlen);
 
     volk_qa_aligned_mem_pool mem_pool;
-    qa_test_data d = setup_test_data(
-        desc, name, vlen, true, float_edge_cases, complex_edge_cases, mem_pool);
+    // Over-allocate inputs by vlen_twiddle (as run_volk_tests does) so a fixed-size
+    // pointer argument read past `vlen` (e.g. sum_of_poly's 5-element coefficient
+    // array) hits seeded data, not unseeded slack, at vlen < that fixed size (#98).
+    // The kernel is still RUN at `vlen`.
+    const unsigned int vlen_twiddle = 5;
+    qa_test_data d = setup_test_data(desc,
+                                     name,
+                                     vlen + vlen_twiddle,
+                                     true,
+                                     float_edge_cases,
+                                     complex_edge_cases,
+                                     mem_pool);
     if (!d.ok) {
         return summary;
     }
@@ -2658,8 +2678,21 @@ run_volk_misaligned_test(volk_func_desc_t desc,
     fmt::print("\nRUN_VOLK_MISALIGNED_TEST: {}(vlen={})\n", name, vlen);
 
     volk_qa_aligned_mem_pool mem_pool;
-    qa_test_data d = setup_test_data(
-        desc, name, vlen, true, float_edge_cases, complex_edge_cases, mem_pool);
+    // Over-allocate/seed inputs by vlen_twiddle (as run_volk_tests does) so a
+    // fixed-size pointer argument read past `vlen` (e.g. sum_of_poly's 5-element
+    // coefficient array) hits seeded data at vlen < that fixed size (#98). Both the
+    // aligned pool buffers AND the misaligned own-malloc copies below are sized to
+    // vlen_twiddle and filled from the SAME seeded pre-image, so the two allocations
+    // read identical bytes there (a mere zero-fill would make the vlen < 5 comparison
+    // vacuous). The kernel is still RUN at `vlen`.
+    const unsigned int vlen_twiddle = 5;
+    qa_test_data d = setup_test_data(desc,
+                                     name,
+                                     vlen + vlen_twiddle,
+                                     true,
+                                     float_edge_cases,
+                                     complex_edge_cases,
+                                     mem_pool);
     if (!d.ok) {
         return summary;
     }
@@ -2944,7 +2977,10 @@ run_volk_misaligned_test(volk_func_desc_t desc,
         std::vector<void*> buffs;
         for (size_t j = 0; j < d.both_sigs.size(); j++) {
             const size_t elem = d.both_sigs[j].size * (d.both_sigs[j].is_complex ? 2 : 1);
-            const size_t bytes = static_cast<size_t>(vlen) * elem;
+            // vlen_twiddle padding here too: the misaligned copy must span the same
+            // seeded region as the aligned pool buffer so a fixed-element over-read
+            // reads identical bytes on both sides (#98).
+            const size_t bytes = static_cast<size_t>(vlen + vlen_twiddle) * elem;
             mbufs.push_back(std::make_unique<misaligned_buffer>(bytes, alignment, elem));
             buffs.push_back(mbufs.back()->data());
         }
@@ -2954,8 +2990,10 @@ run_volk_misaligned_test(volk_func_desc_t desc,
             memset(buffs[j], 0, out_bytes);
         }
         for (size_t k = 0; k < d.inputsig.size(); k++) {
-            const size_t in_bytes = static_cast<size_t>(vlen) * d.inputsig[k].size *
-                                    (d.inputsig[k].is_complex ? 2 : 1);
+            // Copy the full seeded region (vlen + vlen_twiddle), matching the aligned
+            // pool pre-image, so fixed-element over-reads see identical bytes (#98).
+            const size_t elem = d.inputsig[k].size * (d.inputsig[k].is_complex ? 2 : 1);
+            const size_t in_bytes = static_cast<size_t>(vlen + vlen_twiddle) * elem;
             memcpy(buffs[d.outputsig.size() + k], d.inbuffs[k], in_bytes);
         }
 
