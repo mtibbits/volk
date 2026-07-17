@@ -43,6 +43,8 @@ volk_32fc_32f_dot_prod_32fc_a_neonpipeline:
 	vld1.32 {tapsVal}, [taps:128]! @ tapsVal
 	vld2.32 {inRealVal-inCompVal}, [input:128]! @ inRealVal, inCompVal
 	add number, number, #1
+	cmp number, quarterPoints	@ quarterPoints==1: the prologue quad is the only one
+	beq .flushpipe			@ skip .loop1 entirely; the flush mac's it
 
 .loop1:
 	@ do work here
@@ -61,6 +63,7 @@ volk_32fc_32f_dot_prod_32fc_a_neonpipeline:
     cmp number, quarterPoints
     blt .loop1
 
+.flushpipe:
 	vmul.f32 realMul, tapsVal, inRealVal
 	vmul.f32 compMul, tapsVal, inCompVal
 	vadd.f32 realAccQ, realAccQ, realMul
