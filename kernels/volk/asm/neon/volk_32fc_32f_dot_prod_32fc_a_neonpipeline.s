@@ -35,7 +35,7 @@ volk_32fc_32f_dot_prod_32fc_a_neonpipeline:
 	veor realAccQ, realAccQ @ zero out accumulators
 	veor compAccQ, compAccQ @ zero out accumulators
 	movs quarterPoints, num_points, lsr #2
-	beq .loop2 @ if zero into quarterPoints
+	beq .tail @ if zero into quarterPoints: skip main loop, enter the guarded tail
 
 	@mov number, quarterPoints
 	mov number, #0
@@ -73,6 +73,7 @@ volk_32fc_32f_dot_prod_32fc_a_neonpipeline:
     vadd.f32 compAccS, s4, s5 @ sum the contents of d2 together (compAccQ)
 
     @ critical values are now in s0 (realAccS), s4 (realAccQ)
+.tail:
 	mov	number, quarterPoints, asl #2
 	cmp num_points, number
 	beq	.done
