@@ -31,8 +31,9 @@ named by --machines (the active configure) against today's kernel defs.
 Stale machine .c files from a prior configure are deliberately ignored
 (named in a stderr note); under an empty --machines nothing is checked
 even when machine files sit on disk (warned, UNCHECKED-named); and the
-correctness of the --machines list itself is cmake's contract
-(available_machines), not this script's.
+correctness of the --machines list itself is cmake's contract (the
+codegen loop's _generated_machines accumulator, derived from
+available_machines), not this script's.
 
 See mtibbits/volk#58 for context; #132 (fail-closed parse guards) and
 #166 (active-machine scoping) for the hardening.
@@ -118,9 +119,12 @@ def check_machine(path: Path, all_kernels, expected_kernels):
         extra = sorted(got_kernels - expected_kernels)
         print(f"error: {path.name}: parsed kernel blocks ({len(got_kernels)}) "
               f"!= gen/volk_kernel_defs kernels ({len(expected_kernels)}); "
-              f"missing={missing[:5]} extra={extra[:5]} -- the impl-array "
-              f"regex no longer matches the generated format; update this "
-              f"parser.", file=sys.stderr)
+              f"missing={missing[:5]} extra={extra[:5]} -- either build/lib "
+              f"is stale (re-run cmake: kernels/volk/*.h is a "
+              f"non-CONFIGURE_DEPENDS glob, so adding/removing a kernel "
+              f"header does not retrigger codegen) or the impl-array regex "
+              f"no longer matches the generated format; update this parser.",
+              file=sys.stderr)
         sys.exit(2)
 
     violations = []
@@ -143,18 +147,28 @@ def check_machine(path: Path, all_kernels, expected_kernels):
 def main():
     ap = argparse.ArgumentParser(
         description="Per-machine impl dispatch-table integrity check",
-        epilog="See mtibbits/volk#58 for context.",
+        epilog="See mtibbits/volk#58 for context; #132/#166 for the "
+               "fail-closed parse guards and active-machine scoping.",
     )
     ap.add_argument("--source-dir", required=True, type=Path,
                     help="Volk source root (the dir with gen/, kernels/, ...)")
     ap.add_argument("--build-lib-dir", required=True, type=Path,
                     help="Build output dir containing volk_machine_*.c files")
     ap.add_argument("--machines", required=True,
-                    help="Semicolon-separated machine names of the active "
-                         "configure (cmake's available_machines). Empty "
-                         "string = nothing to check (static-dispatch or "
-                         "no-machine lane).")
+                    help="Semicolon-separated machine names whose .c the "
+                         "active configure generated (cmake's "
+                         "_generated_machines, accumulated by the codegen "
+                         "loop). Empty string = nothing to check "
+                         "(static-dispatch or no-machine lane).")
     args = ap.parse_args()
+
+    # Cheap wiring sanity (a single stat) kept ahead of the no-op lane so a
+    # typo'd --source-dir is caught even where nothing gets checked; the
+    # expensive kernel-defs import stays below the early exit.
+    gen_dir = args.source_dir / "gen"
+    if not gen_dir.is_dir():
+        print(f"error: gen dir not found at {gen_dir}", file=sys.stderr)
+        sys.exit(2)
 
     # Scope the check to the ACTIVE configure's machine set (mtibbits/volk#166):
     # cmake passes the codegen loop's machine list instead of this script
@@ -190,11 +204,6 @@ def main():
         print(f"note: ignoring {len(orphans)} volk_machine_*.c not in the "
               f"active configure (stale from a prior configure?): "
               f"{', '.join(orphans)}", file=sys.stderr)
-
-    gen_dir = args.source_dir / "gen"
-    if not gen_dir.is_dir():
-        print(f"error: gen dir not found at {gen_dir}", file=sys.stderr)
-        sys.exit(2)
 
     sys.path.insert(0, str(gen_dir))
     try:

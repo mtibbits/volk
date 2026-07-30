@@ -84,7 +84,7 @@ MISSING_AVX = dict(ALL_GOOD, volk_test_add=["generic"])
 
 
 @contextlib.contextmanager
-def env():
+def fixture_tree():
     """Fixture tree: fake source root + empty build lib dir."""
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
@@ -96,17 +96,19 @@ def env():
 
 def test_clean_pass():
     """Both kernels' gated impls present -> exit 0, ok line counts machines."""
-    with env() as (src, lib):
+    with fixture_tree() as (src, lib):
         (lib / "volk_machine_avx_64.c").write_text(
             machine_c(["LV_HAVE_GENERIC", "LV_HAVE_AVX"], ALL_GOOD))
         r = run_check(src, lib, machines="avx_64")
         assert r.returncode == 0, r.stderr
         assert "ok (1 machines checked)" in r.stdout, r.stdout
+        # Negative pin: no orphans on disk -> the ignore note must be absent.
+        assert "note: ignoring" not in r.stderr, r.stderr
 
 
 def test_violation_detected():
     """a_avx gated on defined LV_HAVE_AVX but absent from array -> exit 1."""
-    with env() as (src, lib):
+    with fixture_tree() as (src, lib):
         (lib / "volk_machine_avx_64.c").write_text(
             machine_c(["LV_HAVE_GENERIC", "LV_HAVE_AVX"], MISSING_AVX))
         r = run_check(src, lib, machines="avx_64")
@@ -120,7 +122,7 @@ def test_drift_defines_fails_closed():
     Born-red verified (2026-07-30): unfixed script exited 0 here -- the
     fail-open defect this test pins (analysis/2026-07-30-fail-open-demo.txt).
     """
-    with env() as (src, lib):
+    with fixture_tree() as (src, lib):
         # Same info, drifted shape: '#define LV_HAVE_X (1)' -- the regex
         # (which requires a bare '1') parses NO macros from this.
         body = ("#define LV_HAVE_GENERIC (1)\n#define LV_HAVE_AVX (1)\n"
@@ -137,7 +139,7 @@ def test_drift_blocks_fails_closed():
     Born-red verified (2026-07-30): unfixed script exited 0 ("ok") here while
     checking nothing (analysis/2026-07-30-fail-open-demo.txt).
     """
-    with env() as (src, lib):
+    with fixture_tree() as (src, lib):
         # Same info, drifted shape: impl arrays use ( ) not { } braces.
         body = machine_c(["LV_HAVE_GENERIC", "LV_HAVE_AVX"], {})
         body += '"volk_test_add",\n("generic", "a_avx"),\n'
@@ -155,7 +157,7 @@ def test_kernel_set_mismatch_fails_closed():
     parse to exactly the 154-kernel defs set --
     analysis/2026-07-30-u2-kernel-set-probe.txt: VERDICT equality HOLDS).
     """
-    with env() as (src, lib):
+    with fixture_tree() as (src, lib):
         only_add = {"volk_test_add": ["generic", "a_avx"]}  # volk_test_mul absent
         (lib / "volk_machine_avx_64.c").write_text(
             machine_c(["LV_HAVE_GENERIC", "LV_HAVE_AVX"], only_add))
@@ -171,7 +173,7 @@ def test_duplicate_kernel_block_fails_closed():
     parse_machine_c -- converted from a bare `assert` (strippable under
     python -O, i.e. a live fail-open) to an exit-2 print -- is the only
     cover; this test proves it fires."""
-    with env() as (src, lib):
+    with fixture_tree() as (src, lib):
         body = machine_c(["LV_HAVE_GENERIC", "LV_HAVE_AVX"], ALL_GOOD)
         body += machine_c([], {"volk_test_add": ["generic"]})  # 2nd block
         (lib / "volk_machine_avx_64.c").write_text(body)
@@ -183,7 +185,7 @@ def test_duplicate_kernel_block_fails_closed():
 def test_orphan_ignored_and_count_reflects_active():
     """A stale machine file with a REAL violation, absent from --machines,
     is ignored (exit 0) and the ok-count reflects the active set (#166 AC1+AC2)."""
-    with env() as (src, lib):
+    with fixture_tree() as (src, lib):
         (lib / "volk_machine_avx_64.c").write_text(
             machine_c(["LV_HAVE_GENERIC", "LV_HAVE_AVX"], ALL_GOOD))
         # Orphan from a "previous configure": violation-bearing (a_avx gated
@@ -198,7 +200,7 @@ def test_orphan_ignored_and_count_reflects_active():
 
 def test_empty_machines_list_noop():
     """--machines "" (static-dispatch / no-machine lane) -> warning + exit 0."""
-    with env() as (src, lib):
+    with fixture_tree() as (src, lib):
         # Even with a stale violation-bearing file on disk:
         (lib / "volk_machine_stale_64.c").write_text(
             machine_c(["LV_HAVE_GENERIC", "LV_HAVE_AVX"], MISSING_AVX))
@@ -217,7 +219,7 @@ def test_all_expected_missing_fails_closed():
     files present means a wiped/wrong build/lib -- the same root cause.
     #166 AC4's exit-0-with-warning lane is the EMPTY-list lane above;
     disposition operator-ratified 2026-07-30.)"""
-    with env() as (src, lib):
+    with fixture_tree() as (src, lib):
         r = run_check(src, lib, machines="avx_64;sse_64")
         assert r.returncode == 2, (r.returncode, r.stderr)
         assert "missing from" in r.stderr, r.stderr
@@ -226,7 +228,7 @@ def test_all_expected_missing_fails_closed():
 
 def test_partial_missing_fails_closed():
     """SOME listed machine files missing -> exit 2 (inconsistent build dir)."""
-    with env() as (src, lib):
+    with fixture_tree() as (src, lib):
         (lib / "volk_machine_avx_64.c").write_text(
             machine_c(["LV_HAVE_GENERIC", "LV_HAVE_AVX"], ALL_GOOD))
         r = run_check(src, lib, machines="avx_64;sse_64")
@@ -236,7 +238,7 @@ def test_partial_missing_fails_closed():
 
 def test_multi_machine_clean_pass():
     """Two active machines, both clean -> exit 0, count == 2 (#166 AC3)."""
-    with env() as (src, lib):
+    with fixture_tree() as (src, lib):
         (lib / "volk_machine_avx_64.c").write_text(
             machine_c(["LV_HAVE_GENERIC", "LV_HAVE_AVX"], ALL_GOOD))
         (lib / "volk_machine_sse_64.c").write_text(
@@ -248,7 +250,7 @@ def test_multi_machine_clean_pass():
 
 def test_active_violation_still_detected():
     """Scoping must not swallow a violation in an ACTIVE machine (the #58 core)."""
-    with env() as (src, lib):
+    with fixture_tree() as (src, lib):
         (lib / "volk_machine_avx_64.c").write_text(
             machine_c(["LV_HAVE_GENERIC", "LV_HAVE_AVX"], MISSING_AVX))
         (lib / "volk_machine_stale_64.c").write_text(
@@ -259,6 +261,19 @@ def test_active_violation_still_detected():
         # Discriminating: the orphan's VIOLATION LINE must be absent even
         # though its filename appears in the ignore note.
         assert "stale_64: volk_test_add" not in r.stderr, r.stderr
+
+
+def test_machines_flag_required():
+    """Omitting --machines entirely -> argparse exit 2 (fail-closed CLI).
+
+    Pins the required=True decision: a future "optional with legacy glob
+    fallback" edit must consciously delete this test."""
+    with fixture_tree() as (src, lib):
+        (lib / "volk_machine_avx_64.c").write_text(
+            machine_c(["LV_HAVE_GENERIC", "LV_HAVE_AVX"], ALL_GOOD))
+        r = run_check(src, lib)   # machines=None omits the flag
+        assert r.returncode == 2, (r.returncode, r.stdout, r.stderr)
+        assert "--machines" in r.stderr, r.stderr
 
 
 def main():
