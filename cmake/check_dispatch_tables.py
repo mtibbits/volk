@@ -76,9 +76,10 @@ def parse_machine_c(path: Path):
     for kernel_name, names_block in block_re.findall(text):
         # Fail-closed, not a bare assert (mtibbits/volk#132): a duplicate
         # block leaves the kernel-name SET unchanged, so the set-equality
-        # guard in check_machine cannot see it, and a bare assert is
-        # stripped under `python -O` -- this print+exit is the only
-        # duplicate cover.
+        # guard in check_machine cannot see it -- this print+exit is the
+        # only duplicate cover. (A bare assert would also vanish under an
+        # ambient PYTHONOPTIMIZE; cmake invokes with -B, never -O, so that
+        # was latent rather than live.)
         if kernel_name in dispatch:
             print(f"error: {path.name}: kernel {kernel_name!r} has multiple "
                   f"impl-name arrays; generator structure changed -- update "

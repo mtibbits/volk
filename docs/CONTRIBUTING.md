@@ -81,7 +81,12 @@ accumulator — derived from `available_machines`, and empty under
 configure are ignored (a `note:` on stderr names them) rather than
 checked — see mtibbits/volk#166. If the generated-file format drifts so
 the script's parser no longer matches it, the check fails the build
-(exit 2) instead of silently passing — see mtibbits/volk#132.
+(exit 2) instead of silently passing — see mtibbits/volk#132. One
+everyday consequence: because `kernels/volk/*.h` is a
+non-`CONFIGURE_DEPENDS` glob, adding or removing a kernel header
+requires re-running `cmake`; until you do, the check fails the build
+(exit 2, its message names this cause) rather than letting the build
+silently omit the kernel from every dispatch array.
 
 The check's own test suite is `cmake/test_check_dispatch_tables.py`
 (standalone, not wired into ctest): `python3 cmake/test_check_dispatch_tables.py`.
