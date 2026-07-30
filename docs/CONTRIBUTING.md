@@ -73,6 +73,17 @@ This is a class of bug VOLK's own ctest cannot detect, because the
 `qa_<kernel>` test harness bypasses the per-machine dispatch arrays
 production callers use. See mtibbits/volk#58 for background.
 
+The check is scoped to the machines of the *active* configure (cmake
+passes `available_machines` via `--machines`), so stale
+`volk_machine_*.c` files left in a reused build directory by a previous
+configure are ignored (a `note:` on stderr names them) rather than
+checked — see mtibbits/volk#166. If the generated-file format drifts so
+the script's parser no longer matches it, the check fails the build
+(exit 2) instead of silently passing — see mtibbits/volk#132.
+
+The check's own test suite is `cmake/test_check_dispatch_tables.py`
+(standalone, not wired into ctest): `python3 cmake/test_check_dispatch_tables.py`.
+
 ## The Buddy Principle: Submit One, Review One
 
 When you've submitted a pull request, please take the time to review another

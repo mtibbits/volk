@@ -474,12 +474,18 @@ set(COMPILER_INFO
     "${CMAKE_C_COMPILER}:::${CMAKE_C_FLAGS_${GRCBTU}} ${CMAKE_C_FLAGS}\n${CMAKE_CXX_COMPILER}:::${CMAKE_CXX_FLAGS_${GRCBTU}} ${CMAKE_CXX_FLAGS}\n"
 )
 
+# Machines whose .c the loop below actually generates -- consumed by the
+# volk_check_dispatch_tables target (#166). Accumulated INSIDE the loop so
+# it is correct by construction: under VOLK_STATIC_DISPATCH the loop never
+# runs and the list stays empty (the check then no-ops).
+set(_generated_machines "")
 if(NOT VOLK_STATIC_DISPATCH)
     foreach(machine_name ${available_machines})
         #generate machine source
         set(machine_source ${CMAKE_CURRENT_BINARY_DIR}/volk_machine_${machine_name}.c)
         gen_template(${PROJECT_SOURCE_DIR}/tmpl/volk_machine_xxx.tmpl.c ${machine_source}
                      ${machine_name})
+        list(APPEND _generated_machines ${machine_name})
 
         #determine machine flags
         execute_process(
@@ -621,12 +627,17 @@ endif()
 
 # Verify per-machine dispatch-table integrity after codegen, before
 # compiling any machine .c file. See mtibbits/volk#58
-# for the bug class this catches.
+# for the bug class this catches; #132/#166 for the fail-closed parse
+# guards and active-machine scoping. The machine list is
+# _generated_machines, accumulated by the codegen loop itself, so the
+# check audits exactly the files THIS configure generates -- empty (and
+# the check a no-op) under VOLK_STATIC_DISPATCH by construction.
 add_custom_target(volk_check_dispatch_tables
     COMMAND ${PYTHON_EXECUTABLE} ${PYTHON_DASH_B}
             ${PROJECT_SOURCE_DIR}/cmake/check_dispatch_tables.py
             --source-dir ${PROJECT_SOURCE_DIR}
             --build-lib-dir ${PROJECT_BINARY_DIR}/lib
+            --machines "${_generated_machines}"
     DEPENDS ${volk_gen_sources}
     COMMENT "Checking per-machine impl dispatch-table integrity"
     VERBATIM
@@ -782,7 +793,10 @@ endif()
 # make the shared lib depend on it so a regression in a framework
 # instantiation's machine code breaks the build. With zero tuples declared the
 # manifest is empty and the check is a no-op (zero false positives on
-# origin/main). Mirrors the volk_check_dispatch_tables wiring (PR #59 / B15).
+# origin/main). Mirrors the volk_check_dispatch_tables target/DEPENDS wiring
+# (PR #59 / B15); the dispatch check additionally takes --machines (fed by
+# the codegen loop's _generated_machines accumulator, #132/#166) with no
+# analogue here.
 FINALIZE_CODEGEN_EQUIVALENCE_HARNESS()
 if(_cge_bootstrap_enabled)
     add_dependencies(volk_check_framework_codegen volk_codegen_bootstrap_ref)
