@@ -18,13 +18,25 @@ Invoked by lib/CMakeLists.txt as a custom target made an explicit
 dependency of volk_obj.
 
 Exit codes:
-    0  all dispatch tables consistent with their machine's gates,
-       or no machine .c files to check (cross-compile lane)
+    0  all active-configure dispatch tables consistent with their
+       machine's gates, or nothing to check (empty --machines: static
+       dispatch / no-machine lane)
     1  one or more impls are missing from a machine's dispatch
        (prints each violation with machine name, kernel, impl, gates)
-    2  internal error (parse failure, missing inputs)
+    2  internal error (parse failure/drift, missing inputs, inconsistent
+       build dir)
 
-See mtibbits/volk#58 for context.
+Blind spots (what this check cannot decide): it audits only the machines
+named by --machines (the active configure) against today's kernel defs.
+Stale machine .c files from a prior configure are deliberately ignored
+(named in a stderr note); under an empty --machines nothing is checked
+even when machine files sit on disk (warned, UNCHECKED-named); and the
+correctness of the --machines list itself is cmake's contract (the
+codegen loop's _generated_machines accumulator, derived from
+available_machines), not this script's.
+
+See mtibbits/volk#58 for context; #132 (fail-closed parse guards) and
+#166 (active-machine scoping) for the hardening.
 """
 
 import argparse
@@ -50,11 +62,8 @@ def parse_machine_c(path: Path):
     # which has no double-quotes, so a string-only brace group can only
     # be the impl-name array.
     #
-    # `dispatch[kernel_name] = names` assigns into a dict: if a kernel
-    # ever had multiple matching blocks (it doesn't today), only the
-    # last would survive. One block per kernel is invariant per the
-    # generator's structure -- but if that ever changes, the assertion
-    # below catches the regression.
+    # One block per kernel is invariant per the generator's structure;
+    # the duplicate guard below fails closed if that ever changes.
     #
     # The inner string-group quantifier is * (not +) so a hypothetical
     # zero-impl kernel still enters the dispatch dict with an empty set,
@@ -65,27 +74,65 @@ def parse_machine_c(path: Path):
     )
     dispatch = {}
     for kernel_name, names_block in block_re.findall(text):
-        assert kernel_name not in dispatch, (
-            f"{path.name}: kernel {kernel_name!r} has multiple impl-name "
-            f"arrays; generator structure changed -- update this parser."
-        )
+        # Fail-closed, not a bare assert (mtibbits/volk#132): a duplicate
+        # block leaves the kernel-name SET unchanged, so the set-equality
+        # guard in check_machine cannot see it -- this print+exit is the
+        # only duplicate cover. (A bare assert would also vanish under an
+        # ambient PYTHONOPTIMIZE; cmake invokes with -B, never -O, so that
+        # was latent rather than live.)
+        if kernel_name in dispatch:
+            print(f"error: {path.name}: kernel {kernel_name!r} has multiple "
+                  f"impl-name arrays; generator structure changed -- update "
+                  f"this parser.", file=sys.stderr)
+            sys.exit(2)
         names = set(re.findall(r'"([^"]+)"', names_block))
         dispatch[kernel_name] = names
     return defined, dispatch
 
 
-def check_machine(path: Path, all_kernels):
-    """Return a list of (machine, kernel, impl, gates) violations for this file."""
+def check_machine(path: Path, all_kernels, expected_kernels):
+    """Check one machine file; exits 2 on parse drift, else returns a list
+    of (machine, kernel, impl, gates) violations.
+
+    expected_kernels is the build-wide {kernel.name} set, computed once in
+    main() -- the set-equality guard compares every machine file against
+    the same constant.
+    """
     defined, dispatch = parse_machine_c(path)
-    violations = []
     machine_name = path.stem.replace("volk_machine_", "")
 
+    # Parse-drift guards (mtibbits/volk#132): both regexes fail OPEN -- a
+    # template-format change that matches nothing makes every kernel skip
+    # and the script print ok while checking nothing. Fail closed instead.
+    # Every machine defines LV_HAVE_GENERIC (tmpl/volk_machine_xxx.tmpl.c
+    # emits one '#define LV_HAVE_<ARCH> 1' per arch and every machine
+    # includes 'generic'), and the generator emits one kernel block per
+    # gen/volk_kernel_defs kernel (verified empirically on all 9 machine
+    # files of a dev/all-prs configure, Issue-Fork-132 U2 probe).
+    if "LV_HAVE_GENERIC" not in defined:
+        print(f"error: {path.name}: no '#define LV_HAVE_GENERIC 1' parsed -- "
+              f"the #define regex no longer matches the generated format; "
+              f"update this parser.", file=sys.stderr)
+        sys.exit(2)
+    got_kernels = set(dispatch)
+    if got_kernels != expected_kernels:
+        missing = sorted(expected_kernels - got_kernels)
+        extra = sorted(got_kernels - expected_kernels)
+        print(f"error: {path.name}: parsed kernel blocks ({len(got_kernels)}) "
+              f"!= gen/volk_kernel_defs kernels ({len(expected_kernels)}); "
+              f"missing={missing[:5]} extra={extra[:5]} -- either build/lib "
+              f"is stale (re-run cmake: kernels/volk/*.h is a "
+              f"non-CONFIGURE_DEPENDS glob, so adding/removing a kernel "
+              f"header does not retrigger codegen) or the impl-array regex "
+              f"no longer matches the generated format; update this parser.",
+              file=sys.stderr)
+        sys.exit(2)
+
+    violations = []
     for kernel in all_kernels:
-        actual_impls = dispatch.get(kernel.name)
-        if actual_impls is None:
-            # Kernel not in this machine .c at all -- should never happen
-            # (every machine includes every kernel header per the template).
-            continue
+        # Direct indexing is safe: the set-equality guard above exits
+        # unless every kernel-defs kernel has exactly one parsed block.
+        actual_impls = dispatch[kernel.name]
         # Reads kernel._impls (the unfiltered list) rather than calling
         # the public kernel.get_impls(archs) because the latter applies
         # the same intersection-with-archs filter we are auditing here;
@@ -101,18 +148,63 @@ def check_machine(path: Path, all_kernels):
 def main():
     ap = argparse.ArgumentParser(
         description="Per-machine impl dispatch-table integrity check",
-        epilog="See mtibbits/volk#58 for context.",
+        epilog="See mtibbits/volk#58 for context; #132/#166 for the "
+               "fail-closed parse guards and active-machine scoping.",
     )
     ap.add_argument("--source-dir", required=True, type=Path,
                     help="Volk source root (the dir with gen/, kernels/, ...)")
     ap.add_argument("--build-lib-dir", required=True, type=Path,
                     help="Build output dir containing volk_machine_*.c files")
+    ap.add_argument("--machines", required=True,
+                    help="Semicolon-separated machine names whose .c the "
+                         "active configure generated (cmake's "
+                         "_generated_machines, accumulated by the codegen "
+                         "loop). Empty string = nothing to check "
+                         "(static-dispatch or no-machine lane).")
     args = ap.parse_args()
 
+    # Cheap wiring sanity (a single stat) kept ahead of the no-op lane so a
+    # typo'd --source-dir is caught even where nothing gets checked; the
+    # expensive kernel-defs import stays below the early exit.
     gen_dir = args.source_dir / "gen"
     if not gen_dir.is_dir():
         print(f"error: gen dir not found at {gen_dir}", file=sys.stderr)
         sys.exit(2)
+
+    # Scope the check to the ACTIVE configure's machine set (mtibbits/volk#166):
+    # cmake passes the codegen loop's machine list instead of this script
+    # globbing the build dir, so machine .c files orphaned by a PRIOR configure
+    # are ignored (named on stderr) rather than checked against today's
+    # kernel/arch definitions. The empty-list no-op comes FIRST -- before the
+    # (measured ~150 ms) volk_kernel_defs import it would never use.
+    active = [m for m in args.machines.split(";") if m]
+    on_disk = {p.name for p in args.build_lib_dir.glob("volk_machine_*.c")}
+    if not active:
+        extra = (f"; UNCHECKED on disk: {', '.join(sorted(on_disk))}"
+                 if on_disk else "")
+        print(f"warning: no machines in the active configure (static "
+              f"dispatch or no-machine lane); nothing to check{extra}",
+              file=sys.stderr)
+        sys.exit(0)
+    expected_names = {m: f"volk_machine_{m}.c" for m in active}
+    missing = sorted(m for m, n in expected_names.items() if n not in on_disk)
+    if missing:
+        # None-exist and partial-missing are the SAME failure: cmake supplied
+        # a non-empty active list, so every listed file must exist -- zero
+        # present means a wiped or wrong build/lib, not a lane to wave
+        # through.
+        print(f"error: {len(missing)} of {len(active)} active machine "
+              f"files missing from {args.build_lib_dir}: "
+              f"{', '.join(missing)} (codegen incomplete or wrong "
+              f"--build-lib-dir)", file=sys.stderr)
+        sys.exit(2)
+    machine_files = sorted(args.build_lib_dir / n
+                           for n in expected_names.values())
+    orphans = sorted(on_disk - set(expected_names.values()))
+    if orphans:
+        print(f"note: ignoring {len(orphans)} volk_machine_*.c not in the "
+              f"active configure (stale from a prior configure?): "
+              f"{', '.join(orphans)}", file=sys.stderr)
 
     sys.path.insert(0, str(gen_dir))
     try:
@@ -142,16 +234,10 @@ def main():
               "-- generator API changed; update this check.", file=sys.stderr)
         sys.exit(2)
 
-    machine_files = sorted(args.build_lib_dir.glob("volk_machine_*.c"))
-    if not machine_files:
-        print(f"warning: no volk_machine_*.c files in {args.build_lib_dir} "
-              f"(nothing to check; likely a cross-compile lane that doesn't "
-              f"produce x86 machine .c)", file=sys.stderr)
-        sys.exit(0)
-
+    expected_kernels = {k.name for k in K.kernels}
     all_violations = []
     for mc in machine_files:
-        all_violations.extend(check_machine(mc, K.kernels))
+        all_violations.extend(check_machine(mc, K.kernels, expected_kernels))
 
     if all_violations:
         print("DISPATCH TABLE INTEGRITY CHECK FAILED", file=sys.stderr)

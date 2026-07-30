@@ -266,7 +266,8 @@ equivalence violation, while still hard-failing on a genuine divergence.
 
 ## See also
 
-- the dispatch-table integrity check (mtibbits/volk#58, PR #59) — the
+- the dispatch-table integrity check (mtibbits/volk#58, PR #59; hardened by
+  #132 fail-closed parse guards and #166 active-machine scoping) — the
   integrity check this harness is modeled on.
 - the fusion-framework epic (mtibbits/volk#77) and its design notes for the
   C/C++ integration approaches (A vs B) that inform whether a given impl pair
