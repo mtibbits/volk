@@ -892,14 +892,12 @@ if(ENABLE_TESTING)
             ${CMAKE_CURRENT_SOURCE_DIR}/volk_buffer_roles.cc
             ${CMAKE_CURRENT_SOURCE_DIR}/qa_utils.cc TARGET_DEPS volk)
     endif()
-    # The planted negative-control kernel (volk_32f_misalignedfault_32f)
-    # deliberately executes an alignment-checked load (movaps) on misaligned
-    # memory. UBSan's alignment check reports it before the deliberate fault
-    # fires, so a strict lane (halt_on_error=1) exits at the report and the
-    # misaligned mode never completes (#221). Exempt this one test-only TU
-    # from the alignment check under the sanitizer build type; the raw movaps
-    # is retained, so the fault-recording proof and the NC-LOST exit-2 path
-    # are unchanged.
+    # The planted misaligned-fault control must keep its raw movaps, but
+    # UBSan's alignment check reports it BEFORE the deliberate fault, so a
+    # strict lane (halt_on_error=1) dies pre-sweep. Exempt this one test-only
+    # TU under the sanitizer build type (#221; details: harness README,
+    # Platform notes). A function-level no_sanitize attribute does NOT work
+    # here — GCC generates the check inside the always-inlined _mm_load_ps.
     if(CBTU STREQUAL "ASAN")
         set_source_files_properties(
             ${CMAKE_CURRENT_SOURCE_DIR}/qa_canary_kernel.cc
