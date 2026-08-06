@@ -897,7 +897,7 @@ if(ENABLE_TESTING)
     # strict lane (halt_on_error=1) dies pre-sweep. Exempt this one test-only
     # TU under the sanitizer build type (#221; details: harness README,
     # Platform notes). A function-level no_sanitize attribute does NOT work
-    # here — GCC generates the check inside the always-inlined _mm_load_ps.
+    # here -- GCC generates the check inside the always-inlined _mm_load_ps.
     if(CBTU STREQUAL "ASAN")
         set_source_files_properties(
             ${CMAKE_CURRENT_SOURCE_DIR}/qa_canary_kernel.cc

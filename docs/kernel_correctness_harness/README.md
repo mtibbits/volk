@@ -223,7 +223,10 @@ Retention: latest snapshot only — a new snapshot replaces the old files
   (`qa_canary_kernel.cc`) is compiled with `-fno-sanitize=alignment` so a strict
   UBSan lane (`halt_on_error=1`) can run the misaligned mode — the planted
   `movaps` still faults; only the pre-fault UBSan report is suppressed, and only
-  for that one test-only TU (#221).
+  for that one test-only TU (#221). The exemption follows the ASAN build type
+  only: a UBSan build configured another way (e.g. `-DCMAKE_BUILD_TYPE=Debug`
+  with `-fsanitize=undefined` in `CMAKE_CXX_FLAGS`) still reports the planted
+  load under `halt_on_error=1`.
 - **Default qa:** `volk_test_all` and the per-kernel `qa_volk_*` ctests are
   byte-for-byte unaffected by every capability here; all harness behavior is
   opt-in via the env toggles.
