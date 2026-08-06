@@ -272,9 +272,11 @@ tuple ids without disassembling, useful for inspecting a generated manifest.
 
 ## Limitations
 
-- If any tuple **errors** (a missing symbol or `.o`), the harness exits 2 and
-  reports only the errors — accumulated codegen **failures** from other tuples
-  are not shown until the erroring entry is fixed. Fix manifest errors first.
+- If any tuple **errors** (a missing or ambiguous `.o`, an unparsable
+  disassembly line), the harness exits 2 and reports only the errors —
+  accumulated codegen **failures** from other tuples are not shown until the
+  erroring entry is fixed. Fix manifest errors first. (A missing *symbol* is
+  a skip-with-warning, not an error — see *Diagnostics*.)
 - `MACHINE_O` is resolved by bare-name recursive search under the build tree,
   which assumes the object name is unique there. If a future build compiles the
   same source into more than one OBJECT-library dir, give `MACHINE_O` as a path
@@ -308,7 +310,8 @@ mismatch; actual tuple coverage on macOS starts with #225.)
 - **Symbol not emitted standalone** (a compiler that genuinely inlines an
   address-free impl; note the macOS "not found" case was a naming mismatch,
   mapped since mtibbits/volk#225): there is nothing to compare, so the tuple
-  is **skipped with a warning** and the build stays green — unless the skip leaves a kernel (or the whole run) with
+  is **skipped with a warning** and the build stays green — unless the skip
+  leaves a kernel (or the whole run) with
   zero checked tuples, which the zero-coverage guard turns into a hard failure
   (exit 1). The summary line reports `N skipped`. (Exception: a tuple
   that declares `REQUIRE_STANDALONE` hard-fails instead — see *Require-standalone

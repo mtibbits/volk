@@ -369,7 +369,8 @@ def extract_function_body(o_file: Path, symbol: str,
     text = _disassemble(o_file, objdump, symbol=label)
     try:
         return extract_function_body_from_text(text, label,
-                                               source_label=str(o_file))
+                                               source_label=str(o_file),
+                                               c_symbol=symbol)
     except SymbolNotEmittedError:
         if not _uses_symbol_filter(objdump):
             raise
@@ -382,11 +383,13 @@ def extract_function_body(o_file: Path, symbol: str,
         # (mtibbits/volk#225).
         text = _disassemble(o_file, objdump)
         return extract_function_body_from_text(text, label,
-                                               source_label=str(o_file))
+                                               source_label=str(o_file),
+                                               c_symbol=symbol)
 
 
 def extract_function_body_from_text(text: str, label: str,
-                                    source_label: str = "<disassembly>") -> list:
+                                    source_label: str = "<disassembly>",
+                                    c_symbol: str = None) -> list:
     """Return [{address, bytes, mnemonic, operands}, ...] for the whole body of
     the object-file label `label` in `text` (on Mach-O, callers pass the
     underscore-prefixed label object_symbol_name() produced -- the underscore
@@ -397,7 +400,11 @@ def extract_function_body_from_text(text: str, label: str,
 
     Raises SymbolNotEmittedError if the label is absent (inlined, not emitted
     standalone) and RuntimeError if an in-body line is unparsable and not
-    recognizable padding, or if the body is empty.
+    recognizable padding, or if the body is empty. `c_symbol`, when given and
+    different from `label`, is quoted in the not-found message so a CI-log
+    reader can grep the manifest/tree for the name that actually appears
+    there (the label's underscore is the harness's Mach-O mapping and exists
+    nowhere in the sources).
     """
     in_body = False
     saw_symbol = False
@@ -459,8 +466,10 @@ def extract_function_body_from_text(text: str, label: str,
             hint = f"similar labels present: {shown}{more}"
         else:
             hint = f"no similar labels among {len(labels_seen)} seen"
+        c_note = (f" (C symbol {c_symbol!r})"
+                  if c_symbol and c_symbol != label else "")
         raise SymbolNotEmittedError(
-            f"symbol label {label!r} not found in disassembly of "
+            f"symbol label {label!r}{c_note} not found in disassembly of "
             f"{source_label}. The impl must be emitted standalone (its "
             f"address taken for the dispatch table) for its label to appear "
             f"in the object file; {hint}.")

@@ -590,8 +590,44 @@ def test_not_found_retries_unfiltered_for_similar_labels():
             except mod.SymbolNotEmittedError as e:
                 assert "similar labels present" in str(e), str(e)
                 assert "_wanted_fn_v2" in str(e), str(e)
+                # The C name is what a reader can actually grep the manifest
+                # and tree for -- the label's underscore exists nowhere there.
+                assert "(C symbol 'wanted_fn')" in str(e), str(e)
     # First call filtered (the mapped label), second call the unfiltered retry.
     assert calls == ["_wanted_fn", None], calls
+
+
+def test_not_found_retry_recovers_extraction():
+    """The retry is behavior, not just diagnostics: when the symbol filter
+    misses a label that whole-object disassembly DOES render (an objdump
+    version/symbol-table quirk), the unfiltered retry must recover the
+    extraction -- returning instructions where the pre-retry harness would
+    have skipped the tuple. This is the branch that can turn a former skip
+    into a real comparison, so it must be executed, not just described
+    (mtibbits/volk#225 red-team)."""
+    mod = _load_module()
+    with tempfile.TemporaryDirectory() as td:
+        o = Path(td) / "m.o"
+        o.write_bytes(b"\xcf\xfa\xed\xfe" + b"\x00" * 28)
+        calls = []
+
+        def fake_disassemble(o_file, objdump, symbol=None):
+            calls.append(symbol)
+            if symbol is not None:
+                # Filter misses: header only, zero label lines, rc=0.
+                return "m.o:\tfile format mach-o 64-bit x86-64\n"
+            return (
+                "m.o:\tfile format mach-o 64-bit x86-64\n"
+                "\n"
+                "0000000000000000 <_wanted_fn>:\n"
+                "       0: c3                           \tretq\n"
+            )
+
+        with _patched_disassemble(mod, fake_disassemble):
+            instrs = mod.extract_function_body(o, "wanted_fn",
+                                               objdump="llvm-objdump")
+    assert calls == ["_wanted_fn", None], calls
+    assert [i["mnemonic"] for i in instrs] == ["retq"], instrs
 
 
 def test_not_found_no_retry_when_unfiltered():
