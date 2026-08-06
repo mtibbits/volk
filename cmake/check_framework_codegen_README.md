@@ -48,7 +48,15 @@ Requirements on a compared impl:
   file. Volk's dispatch-table kernels satisfy this automatically because their
   address is taken for the dispatch array. A purely-inlined-away `static
   inline` with no address taken would have no symbol to find (the harness
-  errors clearly: "symbol not found").
+  errors clearly: "symbol label not found").
+  Symbol names are compared against the object format's own labels: on
+  Mach-O every C symbol carries a leading underscore
+  (`_volk_32f_x2_add_32f_a_avx`), and the harness maps this automatically
+  (keyed on the object file's magic bytes, so cross-compiled objects resolve
+  correctly). Before mtibbits/volk#225 the unprefixed lookup made the
+  macOS bootstrap tuple skip as "symbol not found" — a naming mismatch
+  that presented as inlining (a cross-compile probe showed the impl
+  emitted standalone under the underscored label).
 - Trailing NOP-family padding after the function's final `ret`/`jmp` is
   alignment padding for the *next* function; the harness strips it before
   comparing, so inter-function layout differences do not cause false failures.
@@ -212,11 +220,14 @@ positives on a clean tree.
 
 ## Diagnostics
 
-- `symbol '<x>' not found in disassembly of <o>` — the impl was inlined away
-  (no address taken, so no symbol emitted), or the symbol is in a different
-  `.o` than declared. Skipped-with-warning by default; a hard failure if the
-  tuple declares `REQUIRE_STANDALONE`. Aggregate skips are bounded by the
-  zero-coverage guard (see above).
+- `symbol label '<x>' not found in disassembly of <o>` — the impl was inlined
+  away (no address taken, so no symbol emitted), or the symbol is in a
+  different `.o` than declared. (A third cause — the object format's label
+  mangling, e.g. Mach-O's leading underscore — is mapped automatically since
+  mtibbits/volk#225; the message's similar-labels report identifies any
+  residual naming mismatch.) Skipped-with-warning by default; a hard failure
+  if the tuple declares `REQUIRE_STANDALONE`. Aggregate skips are bounded by
+  the zero-coverage guard (see above).
 - `require_standalone assertion FAILED: implementation was not emitted as a
   standalone dispatchable symbol (inlined away)` — a tuple declaring
   `REQUIRE_STANDALONE` had its impl inlined away; the build fails (exit 1).
@@ -277,6 +288,9 @@ The harness runs across the full CI compiler matrix (gcc-11..14, clang-14..19,
 macOS clang, static builds, with either `llvm-objdump` or GNU `objdump`). It
 normalizes away codegen *noise* that differs by compiler but is not a real
 equivalence violation, while still hard-failing on a genuine divergence.
+(Measured caveat: on macOS x86_64 the harness *ran* but checked **zero**
+tuples before mtibbits/volk#225 — every tuple skipped on the Mach-O label
+mismatch; actual tuple coverage on macOS starts with #225.)
 
 **Stripped / tolerated (not a failure):**
 
@@ -290,7 +304,9 @@ equivalence violation, while still hard-failing on a genuine divergence.
   a hot loop) are *preserved* — only the trailing run is stripped.
 - **Trailing `data16` padding** — how GNU objdump renders a multi-byte NOP pad
   (`data16 cs nopw …`); treated as padding like the NOP family.
-- **Symbol not emitted standalone** (e.g. macOS clang inlines the impl): there
+- **Symbol not emitted standalone** (a compiler that genuinely inlines an
+  address-free impl; note the macOS "not found" case was a naming mismatch,
+  mapped since mtibbits/volk#225): there
   is nothing to compare, so the tuple is **skipped with a warning** and the
   build stays green — unless the skip leaves a kernel (or the whole run) with
   zero checked tuples, which the zero-coverage guard turns into a hard failure

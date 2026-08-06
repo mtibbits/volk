@@ -29,7 +29,9 @@ Cross-compiler robustness (mtibbits/volk#145): benign codegen noise that differs
 by compiler is normalized away -- trailing alignment NOPs of any encoding and
 trailing `data16` padding are stripped (they pad the next function and belong to
 no function), and a symbol the compiler inlined rather than emitting standalone
-is skipped-with-warning since there is nothing to compare -- exit 0 only while
+is skipped-with-warning since there is nothing to compare (symbol names are
+first mapped to the object format's labels -- Mach-O prepends an underscore to
+C symbols, mtibbits/volk#225) -- exit 0 only while
 real coverage remains: a run where EVERY declared tuple skipped, or a kernel
 whose declared tuples ALL skipped, is a zero-coverage failure (exit 1;
 mtibbits/volk#165). A genuine post-normalization divergence still fails
@@ -76,14 +78,23 @@ from pathlib import Path
 
 
 class SymbolNotEmittedError(RuntimeError):
-    """The compared symbol is absent from the object file because the compiler
-    inlined it rather than emitting it standalone (e.g. macOS clang on some
-    impls). There is nothing to compare, so main() skips the tuple with a
-    warning rather than failing the build -- subject to the aggregate
-    zero-coverage guard: a run (or a single kernel) whose declared tuples ALL
-    skip fails loudly instead (mtibbits/volk#165). Distinct from the other
-    RuntimeError cases (missing/ambiguous .o, unparsable line) which remain
-    hard errors (mtibbits/volk#145).
+    """The compared label is absent from the object file's disassembly --
+    the compiler inlined the impl rather than emitting it standalone, or the
+    label genuinely is not there. There is nothing to compare, so main()
+    skips the tuple with a warning rather than failing the build -- subject
+    to the aggregate zero-coverage guard: a run (or a single kernel) whose
+    declared tuples ALL skip fails loudly instead (mtibbits/volk#165).
+    Distinct from the other RuntimeError cases (missing/ambiguous .o,
+    unparsable line) which remain hard errors (mtibbits/volk#145).
+
+    NOTE (mtibbits/volk#225): "not found" once had a second, non-inlining
+    cause -- Mach-O's leading-underscore C mangling made the unprefixed
+    lookup miss labels that WERE present (measured on a Linux cross-compile
+    probe: an address-taken static-inline impl compiled for
+    x86_64-apple-macos was emitted standalone as _volk_32f_x2_add_32f_a_avx).
+    object_symbol_name() now maps C name -> object-file label per the file's
+    magic, and the error text reports similar labels seen, so a naming
+    mismatch is loud instead of masquerading as inlining.
     """
 
 
@@ -581,7 +592,7 @@ def main():
                 failures.append((tuple_id(t), msg))
                 continue
             # Default: compiler inlined the impl rather than emitting it
-            # standalone (e.g. macOS clang): nothing to compare, so skip with a
+            # standalone: nothing to compare, so skip with a
             # loud warning instead of failing the build. A present-but-divergent
             # body is unaffected -- it still fails below.
             print(f"codegen-equivalence: WARNING: skipping {tuple_id(t)}: {e}",
