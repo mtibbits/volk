@@ -29,9 +29,11 @@ Cross-compiler robustness (mtibbits/volk#145): benign codegen noise that differs
 by compiler is normalized away -- trailing alignment NOPs of any encoding and
 trailing `data16` padding are stripped (they pad the next function and belong to
 no function), and a symbol the compiler inlined rather than emitting standalone
-is skipped-with-warning (exit 0) since there is nothing to compare. A genuine
-post-normalization divergence still fails (exit 1); a genuinely unparsable
-non-padding line still errors (exit 2).
+is skipped-with-warning since there is nothing to compare -- exit 0 only while
+real coverage remains: a run where EVERY declared tuple skipped, or a kernel
+whose declared tuples ALL skipped, is a zero-coverage failure (exit 1;
+mtibbits/volk#165). A genuine post-normalization divergence still fails
+(exit 1); a genuinely unparsable non-padding line still errors (exit 2).
 
 Per-tuple opt-in `require_standalone` (bool, default off) flips that inlined-away
 outcome: for a tuple whose dispatch relies on the impl existing as a real,
@@ -40,8 +42,11 @@ hard-fails it (exit 1) instead of skip-with-warning. Orthogonal to
 `require_mnemonic`, which asserts which instructions a present symbol contains.
 
 Exit codes:
-    0  all declared tuples pass (or are skipped/empty); skips warn on stderr
-    1  one or more tuples fail their criterion (per-tuple diff on stderr)
+    0  all declared tuples pass; skips warn on stderr while real coverage
+       remains (an empty manifest -- zero tuples declared -- is also ok)
+    1  one or more tuples fail their criterion (per-tuple diff on stderr),
+       or zero coverage: every declared tuple skipped, or some kernel's
+       declared tuples all skipped (mtibbits/volk#165)
     2  internal error: missing manifest/.o, ambiguous .o, unparsable
        non-padding line, or empty function body
 
@@ -66,6 +71,7 @@ import json
 import re
 import subprocess
 import sys
+from collections import Counter
 from pathlib import Path
 
 
@@ -73,9 +79,11 @@ class SymbolNotEmittedError(RuntimeError):
     """The compared symbol is absent from the object file because the compiler
     inlined it rather than emitting it standalone (e.g. macOS clang on some
     impls). There is nothing to compare, so main() skips the tuple with a
-    warning rather than failing the build. Distinct from the other RuntimeError
-    cases (missing/ambiguous .o, unparsable line) which remain hard errors
-    (mtibbits/volk#145).
+    warning rather than failing the build -- subject to the aggregate
+    zero-coverage guard: a run (or a single kernel) whose declared tuples ALL
+    skip fails loudly instead (mtibbits/volk#165). Distinct from the other
+    RuntimeError cases (missing/ambiguous .o, unparsable line) which remain
+    hard errors (mtibbits/volk#145).
     """
 
 
@@ -498,6 +506,7 @@ def main():
     failures = []
     errors = []
     skipped = []
+    skipped_by_kernel = Counter()
     for t in tuples:
         try:
             a_o = resolve_object(args.build_lib_dir, t["impl_a"]["machine_o"])
@@ -523,6 +532,7 @@ def main():
             print(f"codegen-equivalence: WARNING: skipping {tuple_id(t)}: {e}",
                   file=sys.stderr)
             skipped.append(tuple_id(t))
+            skipped_by_kernel[t["kernel"]] += 1
             continue
         except RuntimeError as e:
             errors.append((tuple_id(t), str(e)))
@@ -572,7 +582,60 @@ def main():
             print("", file=sys.stderr)
         sys.exit(1)
 
+    # Zero-coverage guard (mtibbits/volk#165): a skip is legitimate per-tuple,
+    # but declared-yet-unverified coverage must not report success. The global
+    # all-skip case gets its own headline because "the check verified nothing
+    # at all" is a different operator situation than one kernel losing
+    # coverage. (A require_standalone tuple that was inlined away lands in
+    # `failures` -- exited above -- never in `skipped`, so it cannot skew this
+    # accounting.)
     checked = len(tuples) - len(skipped)
+    declared_by_kernel = Counter(t["kernel"] for t in tuples)
+    uncovered = sorted(k for k, n in declared_by_kernel.items()
+                       if skipped_by_kernel[k] == n)
+    # `checked == 0` is tested explicitly rather than relying on it implying
+    # `uncovered` non-empty: that implication is a property of the loop's
+    # current buckets (every tuple checks or skips), not of this guard, and a
+    # future non-skip consumption path must not let a zero-checked run print
+    # ok again.
+    if uncovered or checked == 0:
+        if checked == 0:
+            headline = "zero coverage"
+            lead = (f"All {len(tuples)} declared tuples were skipped (impl "
+                    "not emitted standalone),\nso nothing was verified. A "
+                    "toolchain change that inlines every compared\nimpl "
+                    "would otherwise turn this check into a silent no-op.")
+            shown = skipped
+        else:
+            headline = ("zero codegen coverage for kernel(s): "
+                        + ", ".join(uncovered))
+            lead = ("Every declared tuple for the named kernel(s) was "
+                    "skipped (impl not emitted\nstandalone), leaving them "
+                    "unverified while the rest of the run passed.")
+            # Name only the uncovered kernels' skips: a covered kernel's
+            # incidental skip must not be presented as removable. Derived from
+            # the skip list itself (not kernel membership) so the label stays
+            # truthful if the uncovered predicate is ever loosened below 100%.
+            shown = [tid for tid in skipped
+                     if tid.split(".", 1)[0] in uncovered]
+        print(f"CODEGEN-EQUIVALENCE CHECK FAILED: {headline}",
+              file=sys.stderr)
+        print("", file=sys.stderr)
+        print(lead, file=sys.stderr)
+        print("", file=sys.stderr)
+        print("Fix the build so the symbols are emitted standalone (see the "
+              "README's\nrequire-standalone notes). Removing the affected "
+              "tuples from the manifest\nsilences the check instead of "
+              "fixing it -- a deliberate de-scoping that\nneeds review, not "
+              "an equivalent outcome. See mtibbits/volk#165.",
+              file=sys.stderr)
+        if checked == 0:
+            print("Note: an emptied manifest prints ok (0 tuples declared); "
+                  "that green means\nzero coverage was accepted, not that "
+                  "codegen was verified.", file=sys.stderr)
+        print(f"  skipped: {shown}", file=sys.stderr)
+        sys.exit(1)
+
     extra = (f", {len(skipped)} skipped -- not emitted standalone: {skipped}"
              if skipped else "")
     print(f"codegen-equivalence: ok ({checked} tuples checked{extra})")
