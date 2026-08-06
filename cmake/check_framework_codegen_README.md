@@ -133,13 +133,14 @@ tuples to guarantee the instantiation didn't silently fall back to scalar code.
 
 By default, when the compiler inlines an impl rather than emitting it as a
 standalone symbol there is nothing to disassemble, so the tuple is
-**skipped with a warning** and the build stays green — bounded by the
-zero-coverage guard below: aggregate all-skip configurations fail (see
-*Diagnostics* and *Cross-compiler robustness* below). That is the right default for impls whose
-standalone emission is compiler-dependent — but it leaves a masked-regression
-class for impls that the dispatch table relies on existing as real, separately
-dispatchable symbols: if such an impl gets inlined away by a future refactor,
-the symbol silently disappears and the check still passes.
+**skipped with a warning** and the build stays green (see *Diagnostics* and
+*Cross-compiler robustness* below) — bounded by the *Zero-coverage guard*:
+aggregate all-skip configurations fail. That is the right default for impls
+whose standalone emission is compiler-dependent — but it leaves a
+masked-regression class for impls that the dispatch table relies on existing
+as real, separately dispatchable symbols: if such an impl gets inlined away
+by a future refactor, the symbol silently disappears and the check still
+passes while the kernel retains other coverage.
 
 Declare the optional boolean flag `REQUIRE_STANDALONE` (pass the **bare keyword**,
 no value) on such a tuple to flip that outcome: when the impl is inlined away,
@@ -229,6 +230,11 @@ positives on a clean tree.
 - `within_noise comparison FAILED` — either mnemonics differ (compiler chose a
   different instruction) or operand classes differ (e.g. a register operand
   became a memory operand). The offending index is printed.
+- `CHECK FAILED: zero coverage` — every declared tuple was skipped; the run
+  verified nothing (see *Zero-coverage guard*). Exit 1.
+- `CHECK FAILED: zero codegen coverage for kernel(s): <names>` — the named
+  kernels' declared tuples were all skipped while other kernels were checked;
+  only the named kernels' tuples are listed as removable. Exit 1.
 
 ## Adding a tuple, end-to-end
 
@@ -298,6 +304,8 @@ equivalence violation, while still hard-failing on a genuine divergence.
   operand class) → `CHECK FAILED`, exit 1.
 - A missing/ambiguous `.o`, malformed manifest, an unparsable *non-padding*
   in-body line, or an empty function body → `CHECK ERROR`, exit 2.
+- Zero coverage — every declared tuple skipped, or one kernel's declared
+  tuples all skipped (see *Zero-coverage guard*) → `CHECK FAILED`, exit 1.
 
 ## See also
 

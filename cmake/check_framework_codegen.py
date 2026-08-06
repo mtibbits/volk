@@ -584,26 +584,37 @@ def main():
 
     # Zero-coverage guard (mtibbits/volk#165): a skip is legitimate per-tuple,
     # but declared-yet-unverified coverage must not report success. The global
-    # all-skip case is the per-kernel case with every kernel uncovered; it gets
-    # its own headline because "the check verified nothing at all" is a
-    # different operator situation than one kernel losing coverage.
+    # all-skip case gets its own headline because "the check verified nothing
+    # at all" is a different operator situation than one kernel losing
+    # coverage. (A require_standalone tuple that was inlined away lands in
+    # `failures` -- exited above -- never in `skipped`, so it cannot skew this
+    # accounting.)
     checked = len(tuples) - len(skipped)
     declared_by_kernel = Counter(t["kernel"] for t in tuples)
     uncovered = sorted(k for k, n in declared_by_kernel.items()
                        if skipped_by_kernel[k] == n)
-    if uncovered:
+    # `checked == 0` is tested explicitly rather than relying on it implying
+    # `uncovered` non-empty: that implication is a property of the loop's
+    # current buckets (every tuple checks or skips), not of this guard, and a
+    # future non-skip consumption path must not let a zero-checked run print
+    # ok again.
+    if uncovered or checked == 0:
         if checked == 0:
             headline = "zero coverage"
             lead = (f"All {len(tuples)} declared tuples were skipped (impl "
                     "not emitted standalone),\nso nothing was verified. A "
                     "toolchain change that inlines every compared\nimpl "
                     "would otherwise turn this check into a silent no-op.")
+            shown = skipped
         else:
             headline = ("zero codegen coverage for kernel(s): "
                         + ", ".join(uncovered))
             lead = ("Every declared tuple for the named kernel(s) was "
                     "skipped (impl not emitted\nstandalone), leaving them "
                     "unverified while the rest of the run passed.")
+            # Name only the uncovered kernels' tuples: a covered kernel's
+            # incidental skip must not be presented as removable.
+            shown = [tuple_id(t) for t in tuples if t["kernel"] in uncovered]
         print(f"CODEGEN-EQUIVALENCE CHECK FAILED: {headline}",
               file=sys.stderr)
         print("", file=sys.stderr)
@@ -613,7 +624,7 @@ def main():
               "the manifest\n(or fix the build so the symbols are emitted "
               "standalone); absent coverage\nis not reported as success. "
               "See mtibbits/volk#165.", file=sys.stderr)
-        print(f"  skipped: {skipped}", file=sys.stderr)
+        print(f"  skipped: {shown}", file=sys.stderr)
         sys.exit(1)
 
     extra = (f", {len(skipped)} skipped -- not emitted standalone: {skipped}"

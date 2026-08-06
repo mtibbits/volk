@@ -602,9 +602,11 @@ def test_all_skipped_zero_coverage_fails():
 
 
 def test_per_kernel_all_skip_fails():
-    """Per-kernel all-skip: kernel `hole` has every tuple skipped while kernel
-    `covd` is checked -- the run must name `hole` in the coverage diagnostic
-    and exit non-zero; `covd` (which has coverage) must not be flagged
+    """Per-kernel all-skip: kernels `bhole` and `ahole` have every tuple
+    skipped while kernel `covd` is checked (with one additional skip of its
+    own) -- the run must name the hole kernels sorted in the coverage
+    diagnostic and exit non-zero; `covd` (which has coverage) must not be
+    flagged, and its skipped tuple must not be listed as removable
     (mtibbits/volk#165)."""
     cc, objdump, o = _compile_present_fn_o("zerocov_kernel")
     if not cc:
@@ -612,7 +614,13 @@ def test_per_kernel_all_skip_fails():
         return
     manifest = {"tuples": [
         {
-            "kernel": "hole", "isa": "avx", "alignment": "a",
+            "kernel": "bhole", "isa": "avx", "alignment": "a",
+            "impl_a": {"symbol": "inlined_away", "machine_o": str(o)},
+            "impl_b": {"symbol": "present_fn", "machine_o": str(o)},
+            "criterion": "byte_identical",
+        },
+        {
+            "kernel": "ahole", "isa": "avx", "alignment": "a",
             "impl_a": {"symbol": "inlined_away", "machine_o": str(o)},
             "impl_b": {"symbol": "present_fn", "machine_o": str(o)},
             "criterion": "byte_identical",
@@ -620,6 +628,12 @@ def test_per_kernel_all_skip_fails():
         {
             "kernel": "covd", "isa": "avx", "alignment": "a",
             "impl_a": {"symbol": "present_fn", "machine_o": str(o)},
+            "impl_b": {"symbol": "present_fn", "machine_o": str(o)},
+            "criterion": "byte_identical",
+        },
+        {
+            "kernel": "covd", "isa": "avx", "alignment": "u",
+            "impl_a": {"symbol": "inlined_away", "machine_o": str(o)},
             "impl_b": {"symbol": "present_fn", "machine_o": str(o)},
             "criterion": "byte_identical",
         },
@@ -635,8 +649,14 @@ def test_per_kernel_all_skip_fails():
     guard_lines = [ln for ln in result.stderr.splitlines()
                    if "zero codegen coverage for kernel(s):" in ln]
     assert guard_lines, result.stderr
-    assert "hole" in guard_lines[0], result.stderr
+    assert "kernel(s): ahole, bhole" in guard_lines[0], result.stderr
     assert "covd" not in guard_lines[0], result.stderr
+    skip_lines = [ln for ln in result.stderr.splitlines()
+                  if ln.startswith("  skipped:")]
+    assert skip_lines, result.stderr
+    assert "ahole.avx.a" in skip_lines[0], result.stderr
+    assert "bhole.avx.a" in skip_lines[0], result.stderr
+    assert "covd" not in skip_lines[0], result.stderr
 
 
 def test_partial_kernel_coverage_ok():
