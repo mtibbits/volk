@@ -612,18 +612,27 @@ def main():
             lead = ("Every declared tuple for the named kernel(s) was "
                     "skipped (impl not emitted\nstandalone), leaving them "
                     "unverified while the rest of the run passed.")
-            # Name only the uncovered kernels' tuples: a covered kernel's
-            # incidental skip must not be presented as removable.
-            shown = [tuple_id(t) for t in tuples if t["kernel"] in uncovered]
+            # Name only the uncovered kernels' skips: a covered kernel's
+            # incidental skip must not be presented as removable. Derived from
+            # the skip list itself (not kernel membership) so the label stays
+            # truthful if the uncovered predicate is ever loosened below 100%.
+            shown = [tid for tid in skipped
+                     if tid.split(".", 1)[0] in uncovered]
         print(f"CODEGEN-EQUIVALENCE CHECK FAILED: {headline}",
               file=sys.stderr)
         print("", file=sys.stderr)
         print(lead, file=sys.stderr)
         print("", file=sys.stderr)
-        print("If the inlining is expected, remove the affected tuples from "
-              "the manifest\n(or fix the build so the symbols are emitted "
-              "standalone); absent coverage\nis not reported as success. "
-              "See mtibbits/volk#165.", file=sys.stderr)
+        print("Fix the build so the symbols are emitted standalone (see the "
+              "README's\nrequire-standalone notes). Removing the affected "
+              "tuples from the manifest\nsilences the check instead of "
+              "fixing it -- a deliberate de-scoping that\nneeds review, not "
+              "an equivalent outcome. See mtibbits/volk#165.",
+              file=sys.stderr)
+        if checked == 0:
+            print("Note: an emptied manifest prints ok (0 tuples declared); "
+                  "that green means\nzero coverage was accepted, not that "
+                  "codegen was verified.", file=sys.stderr)
         print(f"  skipped: {shown}", file=sys.stderr)
         sys.exit(1)
 
