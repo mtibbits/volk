@@ -29,7 +29,7 @@ environment variable:
 | `HARNESS_CANARY=1` | output-buffer canary: guarded own-malloc buffers, two-sentinel over/under-write + unwritten-element checks | #89 |
 | `HARNESS_CANARY_ASAN_DEMO=1` | (with `HARNESS_CANARY`, ASan build only) far-past over-run demo proving the guarded buffers are ASan-bracketed | #89 |
 | `HARNESS_IMMUTABLE=1` | input-immutability canary: byte-exact post-run compare of every input against its pristine pre-image | #90 |
-| `HARNESS_MISALIGNED=1` | misaligned `_u_`-variant runs: every unaligned impl on deliberately misaligned buffers, with scoped signal trapping (POSIX only) | #91 |
+| `HARNESS_MISALIGNED=1` | misaligned `_u_`-variant runs: every unaligned impl on deliberately misaligned buffers, with scoped signal trapping (POSIX only); strict-UBSan regression detector is the ctest `qa_strict_misaligned_canary` (ASAN build type only) | #91 / #221 |
 | `HARNESS_COMBINED_NC=1` | combined negative control (the ctest `qa_harness_negative_control`) | #92 |
 | `HARNESS_REPORT=path` | write the per-kernel × per-impl CSV (format below) in any mode | #87 / #92 |
 | `HARNESS_VERBOSE=1` | unmute the per-impl stdout of the underlying qa runs | — |
@@ -219,7 +219,16 @@ Retention: latest snapshot only — a new snapshot replaces the old files
   mode compiles to an explicit skip (no POSIX signals); everything else —
   including the combined negative control ctest — runs.
 - **ASan builds:** canary far-past demo is gated to ASan; misaligned mode needs
-  the `ASAN_OPTIONS` above.
+  the `ASAN_OPTIONS` above. Under the ASAN build type the control-kernel TU
+  (`qa_canary_kernel.cc`) is compiled with `-fno-sanitize=alignment` so a strict
+  UBSan lane (`halt_on_error=1`) can run the misaligned mode — the planted
+  `movaps` still faults; only the pre-fault UBSan report is suppressed, and only
+  for that one test-only TU (#221). The ctest `qa_strict_misaligned_canary`
+  (registered on ASAN builds only) runs the strict misaligned mode and goes red
+  if the exemption is ever lost. The exemption follows the ASAN build type
+  only: a UBSan build configured another way (e.g. `-DCMAKE_BUILD_TYPE=Debug`
+  with `-fsanitize=undefined` in `CMAKE_CXX_FLAGS`) still reports the planted
+  load under `halt_on_error=1`.
 - **Default qa:** `volk_test_all` and the per-kernel `qa_volk_*` ctests are
   byte-for-byte unaffected by every capability here; all harness behavior is
   opt-in via the env toggles.

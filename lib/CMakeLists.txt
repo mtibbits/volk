@@ -892,6 +892,29 @@ if(ENABLE_TESTING)
             ${CMAKE_CURRENT_SOURCE_DIR}/volk_buffer_roles.cc
             ${CMAKE_CURRENT_SOURCE_DIR}/qa_utils.cc TARGET_DEPS volk)
     endif()
+    # The planted misaligned-fault control must keep its raw movaps, but
+    # UBSan's alignment check reports it BEFORE the deliberate fault, so a
+    # strict lane (halt_on_error=1) dies pre-sweep. Exempt this one test-only
+    # TU under the sanitizer build type (#221; details: harness README,
+    # Platform notes). A function-level no_sanitize attribute does NOT work
+    # here -- GCC generates the check inside the always-inlined _mm_load_ps.
+    # The qa_strict_misaligned_canary ctest is the regression detector: it
+    # goes red if the exemption is dropped, stops reaching the compile line,
+    # or the canary stops faulting (NC-LOST exit 2).
+    if(NOT WIN32 AND CBTU STREQUAL "ASAN")
+        set_property(
+            SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/qa_canary_kernel.cc
+            APPEND
+            PROPERTY COMPILE_OPTIONS "-fno-sanitize=alignment")
+        add_test(NAME qa_strict_misaligned_canary
+                 COMMAND volk_test_correctness volk_32f_x3_sum_of_poly_32f)
+        set_tests_properties(
+            qa_strict_misaligned_canary
+            PROPERTIES
+                ENVIRONMENT
+                "HARNESS_MISALIGNED=1;UBSAN_OPTIONS=halt_on_error=1;ASAN_OPTIONS=handle_segv=0:handle_sigbus=0:handle_sigill=0:allow_user_segv_handler=1"
+        )
+    endif()
     target_link_libraries(volk_test_all fmt::fmt)
     target_link_libraries(volk_test_correctness fmt::fmt)
 
