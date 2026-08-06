@@ -133,8 +133,9 @@ tuples to guarantee the instantiation didn't silently fall back to scalar code.
 
 By default, when the compiler inlines an impl rather than emitting it as a
 standalone symbol there is nothing to disassemble, so the tuple is
-**skipped with a warning** and the build stays green (see *Diagnostics* and
-*Cross-compiler robustness* below). That is the right default for impls whose
+**skipped with a warning** and the build stays green — bounded by the
+zero-coverage guard below: aggregate all-skip configurations fail (see
+*Diagnostics* and *Cross-compiler robustness* below). That is the right default for impls whose
 standalone emission is compiler-dependent — but it leaves a masked-regression
 class for impls that the dispatch table relies on existing as real, separately
 dispatchable symbols: if such an impl gets inlined away by a future refactor,
@@ -156,7 +157,38 @@ This is an **orthogonal axis** to `REQUIRE_MNEMONIC`: the latter asserts which
 instructions a *present* symbol contains; `REQUIRE_STANDALONE` asserts the symbol
 *exists* as a dispatchable standalone in the first place. The field is **opt-in**:
 tuples without it are unaffected and produce identical manifest JSON to before
-(unmarked tuples keep the skip-with-warning / exit-0 behavior).
+(unmarked tuples keep the skip-with-warning behavior, exit 0 while real
+coverage remains — see *Zero-coverage guard*).
+
+## Zero-coverage guard (mtibbits/volk#165)
+
+Skipping is per-tuple, but success is not unconditional. Two aggregate
+configurations fail loudly (exit 1) instead of reporting `ok`:
+
+- **Global zero coverage** — every declared tuple was skipped
+  (`checked == 0`). The run verified nothing, so it does not report
+  success. Diagnostic: `CHECK FAILED: zero coverage`.
+- **Per-kernel all-skip** — every tuple belonging to one kernel was
+  skipped while other kernels were checked. That kernel has no codegen
+  coverage, so the run fails and names it. Diagnostic:
+  `CHECK FAILED: zero codegen coverage for kernel(s): <names>`.
+  A kernel with at least one checked tuple is covered; its remaining
+  skips stay warnings.
+
+Both diagnostics point at the usual cause — a toolchain change that
+starts inlining the compared impls — and the remedies: fix the build so
+the symbols are emitted standalone, or deliberately remove the affected
+tuples from the manifest. The empty-manifest case is distinct and stays
+green: zero tuples *declared* is a valid configuration
+(`ok (0 tuples declared)`, exit 0); zero tuples *verified out of some
+declared* is not.
+
+**Blind spots (what this guard cannot decide):** coverage is aggregated
+on the bare kernel name, so a kernel checked on one ISA but wholly
+skipped on another still passes (an ISA-level hole); and tuples that
+silently stop being *declared* — e.g. the CMake machine-name gate in
+`lib/CMakeLists.txt` ceasing to match — land in the legitimate
+`ok (0 tuples declared)` path. Both are outside this guard's contract.
 
 ## How the check runs
 
@@ -182,7 +214,8 @@ positives on a clean tree.
 - `symbol '<x>' not found in disassembly of <o>` — the impl was inlined away
   (no address taken, so no symbol emitted), or the symbol is in a different
   `.o` than declared. Skipped-with-warning by default; a hard failure if the
-  tuple declares `REQUIRE_STANDALONE`.
+  tuple declares `REQUIRE_STANDALONE`. Aggregate skips are bounded by the
+  zero-coverage guard (see above).
 - `require_standalone assertion FAILED: implementation was not emitted as a
   standalone dispatchable symbol (inlined away)` — a tuple declaring
   `REQUIRE_STANDALONE` had its impl inlined away; the build fails (exit 1).
@@ -253,7 +286,9 @@ equivalence violation, while still hard-failing on a genuine divergence.
   (`data16 cs nopw …`); treated as padding like the NOP family.
 - **Symbol not emitted standalone** (e.g. macOS clang inlines the impl): there
   is nothing to compare, so the tuple is **skipped with a warning** and the
-  build stays green. The summary line reports `N skipped`. (Exception: a tuple
+  build stays green — unless the skip leaves a kernel (or the whole run) with
+  zero checked tuples, which the zero-coverage guard turns into a hard failure
+  (exit 1). The summary line reports `N skipped`. (Exception: a tuple
   that declares `REQUIRE_STANDALONE` hard-fails instead — see *Require-standalone
   assertion*.)
 
