@@ -30,9 +30,9 @@ by compiler is normalized away -- trailing alignment NOPs of any encoding and
 trailing `data16` padding are stripped (they pad the next function and belong to
 no function), and a symbol the compiler inlined rather than emitting standalone
 is skipped-with-warning since there is nothing to compare (symbol names are
-first mapped to the object format's labels -- Mach-O prepends an underscore to
-C symbols, mtibbits/volk#225) -- exit 0 only while
-real coverage remains: a run where EVERY declared tuple skipped, or a kernel
+first mapped to the object format's labels -- Mach-O prepends an underscore
+to C symbols, mtibbits/volk#225) -- exit 0 only while real coverage remains:
+a run where EVERY declared tuple skipped, or a kernel
 whose declared tuples ALL skipped, is a zero-coverage failure (exit 1;
 mtibbits/volk#165). A genuine post-normalization divergence still fails
 (exit 1); a genuinely unparsable non-padding line still errors (exit 2).
@@ -360,7 +360,10 @@ def extract_function_body(o_file: Path, symbol: str,
     callers and tests can pass a file path + objdump. On a not-found label
     after a FILTERED fast-path disassembly, retries unfiltered so the
     similar-labels report is computed from the whole object, not from
-    filter-emptied output.
+    filter-emptied output. The retry is behavior, not just diagnostics: if
+    the symbol filter fails to match a label that whole-object disassembly
+    does render (an objdump version/symbol-table quirk), the retry recovers
+    the extraction instead of skipping the tuple.
     """
     label = object_symbol_name(o_file, symbol)
     text = _disassemble(o_file, objdump, symbol=label)
@@ -447,7 +450,13 @@ def extract_function_body_from_text(text: str, label: str,
         near = [seen for seen in labels_seen
                 if label in seen or seen in label]
         if near:
-            hint = f"similar labels present: {sorted(near)[:8]}"
+            # Closest-length first so the exact underscore twin cannot be
+            # truncated out of the window; say when truncation happened.
+            near = sorted(near, key=lambda seen: (abs(len(seen) - len(label)),
+                                                  seen))
+            shown = near[:8]
+            more = f" (+{len(near) - len(shown)} more)" if len(near) > 8 else ""
+            hint = f"similar labels present: {shown}{more}"
         else:
             hint = f"no similar labels among {len(labels_seen)} seen"
         raise SymbolNotEmittedError(
@@ -625,9 +634,9 @@ def main():
                 failures.append((tuple_id(t), msg))
                 continue
             # Default: compiler inlined the impl rather than emitting it
-            # standalone: nothing to compare, so skip with a
-            # loud warning instead of failing the build. A present-but-divergent
-            # body is unaffected -- it still fails below.
+            # standalone: nothing to compare, so skip with a loud warning
+            # instead of failing the build. A present-but-divergent body is
+            # unaffected -- it still fails below.
             print(f"codegen-equivalence: WARNING: skipping {tuple_id(t)}: {e}",
                   file=sys.stderr)
             skipped.append(tuple_id(t))

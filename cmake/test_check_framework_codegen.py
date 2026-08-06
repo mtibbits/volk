@@ -379,6 +379,12 @@ def test_object_symbol_name_macho_prefixes():
         o32 = Path(td) / "m32.o"
         o32.write_bytes(b"\xce\xfa\xed\xfe" + b"\x00" * 28)  # MH_MAGIC (LE)
         assert mod.object_symbol_name(o32, "fwk_fn") == "_fwk_fn"
+        fat = Path(td) / "fat.o"
+        fat.write_bytes(b"\xca\xfe\xba\xbe" + b"\x00" * 28)  # FAT_MAGIC
+        assert mod.object_symbol_name(fat, "fwk_fn") == "_fwk_fn"
+        fat64 = Path(td) / "fat64.o"
+        fat64.write_bytes(b"\xca\xfe\xba\xbf" + b"\x00" * 28)  # FAT_MAGIC_64
+        assert mod.object_symbol_name(fat64, "fwk_fn") == "_fwk_fn"
 
 
 def test_object_symbol_name_elf_and_coff_unchanged():
@@ -586,6 +592,34 @@ def test_not_found_retries_unfiltered_for_similar_labels():
                 assert "_wanted_fn_v2" in str(e), str(e)
     # First call filtered (the mapped label), second call the unfiltered retry.
     assert calls == ["_wanted_fn", None], calls
+
+
+def test_not_found_no_retry_when_unfiltered():
+    """GNU objdump has no symbol filter, so the first disassembly was already
+    whole-object -- a not-found there must raise WITHOUT a second disassembly
+    (on macOS, which resolves Apple's non-'llvm'-named objdump, a retry would
+    re-disassemble the whole machine .o for identical text on every skip)."""
+    mod = _load_module()
+    with tempfile.TemporaryDirectory() as td:
+        o = Path(td) / "e.o"
+        o.write_bytes(b"\x7fELF" + b"\x00" * 28)
+        calls = []
+
+        def fake_disassemble(o_file, objdump, symbol=None):
+            calls.append(symbol)
+            return (
+                "0000000000000000 <other_fn>:\n"
+                "       0: c3                           \tretq\n"
+            )
+
+        with _patched_disassemble(mod, fake_disassemble):
+            try:
+                mod.extract_function_body(o, "wanted_fn", objdump="objdump")
+                assert False, "expected SymbolNotEmittedError"
+            except mod.SymbolNotEmittedError:
+                pass
+    # Exactly one disassembly: unfiltered tools get no retry.
+    assert calls == ["wanted_fn"], calls
 
 
 def test_symbol_not_emitted_reports_similar_labels():

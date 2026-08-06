@@ -229,8 +229,9 @@ positives on a clean tree.
   if the tuple declares `REQUIRE_STANDALONE`. Aggregate skips are bounded by
   the zero-coverage guard (see above).
 - `require_standalone assertion FAILED: implementation was not emitted as a
-  standalone dispatchable symbol (inlined away)` — a tuple declaring
-  `REQUIRE_STANDALONE` had its impl inlined away; the build fails (exit 1).
+  standalone dispatchable symbol` — a tuple declaring `REQUIRE_STANDALONE`
+  had no standalone impl to compare; the build fails (exit 1). The appended
+  exception text carries the not-found label and its similar-labels report.
 - `object file '<x>' not found under <dir>` — the `MACHINE_O` name does not
   match any compiled object; check the build actually produced it.
 - `object file '<x>' is ambiguous` — more than one `.o` with that name exists;
@@ -306,9 +307,8 @@ mismatch; actual tuple coverage on macOS starts with #225.)
   (`data16 cs nopw …`); treated as padding like the NOP family.
 - **Symbol not emitted standalone** (a compiler that genuinely inlines an
   address-free impl; note the macOS "not found" case was a naming mismatch,
-  mapped since mtibbits/volk#225): there
-  is nothing to compare, so the tuple is **skipped with a warning** and the
-  build stays green — unless the skip leaves a kernel (or the whole run) with
+  mapped since mtibbits/volk#225): there is nothing to compare, so the tuple
+  is **skipped with a warning** and the build stays green — unless the skip leaves a kernel (or the whole run) with
   zero checked tuples, which the zero-coverage guard turns into a hard failure
   (exit 1). The summary line reports `N skipped`. (Exception: a tuple
   that declares `REQUIRE_STANDALONE` hard-fails instead — see *Require-standalone
