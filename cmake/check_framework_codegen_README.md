@@ -137,10 +137,11 @@ actually present. The field is **opt-in**: tuples without it are unaffected and
 produce identical manifest JSON to before. Use it on framework-instantiation
 tuples to guarantee the instantiation didn't silently fall back to scalar code.
 
-## Require-standalone assertion (inlined-away guard)
+## Require-standalone assertion (not-found guard)
 
-By default, when the compiler inlines an impl rather than emitting it as a
-standalone symbol there is nothing to disassemble, so the tuple is
+By default, when the impl has no matching label in the object file —
+inlined away, or absent under the name looked up — there is nothing to
+disassemble, so the tuple is
 **skipped with a warning** and the build stays green (see *Diagnostics* and
 *Cross-compiler robustness* below) — bounded by the *Zero-coverage guard*:
 aggregate all-skip configurations fail. That is the right default for impls
@@ -151,9 +152,10 @@ by a future refactor, the symbol silently disappears and the check still
 passes while the kernel retains other coverage.
 
 Declare the optional boolean flag `REQUIRE_STANDALONE` (pass the **bare keyword**,
-no value) on such a tuple to flip that outcome: when the impl is inlined away,
-the checker reports a **hard failure** (exit 1) for that tuple instead of
-skip-with-warning.
+no value) on such a tuple to flip that outcome: when the impl has no
+matching label in the object file (inlined away, or absent under the name
+looked up), the checker reports a **hard failure** (exit 1) for that tuple
+instead of skip-with-warning.
 
 ```cmake
 ADD_CODEGEN_EQUIVALENCE_TUPLE(
@@ -184,13 +186,30 @@ configurations fail loudly (exit 1) instead of reporting `ok`:
   A kernel with at least one checked tuple is covered; its remaining
   skips stay warnings.
 
-Both diagnostics point at the usual cause — a toolchain change that
-starts inlining the compared impls — and the remedies: fix the build so
-the symbols are emitted standalone, or deliberately remove the affected
-tuples from the manifest. The empty-manifest case is distinct and stays
-green: zero tuples *declared* is a valid configuration
-(`ok (0 tuples declared)`, exit 0); zero tuples *verified out of some
-declared* is not.
+Both diagnostics name the two causes — a toolchain change that starts
+inlining the compared impls, or a label/name mismatch (the impl is present
+under a name the harness did not look up; the per-tuple WARNING lines
+report the labels actually seen) — and the remedies: fix the build so the
+symbols are emitted standalone, fix the harness's name→label mapping if
+the WARNINGs show the impl present under another name (see *Object-file
+labels* below), or deliberately remove the affected tuples from the
+manifest. The empty-manifest case is distinct and stays green: zero tuples
+*declared* is a valid configuration (`ok (0 tuples declared)`, exit 0);
+zero tuples *verified out of some declared* is not.
+
+### Object-file labels (mtibbits/volk#225)
+
+Symbol names are looked up as the object format's own labels: Mach-O
+prepends an underscore to every C symbol (`volk_32f_x2_add_32f_a_avx` is
+emitted as `_volk_32f_x2_add_32f_a_avx`), while ELF and COFF-x64 use the C
+name unchanged. `object_symbol_name()` maps C name → label, keyed on the
+object file's magic bytes (thin LE 32/64-bit Mach-O + fat 32/64 — so
+cross-compiled objects resolve correctly on any host; any other format
+keeps the C name, which is its documented blind spot). Before #225 the
+unprefixed lookup made every macOS tuple skip as "symbol not found" — a
+naming mismatch that presented as inlining. If a zero-coverage failure's
+WARNING lines show similar labels present, suspect the mapping, not the
+compiler.
 
 **Blind spots (what this guard cannot decide):** coverage is aggregated
 on the bare kernel name, so a kernel checked on one ISA but wholly

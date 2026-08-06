@@ -638,19 +638,20 @@ def main():
             b_instrs = extract_function_body(
                 b_o, t["impl_b"]["symbol"], objdump=args.objdump)
         except SymbolNotEmittedError as e:
-            # Opt-in (require_standalone): for tuples whose dispatch relies on the
-            # impl existing as a real, separately-dispatchable symbol, "inlined
-            # away" is a regression, not an acceptable outcome -- hard-fail it.
+            # Opt-in (require_standalone): for tuples whose dispatch relies
+            # on the impl existing as a real, separately-dispatchable symbol,
+            # a not-found label (inlined away, or absent under the name
+            # looked up) is a regression, not acceptable -- hard-fail it.
             if t.get("require_standalone"):
                 msg = ("require_standalone assertion FAILED: implementation "
                        "was not emitted as a standalone dispatchable symbol. "
                        f"{e}")
                 failures.append((tuple_id(t), msg))
                 continue
-            # Default: compiler inlined the impl rather than emitting it
-            # standalone: nothing to compare, so skip with a loud warning
-            # instead of failing the build. A present-but-divergent body is
-            # unaffected -- it still fails below.
+            # Default: no matching label in the object file -- inlined away,
+            # or emitted under a name we did not look up; nothing to compare,
+            # so skip with a loud warning instead of failing the build. A
+            # present-but-divergent body is unaffected -- it still fails below.
             print(f"codegen-equivalence: WARNING: skipping {tuple_id(t)}: {e}",
                   file=sys.stderr)
             skipped.append(tuple_id(t))
@@ -754,7 +755,8 @@ def main():
         print("Fix the build so the symbols are emitted standalone, or the "
               "harness's\nname->label mapping if the WARNING lines show the "
               "impl present under\nanother name (see the README's "
-              "require-standalone and object-label notes).\nRemoving the "
+              "'Object-file labels' and 'Require-standalone\nassertion' "
+              "sections). Removing the "
               "affected tuples from the manifest silences the check "
               "instead\nof fixing it -- a deliberate de-scoping that needs "
               "review, not an\nequivalent outcome. See mtibbits/volk#165.",
