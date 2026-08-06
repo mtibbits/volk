@@ -343,6 +343,10 @@ def test_symbol_not_standalone_raises_typed():
         assert False, "expected SymbolNotEmittedError"
     except mod.SymbolNotEmittedError as e:
         assert "inlined_away" in str(e), str(e)
+        # The fixture's only label is the unrelated <other>, so the
+        # similar-labels report must state there is nothing similar
+        # (mtibbits/volk#225).
+        assert "no similar labels" in str(e), str(e)
     # It must be a RuntimeError subclass so existing `except RuntimeError`
     # callers still see it if they do not special-case it.
     assert issubclass(mod.SymbolNotEmittedError, RuntimeError)
@@ -388,6 +392,178 @@ def test_object_symbol_name_missing_file_raises():
         assert False, "expected RuntimeError"
     except RuntimeError as e:
         assert "object file not found" in str(e), str(e)
+
+
+# REAL captured llvm-objdump-18 output of a cross-compiled Mach-O object
+# (clang -target x86_64-apple-macos12 -O3 -mavx on a machine-TU-shaped
+# fixture: static inline impl, address taken in a dispatch table). The
+# Mach-O label carries the Darwin ABI's leading underscore. Captured for
+# mtibbits/volk#225; regeneration recipe in that issue's plan.
+_MACHO_REAL_DISASM = """\
+
+probe_macho.o:	file format mach-o 64-bit x86-64
+
+Disassembly of section __TEXT,__text:
+
+0000000000000000 <_volk_32f_x2_add_32f_a_avx>:
+       0: 55                           	pushq	%rbp
+       1: 48 89 e5                     	movq	%rsp, %rbp
+       4: 85 c9                        	testl	%ecx, %ecx
+       6: 0f 84 57 01 00 00            	je	0x163 <_volk_32f_x2_add_32f_a_avx+0x163>
+       c: 89 c8                        	movl	%ecx, %eax
+       e: 83 f9 20                     	cmpl	$0x20, %ecx
+      11: 0f 83 a8 00 00 00            	jae	0xbf <_volk_32f_x2_add_32f_a_avx+0xbf>
+      17: 31 c9                        	xorl	%ecx, %ecx
+      19: 49 89 c1                     	movq	%rax, %r9
+      1c: 49 89 c8                     	movq	%rcx, %r8
+      1f: 49 83 e1 03                  	andq	$0x3, %r9
+      23: 74 25                        	je	0x4a <_volk_32f_x2_add_32f_a_avx+0x4a>
+      25: 49 89 c8                     	movq	%rcx, %r8
+      28: 0f 1f 84 00 00 00 00 00      	nopl	(%rax,%rax)
+      30: c4 a1 7a 10 04 86            	vmovss	(%rsi,%r8,4), %xmm0
+      36: c4 a1 7a 58 04 82            	vaddss	(%rdx,%r8,4), %xmm0, %xmm0
+      3c: c4 a1 7a 11 04 87            	vmovss	%xmm0, (%rdi,%r8,4)
+      42: 49 ff c0                     	incq	%r8
+      45: 49 ff c9                     	decq	%r9
+      48: 75 e6                        	jne	0x30 <_volk_32f_x2_add_32f_a_avx+0x30>
+      4a: 48 29 c1                     	subq	%rax, %rcx
+      4d: 48 83 f9 fc                  	cmpq	$-0x4, %rcx
+      51: 0f 87 0c 01 00 00            	ja	0x163 <_volk_32f_x2_add_32f_a_avx+0x163>
+      57: 66 0f 1f 84 00 00 00 00 00   	nopw	(%rax,%rax)
+      60: c4 a1 7a 10 04 86            	vmovss	(%rsi,%r8,4), %xmm0
+      66: c4 a1 7a 58 04 82            	vaddss	(%rdx,%r8,4), %xmm0, %xmm0
+      6c: c4 a1 7a 11 04 87            	vmovss	%xmm0, (%rdi,%r8,4)
+      72: c4 a1 7a 10 44 86 04         	vmovss	0x4(%rsi,%r8,4), %xmm0
+      79: c4 a1 7a 58 44 82 04         	vaddss	0x4(%rdx,%r8,4), %xmm0, %xmm0
+      80: c4 a1 7a 11 44 87 04         	vmovss	%xmm0, 0x4(%rdi,%r8,4)
+      87: c4 a1 7a 10 44 86 08         	vmovss	0x8(%rsi,%r8,4), %xmm0
+      8e: c4 a1 7a 58 44 82 08         	vaddss	0x8(%rdx,%r8,4), %xmm0, %xmm0
+      95: c4 a1 7a 11 44 87 08         	vmovss	%xmm0, 0x8(%rdi,%r8,4)
+      9c: c4 a1 7a 10 44 86 0c         	vmovss	0xc(%rsi,%r8,4), %xmm0
+      a3: c4 a1 7a 58 44 82 0c         	vaddss	0xc(%rdx,%r8,4), %xmm0, %xmm0
+      aa: c4 a1 7a 11 44 87 0c         	vmovss	%xmm0, 0xc(%rdi,%r8,4)
+      b1: 49 83 c0 04                  	addq	$0x4, %r8
+      b5: 4c 39 c0                     	cmpq	%r8, %rax
+      b8: 75 a6                        	jne	0x60 <_volk_32f_x2_add_32f_a_avx+0x60>
+      ba: e9 a4 00 00 00               	jmp	0x163 <_volk_32f_x2_add_32f_a_avx+0x163>
+      bf: 49 89 f8                     	movq	%rdi, %r8
+      c2: 49 29 f0                     	subq	%rsi, %r8
+      c5: 31 c9                        	xorl	%ecx, %ecx
+      c7: 49 81 f8 80 00 00 00         	cmpq	$0x80, %r8
+      ce: 0f 82 45 ff ff ff            	jb	0x19 <_volk_32f_x2_add_32f_a_avx+0x19>
+      d4: 49 89 f8                     	movq	%rdi, %r8
+      d7: 49 29 d0                     	subq	%rdx, %r8
+      da: 49 81 f8 80 00 00 00         	cmpq	$0x80, %r8
+      e1: 0f 82 32 ff ff ff            	jb	0x19 <_volk_32f_x2_add_32f_a_avx+0x19>
+      e7: 89 c1                        	movl	%eax, %ecx
+      e9: 83 e1 e0                     	andl	$-0x20, %ecx
+      ec: 4c 8d 04 85 00 00 00 00      	leaq	(,%rax,4), %r8
+      f4: 49 83 e0 80                  	andq	$-0x80, %r8
+      f8: 45 31 c9                     	xorl	%r9d, %r9d
+      fb: 0f 1f 44 00 00               	nopl	(%rax,%rax)
+     100: c4 a1 7c 10 04 0e            	vmovups	(%rsi,%r9), %ymm0
+     106: c4 a1 7c 10 4c 0e 20         	vmovups	0x20(%rsi,%r9), %ymm1
+     10d: c4 a1 7c 10 54 0e 40         	vmovups	0x40(%rsi,%r9), %ymm2
+     114: c4 a1 7c 10 5c 0e 60         	vmovups	0x60(%rsi,%r9), %ymm3
+     11b: c4 a1 7c 58 04 0a            	vaddps	(%rdx,%r9), %ymm0, %ymm0
+     121: c4 a1 74 58 4c 0a 20         	vaddps	0x20(%rdx,%r9), %ymm1, %ymm1
+     128: c4 a1 6c 58 54 0a 40         	vaddps	0x40(%rdx,%r9), %ymm2, %ymm2
+     12f: c4 a1 64 58 5c 0a 60         	vaddps	0x60(%rdx,%r9), %ymm3, %ymm3
+     136: c4 a1 7c 11 04 0f            	vmovups	%ymm0, (%rdi,%r9)
+     13c: c4 a1 7c 11 4c 0f 20         	vmovups	%ymm1, 0x20(%rdi,%r9)
+     143: c4 a1 7c 11 54 0f 40         	vmovups	%ymm2, 0x40(%rdi,%r9)
+     14a: c4 a1 7c 11 5c 0f 60         	vmovups	%ymm3, 0x60(%rdi,%r9)
+     151: 49 83 e9 80                  	subq	$-0x80, %r9
+     155: 4d 39 c8                     	cmpq	%r9, %r8
+     158: 75 a6                        	jne	0x100 <_volk_32f_x2_add_32f_a_avx+0x100>
+     15a: 48 39 c1                     	cmpq	%rax, %rcx
+     15d: 0f 85 b6 fe ff ff            	jne	0x19 <_volk_32f_x2_add_32f_a_avx+0x19>
+     163: 5d                           	popq	%rbp
+     164: c5 f8 77                     	vzeroupper
+     167: c3                           	retq
+"""
+
+
+def test_extract_function_body_macho_wiring_real_capture():
+    """extract_function_body maps the C name to its Mach-O label BEFORE
+    disassembly: the label reaches --disassemble-symbols (else llvm-objdump
+    silently disassembles nothing for the unprefixed name, rc=0 measured)
+    and the header match. The disassembly text is the REAL captured
+    llvm-objdump-18 output of a cross-compiled Mach-O machine-TU-shaped
+    fixture (static inline impl, address taken in a dispatch table) --
+    a real produced artifact fed through the consumer, not a hand-written
+    format claim (mtibbits/volk#225)."""
+    mod = _load_module()
+    import tempfile
+    with tempfile.TemporaryDirectory() as td:
+        o = Path(td) / "m.o"
+        o.write_bytes(b"\xcf\xfa\xed\xfe" + b"\x00" * 28)
+        seen = {}
+        real = mod._disassemble
+
+        def fake_disassemble(o_file, objdump, symbol=None):
+            seen["symbol"] = symbol
+            return _MACHO_REAL_DISASM
+
+        mod._disassemble = fake_disassemble
+        try:
+            instrs = mod.extract_function_body(
+                o, "volk_32f_x2_add_32f_a_avx", objdump="llvm-objdump")
+        finally:
+            mod._disassemble = real
+    assert seen["symbol"] == "_volk_32f_x2_add_32f_a_avx", seen
+    # Structural pins, stable across a toolchain re-capture: whole real
+    # body parses, prologue/epilogue mnemonics, and the AVX payload.
+    assert len(instrs) >= 50, len(instrs)
+    assert instrs[0]["mnemonic"] == "pushq", instrs[0]
+    assert instrs[-1]["mnemonic"] == "retq", instrs[-1]
+    assert any(i["mnemonic"] == "vaddps" for i in instrs)
+
+
+def test_extract_function_body_elf_label_unchanged():
+    """Regression pin for the untouched branch (GREEN before and after the
+    fix -- declared, not born-red): an ELF object keeps the C name
+    end-to-end, so no prefix leaks into non-Mach-O lookups and Linux-lane
+    results stay byte-identical (AC2)."""
+    mod = _load_module()
+    import tempfile
+    with tempfile.TemporaryDirectory() as td:
+        o = Path(td) / "e.o"
+        o.write_bytes(b"\x7fELF" + b"\x00" * 28)
+        seen = {}
+        real = mod._disassemble
+
+        def fake_disassemble(o_file, objdump, symbol=None):
+            seen["symbol"] = symbol
+            return (
+                "0000000000000000 <fwk_fn>:\n"
+                "       0: c3                           \tretq\n"
+            )
+
+        mod._disassemble = fake_disassemble
+        try:
+            instrs = mod.extract_function_body(o, "fwk_fn", objdump="llvm-objdump")
+        finally:
+            mod._disassemble = real
+    assert seen["symbol"] == "fwk_fn", seen
+    assert [i["mnemonic"] for i in instrs] == ["retq"], instrs
+
+
+def test_symbol_not_emitted_reports_similar_labels():
+    """When the requested label is absent but a near-name IS present (the
+    Mach-O underscore family of failures), the error must say so -- one
+    line separates 'emitted under a name we didn't ask for' from 'not
+    emitted', so the skip warning discriminates at the source instead of
+    forcing stderr archaeology (mtibbits/volk#225)."""
+    mod = _load_module()
+    text = ("0000000000000000 <_wanted_fn>:\n"
+            "       0: c3                           \tretq\n")
+    try:
+        mod.extract_function_body_from_text(text, "wanted_fn")
+        assert False, "expected SymbolNotEmittedError"
+    except mod.SymbolNotEmittedError as e:
+        assert "similar labels present" in str(e), str(e)
+        assert "_wanted_fn" in str(e), str(e)
 
 
 def test_padding_strip_does_not_swallow_real_instruction():

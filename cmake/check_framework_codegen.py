@@ -328,33 +328,42 @@ def _instr_from_match(m) -> dict:
 def extract_function_body(o_file: Path, symbol: str,
                           objdump: str = "llvm-objdump") -> list:
     """Disassemble `symbol` in o_file and return its whole-body instruction list.
-    Thin wrapper over extract_function_body_from_text (see it for the parse
-    contract); kept so callers and tests can pass a file path + objdump.
+    Maps the C name to the object file's label first (Mach-O prepends an
+    underscore, mtibbits/volk#225), then thin wrapper over
+    extract_function_body_from_text (see it for the parse contract); kept so
+    callers and tests can pass a file path + objdump.
     """
-    text = _disassemble(o_file, objdump, symbol=symbol)
-    return extract_function_body_from_text(text, symbol, source_label=str(o_file))
+    label = object_symbol_name(o_file, symbol)
+    text = _disassemble(o_file, objdump, symbol=label)
+    return extract_function_body_from_text(text, label,
+                                           source_label=str(o_file))
 
 
-def extract_function_body_from_text(text: str, symbol: str,
+def extract_function_body_from_text(text: str, label: str,
                                     source_label: str = "<disassembly>") -> list:
     """Return [{address, bytes, mnemonic, operands}, ...] for the whole body of
-    `symbol` in `text`: every instruction line from the `<symbol>:` header up to
-    (exclusive) the next symbol header or a blank line that ends the block.
-    Trailing inter-function padding (alignment NOPs / data16) is stripped.
+    the object-file label `label` in `text` (on Mach-O, callers pass the
+    underscore-prefixed label object_symbol_name() produced -- the underscore
+    is the harness's mapping, not part of the C name): every instruction line
+    from the `<label>:` header up to (exclusive) the next symbol header or a
+    blank line that ends the block. Trailing inter-function padding
+    (alignment NOPs / data16) is stripped.
 
-    Raises SymbolNotEmittedError if the symbol is absent (inlined, not emitted
+    Raises SymbolNotEmittedError if the label is absent (inlined, not emitted
     standalone) and RuntimeError if an in-body line is unparsable and not
     recognizable padding, or if the body is empty.
     """
     in_body = False
     saw_symbol = False
     instrs = []
+    labels_seen = []
 
     for line in text.splitlines():
         m = _label_line.match(line)
         if m:
-            label = m.group(1)
-            if label == symbol:
+            label_name = m.group(1)
+            labels_seen.append(label_name)
+            if label_name == label:
                 in_body = True
                 saw_symbol = True
                 continue
@@ -387,15 +396,21 @@ def extract_function_body_from_text(text: str, symbol: str,
                 # silently dropped: a dropped instruction would weaken the
                 # comparison without anyone noticing.
                 raise RuntimeError(
-                    f"unparsable disassembly line for {symbol!r} in "
+                    f"unparsable disassembly line for {label!r} in "
                     f"{source_label}: {line!r}")
             instrs.append(_instr_from_match(mi))
 
     if not saw_symbol:
+        near = [l for l in labels_seen if label in l or l in label]
+        if near:
+            hint = f"similar labels present: {sorted(near)[:8]}"
+        else:
+            hint = f"no similar labels among {len(labels_seen)} seen"
         raise SymbolNotEmittedError(
-            f"symbol {symbol!r} not found in disassembly of {source_label}. "
-            f"The impl must be emitted standalone (its address taken for the "
-            f"dispatch table) for its symbol to appear in the object file.")
+            f"symbol label {label!r} not found in disassembly of "
+            f"{source_label}. The impl must be emitted standalone (its "
+            f"address taken for the dispatch table) for its label to appear "
+            f"in the object file; {hint}.")
     # Strip trailing padding (NOP family + data16): bytes emitted after the
     # function's final control-flow terminator to align the NEXT function. They
     # belong to no function and vary with inter-function layout, so they are not
@@ -405,7 +420,7 @@ def extract_function_body_from_text(text: str, symbol: str,
         instrs.pop()
     if not instrs:
         raise RuntimeError(
-            f"symbol {symbol!r} found in {source_label} but its body is empty")
+            f"symbol {label!r} found in {source_label} but its body is empty")
     return instrs
 
 
