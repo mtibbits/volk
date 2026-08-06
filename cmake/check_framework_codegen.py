@@ -37,9 +37,10 @@ whose declared tuples ALL skipped, is a zero-coverage failure (exit 1;
 mtibbits/volk#165). A genuine post-normalization divergence still fails
 (exit 1); a genuinely unparsable non-padding line still errors (exit 2).
 
-Per-tuple opt-in `require_standalone` (bool, default off) flips that inlined-away
+Per-tuple opt-in `require_standalone` (bool, default off) flips that not-found
 outcome: for a tuple whose dispatch relies on the impl existing as a real,
-separately-dispatchable symbol, "inlined away" is a regression, so the checker
+separately-dispatchable symbol, a not-found label (genuinely inlined away, or
+absent) is a regression, so the checker
 hard-fails it (exit 1) instead of skip-with-warning. Orthogonal to
 `require_mnemonic`, which asserts which instructions a present symbol contains.
 
@@ -75,6 +76,7 @@ import subprocess
 import sys
 from collections import Counter
 from pathlib import Path
+from typing import Optional
 
 
 class SymbolNotEmittedError(RuntimeError):
@@ -363,7 +365,9 @@ def extract_function_body(o_file: Path, symbol: str,
     filter-emptied output. The retry is behavior, not just diagnostics: if
     the symbol filter fails to match a label that whole-object disassembly
     does render (an objdump version/symbol-table quirk), the retry recovers
-    the extraction instead of skipping the tuple.
+    the extraction instead of skipping the tuple. (Defensive: no such
+    objdump has been observed in this matrix -- the retry exists for the
+    diagnostic, and the recovery is a free consequence.)
     """
     label = object_symbol_name(o_file, symbol)
     text = _disassemble(o_file, objdump, symbol=label)
@@ -377,10 +381,11 @@ def extract_function_body(o_file: Path, symbol: str,
         # The fast path FILTERED the disassembly to the requested label; when
         # that label is wrong the output contains zero labels, which would
         # starve the similar-labels diagnostic ("no similar labels among 0
-        # seen"). Retry unfiltered -- error path only, so the extra
-        # disassembly costs nothing on a passing build -- so the raised
-        # error can report what the object file actually contains
-        # (mtibbits/volk#225).
+        # seen"). Retry unfiltered so the raised error can report what the
+        # object file actually contains (mtibbits/volk#225). Cost: skip path
+        # only -- a build whose tuples all resolve never pays it; each
+        # SKIPPED tuple (skips are exit-0) pays one whole-object disassembly.
+        # Fine at current tuple counts; memoise per .o if skips ever grow.
         text = _disassemble(o_file, objdump)
         return extract_function_body_from_text(text, label,
                                                source_label=str(o_file),
@@ -389,7 +394,7 @@ def extract_function_body(o_file: Path, symbol: str,
 
 def extract_function_body_from_text(text: str, label: str,
                                     source_label: str = "<disassembly>",
-                                    c_symbol: str = None) -> list:
+                                    c_symbol: Optional[str] = None) -> list:
     """Return [{address, bytes, mnemonic, operands}, ...] for the whole body of
     the object-file label `label` in `text` (on Mach-O, callers pass the
     underscore-prefixed label object_symbol_name() produced -- the underscore
@@ -718,17 +723,23 @@ def main():
     if uncovered or checked == 0:
         if checked == 0:
             headline = "zero coverage"
-            lead = (f"All {len(tuples)} declared tuples were skipped (impl "
-                    "not emitted standalone),\nso nothing was verified. A "
-                    "toolchain change that inlines every compared\nimpl "
-                    "would otherwise turn this check into a silent no-op.")
+            lead = (f"All {len(tuples)} declared tuples were skipped (no "
+                    "matching label in the object file:\nthe impl was "
+                    "inlined away, or its label does not match the name "
+                    "looked up --\nthe per-tuple WARNING lines above report "
+                    "the labels actually present),\nso nothing was verified. "
+                    "A toolchain change that inlines or renames every\n"
+                    "compared impl would otherwise turn this check into a "
+                    "silent no-op.")
             shown = skipped
         else:
             headline = ("zero codegen coverage for kernel(s): "
                         + ", ".join(uncovered))
             lead = ("Every declared tuple for the named kernel(s) was "
-                    "skipped (impl not emitted\nstandalone), leaving them "
-                    "unverified while the rest of the run passed.")
+                    "skipped (no matching label\nin the object file -- "
+                    "inlined away, or a label/name mismatch; see the\n"
+                    "per-tuple WARNING lines), leaving them unverified while "
+                    "the rest of the\nrun passed.")
             # Name only the uncovered kernels' skips: a covered kernel's
             # incidental skip must not be presented as removable. Derived from
             # the skip list itself (not kernel membership) so the label stays
@@ -740,11 +751,13 @@ def main():
         print("", file=sys.stderr)
         print(lead, file=sys.stderr)
         print("", file=sys.stderr)
-        print("Fix the build so the symbols are emitted standalone (see the "
-              "README's\nrequire-standalone notes). Removing the affected "
-              "tuples from the manifest\nsilences the check instead of "
-              "fixing it -- a deliberate de-scoping that\nneeds review, not "
-              "an equivalent outcome. See mtibbits/volk#165.",
+        print("Fix the build so the symbols are emitted standalone, or the "
+              "harness's\nname->label mapping if the WARNING lines show the "
+              "impl present under\nanother name (see the README's "
+              "require-standalone and object-label notes).\nRemoving the "
+              "affected tuples from the manifest silences the check "
+              "instead\nof fixing it -- a deliberate de-scoping that needs "
+              "review, not an\nequivalent outcome. See mtibbits/volk#165.",
               file=sys.stderr)
         if checked == 0:
             print("Note: an emptied manifest prints ok (0 tuples declared); "
