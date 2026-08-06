@@ -233,6 +233,14 @@ def resolve_object(build_lib_dir: Path, machine_o: str) -> Path:
         f"({len(matches)} matches): {[str(m) for m in matches]}")
 
 
+def _require_object_file(o_file: Path):
+    """Single owner of the missing-object diagnostic (exit-2 class), shared by
+    every seam that touches the file so the message cannot drift between
+    copies."""
+    if not o_file.is_file():
+        raise RuntimeError(f"object file not found: {o_file}")
+
+
 # Mach-O object-file magics (as the first 4 bytes appear on disk): thin
 # 64-/32-bit little-endian, and fat/universal (big-endian on disk) 32/64.
 _MACHO_MAGICS = {
@@ -264,8 +272,7 @@ def object_symbol_name(o_file: Path, symbol: str) -> str:
     SymbolNotEmittedError's similar-labels report is the loud signal (the
     underscored twin shows up there).
     """
-    if not o_file.is_file():
-        raise RuntimeError(f"object file not found: {o_file}")
+    _require_object_file(o_file)
     with o_file.open("rb") as f:
         magic = f.read(4)
     if magic in _MACHO_MAGICS:
@@ -273,9 +280,17 @@ def object_symbol_name(o_file: Path, symbol: str) -> str:
     return symbol
 
 
+def _uses_symbol_filter(objdump: str) -> bool:
+    """True when _disassemble will pass --disassemble-symbols for this tool
+    (llvm-objdump only; GNU objdump has no equivalent). Shared predicate so
+    extract_function_body can know its fast-path output was FILTERED -- a
+    filtered disassembly of a wrong label contains zero labels, which would
+    starve the similar-labels diagnostic (mtibbits/volk#225)."""
+    return "llvm" in Path(objdump).name
+
+
 def _disassemble(o_file: Path, objdump: str, symbol: str = None) -> str:
-    if not o_file.is_file():
-        raise RuntimeError(f"object file not found: {o_file}")
+    _require_object_file(o_file)
     # NOTE: deliberately NOT using --symbolize-operands. It makes llvm-objdump
     # synthesize <L0>/<L1> branch labels that collide with the _label_line
     # parser. Plain --disassemble shows symbol headers as clean <name>: lines.
@@ -283,7 +298,7 @@ def _disassemble(o_file: Path, objdump: str, symbol: str = None) -> str:
     # Efficiency: llvm-objdump can disassemble a single symbol, skipping the
     # hundreds of other kernels in a machine .o. GNU objdump has no equivalent,
     # so only use it for llvm-objdump and fall back to whole-object otherwise.
-    if symbol and "llvm" in Path(objdump).name:
+    if symbol and _uses_symbol_filter(objdump):
         cmd.append(f"--disassemble-symbols={symbol}")
     cmd.append(str(o_file))
     result = subprocess.run(cmd, capture_output=True, text=True, check=False)
@@ -342,12 +357,29 @@ def extract_function_body(o_file: Path, symbol: str,
     Maps the C name to the object file's label first (Mach-O prepends an
     underscore, mtibbits/volk#225), then thin wrapper over
     extract_function_body_from_text (see it for the parse contract); kept so
-    callers and tests can pass a file path + objdump.
+    callers and tests can pass a file path + objdump. On a not-found label
+    after a FILTERED fast-path disassembly, retries unfiltered so the
+    similar-labels report is computed from the whole object, not from
+    filter-emptied output.
     """
     label = object_symbol_name(o_file, symbol)
     text = _disassemble(o_file, objdump, symbol=label)
-    return extract_function_body_from_text(text, label,
-                                           source_label=str(o_file))
+    try:
+        return extract_function_body_from_text(text, label,
+                                               source_label=str(o_file))
+    except SymbolNotEmittedError:
+        if not _uses_symbol_filter(objdump):
+            raise
+        # The fast path FILTERED the disassembly to the requested label; when
+        # that label is wrong the output contains zero labels, which would
+        # starve the similar-labels diagnostic ("no similar labels among 0
+        # seen"). Retry unfiltered -- error path only, so the extra
+        # disassembly costs nothing on a passing build -- so the raised
+        # error can report what the object file actually contains
+        # (mtibbits/volk#225).
+        text = _disassemble(o_file, objdump)
+        return extract_function_body_from_text(text, label,
+                                               source_label=str(o_file))
 
 
 def extract_function_body_from_text(text: str, label: str,
@@ -587,8 +619,8 @@ def main():
             # away" is a regression, not an acceptable outcome -- hard-fail it.
             if t.get("require_standalone"):
                 msg = ("require_standalone assertion FAILED: implementation "
-                       "was not emitted as a standalone dispatchable symbol "
-                       f"(inlined away). {e}")
+                       "was not emitted as a standalone dispatchable symbol. "
+                       f"{e}")
                 failures.append((tuple_id(t), msg))
                 continue
             # Default: compiler inlined the impl rather than emitting it

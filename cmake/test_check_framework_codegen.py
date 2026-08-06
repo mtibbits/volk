@@ -17,9 +17,11 @@ assemble tiny fixtures with the system toolchain, so they require `cc` and
 a disassembler (llvm-objdump or objdump) on PATH.
 """
 
+import contextlib
 import json
 import subprocess
 import sys
+import tempfile
 from importlib import util
 from pathlib import Path
 
@@ -39,6 +41,18 @@ def _which_objdump():
         if subprocess.run(["which", cand], capture_output=True).returncode == 0:
             return cand
     raise RuntimeError("no disassembler found (llvm-objdump / objdump)")
+
+
+@contextlib.contextmanager
+def _patched_disassemble(mod, fake):
+    """Swap mod._disassemble for `fake` and guarantee restoration -- a leaked
+    monkeypatch would silently poison every later extraction test."""
+    real = mod._disassemble
+    mod._disassemble = fake
+    try:
+        yield
+    finally:
+        mod._disassemble = real
 
 
 def test_manifest_parse():
@@ -358,7 +372,6 @@ def test_object_symbol_name_macho_prefixes():
     platform, so a cross-compiled Mach-O .o on a Linux host resolves
     correctly (mtibbits/volk#225)."""
     mod = _load_module()
-    import tempfile
     with tempfile.TemporaryDirectory() as td:
         o = Path(td) / "m.o"
         o.write_bytes(b"\xcf\xfa\xed\xfe" + b"\x00" * 28)  # MH_MAGIC_64 (LE)
@@ -373,7 +386,6 @@ def test_object_symbol_name_elf_and_coff_unchanged():
     blob (COFF has no single 4-byte magic; absence of Mach-O magic must mean
     'no prefix', preserving today's behavior everywhere else)."""
     mod = _load_module()
-    import tempfile
     with tempfile.TemporaryDirectory() as td:
         o = Path(td) / "e.o"
         o.write_bytes(b"\x7fELF" + b"\x00" * 28)
@@ -494,23 +506,18 @@ def test_extract_function_body_macho_wiring_real_capture():
     a real produced artifact fed through the consumer, not a hand-written
     format claim (mtibbits/volk#225)."""
     mod = _load_module()
-    import tempfile
     with tempfile.TemporaryDirectory() as td:
         o = Path(td) / "m.o"
         o.write_bytes(b"\xcf\xfa\xed\xfe" + b"\x00" * 28)
         seen = {}
-        real = mod._disassemble
 
         def fake_disassemble(o_file, objdump, symbol=None):
             seen["symbol"] = symbol
             return _MACHO_REAL_DISASM
 
-        mod._disassemble = fake_disassemble
-        try:
+        with _patched_disassemble(mod, fake_disassemble):
             instrs = mod.extract_function_body(
                 o, "volk_32f_x2_add_32f_a_avx", objdump="llvm-objdump")
-        finally:
-            mod._disassemble = real
     assert seen["symbol"] == "_volk_32f_x2_add_32f_a_avx", seen
     # Structural pins, stable across a toolchain re-capture: whole real
     # body parses, prologue/epilogue mnemonics, and the AVX payload.
@@ -526,12 +533,10 @@ def test_extract_function_body_elf_label_unchanged():
     end-to-end, so no prefix leaks into non-Mach-O lookups and Linux-lane
     results stay byte-identical (AC2)."""
     mod = _load_module()
-    import tempfile
     with tempfile.TemporaryDirectory() as td:
         o = Path(td) / "e.o"
         o.write_bytes(b"\x7fELF" + b"\x00" * 28)
         seen = {}
-        real = mod._disassemble
 
         def fake_disassemble(o_file, objdump, symbol=None):
             seen["symbol"] = symbol
@@ -540,13 +545,47 @@ def test_extract_function_body_elf_label_unchanged():
                 "       0: c3                           \tretq\n"
             )
 
-        mod._disassemble = fake_disassemble
-        try:
+        with _patched_disassemble(mod, fake_disassemble):
             instrs = mod.extract_function_body(o, "fwk_fn", objdump="llvm-objdump")
-        finally:
-            mod._disassemble = real
     assert seen["symbol"] == "fwk_fn", seen
     assert [i["mnemonic"] for i in instrs] == ["retq"], instrs
+
+
+def test_not_found_retries_unfiltered_for_similar_labels():
+    """The llvm fast path FILTERS disassembly to the requested label
+    (--disassemble-symbols), so a wrong label yields output with ZERO labels
+    -- which would starve the similar-labels diagnostic into 'no similar
+    labels among 0 seen'. On not-found, extract_function_body must retry
+    UNFILTERED so the raised error reports what the object actually contains
+    (mtibbits/volk#225 quality pass)."""
+    mod = _load_module()
+    with tempfile.TemporaryDirectory() as td:
+        o = Path(td) / "m.o"
+        o.write_bytes(b"\xcf\xfa\xed\xfe" + b"\x00" * 28)
+        calls = []
+
+        def fake_disassemble(o_file, objdump, symbol=None):
+            calls.append(symbol)
+            if symbol is not None:
+                # llvm-objdump behavior for a missing symbol: header only,
+                # zero label lines, rc=0 (measured).
+                return "m.o:\tfile format mach-o 64-bit x86-64\n"
+            return (
+                "m.o:\tfile format mach-o 64-bit x86-64\n"
+                "\n"
+                "0000000000000000 <_wanted_fn_v2>:\n"
+                "       0: c3                           \tretq\n"
+            )
+
+        with _patched_disassemble(mod, fake_disassemble):
+            try:
+                mod.extract_function_body(o, "wanted_fn", objdump="llvm-objdump")
+                assert False, "expected SymbolNotEmittedError"
+            except mod.SymbolNotEmittedError as e:
+                assert "similar labels present" in str(e), str(e)
+                assert "_wanted_fn_v2" in str(e), str(e)
+    # First call filtered (the mapped label), second call the unfiltered retry.
+    assert calls == ["_wanted_fn", None], calls
 
 
 def test_symbol_not_emitted_reports_similar_labels():
