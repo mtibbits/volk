@@ -444,7 +444,8 @@ def extract_function_body_from_text(text: str, label: str,
             instrs.append(_instr_from_match(mi))
 
     if not saw_symbol:
-        near = [l for l in labels_seen if label in l or l in label]
+        near = [seen for seen in labels_seen
+                if label in seen or seen in label]
         if near:
             hint = f"similar labels present: {sorted(near)[:8]}"
         else:
