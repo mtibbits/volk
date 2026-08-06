@@ -678,33 +678,27 @@ def test_divergence_precedes_coverage_guard():
     coverage message -- the guard sits after the failures exit and must never
     mask a divergence diagnostic (mtibbits/volk#165). Green before and after
     the guard lands; it pins the guard's position, not its existence."""
-    import shutil
-    cc = shutil.which("cc")
+    cc, objdump, o = _compile_present_fn_o("dv_guard")
     if not cc:
         print("  (skip test_divergence_precedes_coverage_guard: no cc)")
         return
-    objdump = _which_objdump()
-    add = ("#include <immintrin.h>\n"
-           "__m256 dv_fn(__m256 a,__m256 b){return _mm256_add_ps(a,b);}\n")
     mul = ("#include <immintrin.h>\n"
-           "__m256 dv_fn(__m256 a,__m256 b){return _mm256_mul_ps(a,b);}\n")
-    a_c = Path("/tmp/cge_dv_a.c"); a_c.write_text(add)
-    b_c = Path("/tmp/cge_dv_b.c"); b_c.write_text(mul)
-    a_o = Path("/tmp/cge_dv_a.o"); b_o = Path("/tmp/cge_dv_b.o")
-    for s, o in ((a_c, a_o), (b_c, b_o)):
-        subprocess.run([cc, "-O3", "-mavx", "-c", str(s), "-o", str(o)],
-                       check=True)
+           "__m256 present_fn(__m256 a,__m256 b){return _mm256_mul_ps(a,b);}\n")
+    b_c = Path("/tmp/cge_dv_mul.c"); b_c.write_text(mul)
+    b_o = Path("/tmp/cge_dv_mul.o")
+    subprocess.run([cc, "-O3", "-mavx", "-c", str(b_c), "-o", str(b_o)],
+                   check=True)
     manifest = {"tuples": [
         {
             "kernel": "dv", "isa": "avx", "alignment": "a",
-            "impl_a": {"symbol": "dv_fn", "machine_o": str(a_o)},
-            "impl_b": {"symbol": "dv_fn", "machine_o": str(b_o)},
+            "impl_a": {"symbol": "present_fn", "machine_o": str(o)},
+            "impl_b": {"symbol": "present_fn", "machine_o": str(b_o)},
             "criterion": "byte_identical",
         },
         {
             "kernel": "hole2", "isa": "avx", "alignment": "a",
-            "impl_a": {"symbol": "inlined_away", "machine_o": str(a_o)},
-            "impl_b": {"symbol": "dv_fn", "machine_o": str(a_o)},
+            "impl_a": {"symbol": "inlined_away", "machine_o": str(o)},
+            "impl_b": {"symbol": "present_fn", "machine_o": str(o)},
             "criterion": "byte_identical",
         },
     ]}

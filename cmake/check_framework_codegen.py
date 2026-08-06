@@ -71,6 +71,7 @@ import json
 import re
 import subprocess
 import sys
+from collections import Counter
 from pathlib import Path
 
 
@@ -505,7 +506,7 @@ def main():
     failures = []
     errors = []
     skipped = []
-    skipped_by_kernel = {}
+    skipped_by_kernel = Counter()
     for t in tuples:
         try:
             a_o = resolve_object(args.build_lib_dir, t["impl_a"]["machine_o"])
@@ -531,8 +532,7 @@ def main():
             print(f"codegen-equivalence: WARNING: skipping {tuple_id(t)}: {e}",
                   file=sys.stderr)
             skipped.append(tuple_id(t))
-            skipped_by_kernel[t["kernel"]] = \
-                skipped_by_kernel.get(t["kernel"], 0) + 1
+            skipped_by_kernel[t["kernel"]] += 1
             continue
         except RuntimeError as e:
             errors.append((tuple_id(t), str(e)))
@@ -582,49 +582,38 @@ def main():
             print("", file=sys.stderr)
         sys.exit(1)
 
+    # Zero-coverage guard (mtibbits/volk#165): a skip is legitimate per-tuple,
+    # but declared-yet-unverified coverage must not report success. The global
+    # all-skip case is the per-kernel case with every kernel uncovered; it gets
+    # its own headline because "the check verified nothing at all" is a
+    # different operator situation than one kernel losing coverage.
     checked = len(tuples) - len(skipped)
-    if checked == 0:
-        print("CODEGEN-EQUIVALENCE CHECK FAILED: zero coverage",
+    declared_by_kernel = Counter(t["kernel"] for t in tuples)
+    uncovered = sorted(k for k, n in declared_by_kernel.items()
+                       if skipped_by_kernel[k] == n)
+    if uncovered:
+        if checked == 0:
+            headline = "zero coverage"
+            lead = (f"All {len(tuples)} declared tuples were skipped (impl "
+                    "not emitted standalone),\nso nothing was verified. A "
+                    "toolchain change that inlines every compared\nimpl "
+                    "would otherwise turn this check into a silent no-op.")
+        else:
+            headline = ("zero codegen coverage for kernel(s): "
+                        + ", ".join(uncovered))
+            lead = ("Every declared tuple for the named kernel(s) was "
+                    "skipped (impl not emitted\nstandalone), leaving them "
+                    "unverified while the rest of the run passed.")
+        print(f"CODEGEN-EQUIVALENCE CHECK FAILED: {headline}",
               file=sys.stderr)
         print("", file=sys.stderr)
-        print(f"All {len(tuples)} declared tuples were skipped (impl not "
-              "emitted standalone),", file=sys.stderr)
-        print("so nothing was verified. A toolchain change that inlines "
-              "every compared", file=sys.stderr)
-        print("impl would otherwise turn this check into a silent no-op.",
-              file=sys.stderr)
+        print(lead, file=sys.stderr)
         print("", file=sys.stderr)
         print("If the inlining is expected, remove the affected tuples from "
-              "the manifest", file=sys.stderr)
-        print("(or fix the build so the symbols are emitted standalone); "
-              "absent coverage", file=sys.stderr)
-        print("is not reported as success. See mtibbits/volk#165.",
-              file=sys.stderr)
+              "the manifest\n(or fix the build so the symbols are emitted "
+              "standalone); absent coverage\nis not reported as success. "
+              "See mtibbits/volk#165.", file=sys.stderr)
         print(f"  skipped: {skipped}", file=sys.stderr)
-        sys.exit(1)
-
-    declared_by_kernel = {}
-    for t in tuples:
-        declared_by_kernel[t["kernel"]] = \
-            declared_by_kernel.get(t["kernel"], 0) + 1
-    uncovered = sorted(
-        k for k, n in declared_by_kernel.items()
-        if skipped_by_kernel.get(k, 0) == n)
-    if uncovered:
-        print("CODEGEN-EQUIVALENCE CHECK FAILED: zero codegen coverage "
-              f"for kernel(s): {', '.join(uncovered)}", file=sys.stderr)
-        print("", file=sys.stderr)
-        print("Every declared tuple for the named kernel(s) was skipped "
-              "(impl not emitted", file=sys.stderr)
-        print("standalone), leaving them unverified while the rest of the "
-              "run passed.", file=sys.stderr)
-        print("", file=sys.stderr)
-        print("If the inlining is expected, remove those kernels' tuples "
-              "from the manifest", file=sys.stderr)
-        print("(or fix the build so the symbols are emitted standalone); "
-              "a kernel with", file=sys.stderr)
-        print("zero checked tuples is not covered. See mtibbits/volk#165.",
-              file=sys.stderr)
         sys.exit(1)
 
     extra = (f", {len(skipped)} skipped -- not emitted standalone: {skipped}"
