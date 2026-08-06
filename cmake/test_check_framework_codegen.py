@@ -532,19 +532,30 @@ def test_require_standalone_inlined_hard_fails():
 
 
 def test_unmarked_inlined_still_skips():
-    """Negative control: the same inlined-away condition WITHOUT the opt-in keeps
-    today's behavior -- skip-with-warning, exit 0 (the build stays green)."""
+    """Negative control: an inlined-away tuple WITHOUT the opt-in keeps
+    skip-with-warning behavior -- exit 0 -- provided the kernel retains real
+    coverage (a second, checked tuple in the SAME kernel). The all-skip
+    configuration is now a zero-coverage failure (mtibbits/volk#165),
+    covered separately."""
     cc, objdump, o = _compile_present_fn_o("reqstandalone_skip")
     if not cc:
         print("  (skip test_unmarked_inlined_still_skips: no cc)")
         return
-    manifest = {"tuples": [{
-        "kernel": "nc", "isa": "avx", "alignment": "a",
-        "impl_a": {"symbol": "inlined_away", "machine_o": str(o)},
-        "impl_b": {"symbol": "present_fn", "machine_o": str(o)},
-        "criterion": "byte_identical",
-        # no require_standalone
-    }]}
+    manifest = {"tuples": [
+        {
+            "kernel": "nc", "isa": "avx", "alignment": "a",
+            "impl_a": {"symbol": "inlined_away", "machine_o": str(o)},
+            "impl_b": {"symbol": "present_fn", "machine_o": str(o)},
+            "criterion": "byte_identical",
+            # no require_standalone
+        },
+        {
+            "kernel": "nc", "isa": "avx", "alignment": "u",
+            "impl_a": {"symbol": "present_fn", "machine_o": str(o)},
+            "impl_b": {"symbol": "present_fn", "machine_o": str(o)},
+            "criterion": "byte_identical",
+        },
+    ]}
     mpath = Path("/tmp/cge_reqstandalone_skip_manifest.json")
     mpath.write_text(json.dumps(manifest))
     result = subprocess.run(
@@ -553,6 +564,159 @@ def test_unmarked_inlined_still_skips():
         capture_output=True, text=True)
     assert result.returncode == 0, (result.returncode, result.stdout, result.stderr)
     assert "WARNING: skipping nc.avx.a" in result.stderr, result.stderr
+    assert "1 tuples checked" in result.stdout, result.stdout
+
+
+def test_all_skipped_zero_coverage_fails():
+    """Global zero coverage: every declared tuple skips (inlined away), so
+    nothing was verified -- the run must FAIL loudly, not print
+    `ok (0 tuples checked)` (mtibbits/volk#165)."""
+    cc, objdump, o = _compile_present_fn_o("zerocov_global")
+    if not cc:
+        print("  (skip test_all_skipped_zero_coverage_fails: no cc)")
+        return
+    manifest = {"tuples": [
+        {
+            "kernel": "ka", "isa": "avx", "alignment": "a",
+            "impl_a": {"symbol": "inlined_away", "machine_o": str(o)},
+            "impl_b": {"symbol": "present_fn", "machine_o": str(o)},
+            "criterion": "byte_identical",
+        },
+        {
+            "kernel": "kb", "isa": "avx", "alignment": "u",
+            "impl_a": {"symbol": "also_inlined_away", "machine_o": str(o)},
+            "impl_b": {"symbol": "present_fn", "machine_o": str(o)},
+            "criterion": "byte_identical",
+        },
+    ]}
+    mpath = Path("/tmp/cge_zerocov_global_manifest.json")
+    mpath.write_text(json.dumps(manifest))
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), "--manifest", str(mpath),
+         "--build-lib-dir", "/tmp", "--objdump", objdump],
+        capture_output=True, text=True)
+    assert result.returncode == 1, (result.returncode, result.stdout, result.stderr)
+    assert "CHECK FAILED" in result.stderr, result.stderr
+    assert "zero coverage" in result.stderr, result.stderr
+    assert "ok (" not in result.stdout, result.stdout
+
+
+def test_per_kernel_all_skip_fails():
+    """Per-kernel all-skip: kernel `hole` has every tuple skipped while kernel
+    `covd` is checked -- the run must name `hole` in the coverage diagnostic
+    and exit non-zero; `covd` (which has coverage) must not be flagged
+    (mtibbits/volk#165)."""
+    cc, objdump, o = _compile_present_fn_o("zerocov_kernel")
+    if not cc:
+        print("  (skip test_per_kernel_all_skip_fails: no cc)")
+        return
+    manifest = {"tuples": [
+        {
+            "kernel": "hole", "isa": "avx", "alignment": "a",
+            "impl_a": {"symbol": "inlined_away", "machine_o": str(o)},
+            "impl_b": {"symbol": "present_fn", "machine_o": str(o)},
+            "criterion": "byte_identical",
+        },
+        {
+            "kernel": "covd", "isa": "avx", "alignment": "a",
+            "impl_a": {"symbol": "present_fn", "machine_o": str(o)},
+            "impl_b": {"symbol": "present_fn", "machine_o": str(o)},
+            "criterion": "byte_identical",
+        },
+    ]}
+    mpath = Path("/tmp/cge_zerocov_kernel_manifest.json")
+    mpath.write_text(json.dumps(manifest))
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), "--manifest", str(mpath),
+         "--build-lib-dir", "/tmp", "--objdump", objdump],
+        capture_output=True, text=True)
+    assert result.returncode == 1, (result.returncode, result.stdout, result.stderr)
+    assert "CHECK FAILED" in result.stderr, result.stderr
+    guard_lines = [l for l in result.stderr.splitlines()
+                   if "zero codegen coverage for kernel(s):" in l]
+    assert guard_lines, result.stderr
+    assert "hole" in guard_lines[0], result.stderr
+    assert "covd" not in guard_lines[0], result.stderr
+
+
+def test_partial_kernel_coverage_ok():
+    """A kernel with >=1 checked tuple is covered even if its other tuples
+    skip: one skip within kernel `pk` (which also has a checked tuple) stays
+    exit 0. Guards the per-kernel check against over-firing
+    (mtibbits/volk#165)."""
+    cc, objdump, o = _compile_present_fn_o("partialcov")
+    if not cc:
+        print("  (skip test_partial_kernel_coverage_ok: no cc)")
+        return
+    manifest = {"tuples": [
+        {
+            "kernel": "pk", "isa": "avx", "alignment": "a",
+            "impl_a": {"symbol": "present_fn", "machine_o": str(o)},
+            "impl_b": {"symbol": "present_fn", "machine_o": str(o)},
+            "criterion": "byte_identical",
+        },
+        {
+            "kernel": "pk", "isa": "avx", "alignment": "u",
+            "impl_a": {"symbol": "inlined_away", "machine_o": str(o)},
+            "impl_b": {"symbol": "present_fn", "machine_o": str(o)},
+            "criterion": "byte_identical",
+        },
+    ]}
+    mpath = Path("/tmp/cge_partialcov_manifest.json")
+    mpath.write_text(json.dumps(manifest))
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), "--manifest", str(mpath),
+         "--build-lib-dir", "/tmp", "--objdump", objdump],
+        capture_output=True, text=True)
+    assert result.returncode == 0, (result.returncode, result.stdout, result.stderr)
+    assert "1 tuples checked" in result.stdout, result.stdout
+
+
+def test_divergence_precedes_coverage_guard():
+    """Ordering pin: a real divergence in kernel `dv` plus an all-skip kernel
+    `hole2` must report the DIVERGENCE (per-tuple diff, exit 1), not the
+    coverage message -- the guard sits after the failures exit and must never
+    mask a divergence diagnostic (mtibbits/volk#165). Green before and after
+    the guard lands; it pins the guard's position, not its existence."""
+    import shutil
+    cc = shutil.which("cc")
+    if not cc:
+        print("  (skip test_divergence_precedes_coverage_guard: no cc)")
+        return
+    objdump = _which_objdump()
+    add = ("#include <immintrin.h>\n"
+           "__m256 dv_fn(__m256 a,__m256 b){return _mm256_add_ps(a,b);}\n")
+    mul = ("#include <immintrin.h>\n"
+           "__m256 dv_fn(__m256 a,__m256 b){return _mm256_mul_ps(a,b);}\n")
+    a_c = Path("/tmp/cge_dv_a.c"); a_c.write_text(add)
+    b_c = Path("/tmp/cge_dv_b.c"); b_c.write_text(mul)
+    a_o = Path("/tmp/cge_dv_a.o"); b_o = Path("/tmp/cge_dv_b.o")
+    for s, o in ((a_c, a_o), (b_c, b_o)):
+        subprocess.run([cc, "-O3", "-mavx", "-c", str(s), "-o", str(o)],
+                       check=True)
+    manifest = {"tuples": [
+        {
+            "kernel": "dv", "isa": "avx", "alignment": "a",
+            "impl_a": {"symbol": "dv_fn", "machine_o": str(a_o)},
+            "impl_b": {"symbol": "dv_fn", "machine_o": str(b_o)},
+            "criterion": "byte_identical",
+        },
+        {
+            "kernel": "hole2", "isa": "avx", "alignment": "a",
+            "impl_a": {"symbol": "inlined_away", "machine_o": str(a_o)},
+            "impl_b": {"symbol": "dv_fn", "machine_o": str(a_o)},
+            "criterion": "byte_identical",
+        },
+    ]}
+    mpath = Path("/tmp/cge_dv_guard_manifest.json")
+    mpath.write_text(json.dumps(manifest))
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), "--manifest", str(mpath),
+         "--build-lib-dir", "/tmp", "--objdump", objdump],
+        capture_output=True, text=True)
+    assert result.returncode == 1, (result.returncode, result.stdout, result.stderr)
+    assert "byte_identical comparison FAILED" in result.stderr, result.stderr
+    assert "zero codegen coverage" not in result.stderr, result.stderr
 
 
 def main():
