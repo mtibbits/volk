@@ -219,7 +219,11 @@ Retention: latest snapshot only — a new snapshot replaces the old files
   mode compiles to an explicit skip (no POSIX signals); everything else —
   including the combined negative control ctest — runs.
 - **ASan builds:** canary far-past demo is gated to ASan; misaligned mode needs
-  the `ASAN_OPTIONS` above.
+  the `ASAN_OPTIONS` above. Under the ASAN build type the control-kernel TU
+  (`qa_canary_kernel.cc`) is compiled with `-fno-sanitize=alignment` so a strict
+  UBSan lane (`halt_on_error=1`) can run the misaligned mode — the planted
+  `movaps` still faults; only the pre-fault UBSan report is suppressed, and only
+  for that one test-only TU (#221).
 - **Default qa:** `volk_test_all` and the per-kernel `qa_volk_*` ctests are
   byte-for-byte unaffected by every capability here; all harness behavior is
   opt-in via the env toggles.
