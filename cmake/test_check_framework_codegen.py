@@ -348,6 +348,48 @@ def test_symbol_not_standalone_raises_typed():
     assert issubclass(mod.SymbolNotEmittedError, RuntimeError)
 
 
+def test_object_symbol_name_macho_prefixes():
+    """Mach-O mangles C symbols with a leading underscore; the label the
+    disassembler shows is '_sym'. Detection is by file magic, not host
+    platform, so a cross-compiled Mach-O .o on a Linux host resolves
+    correctly (mtibbits/volk#225)."""
+    mod = _load_module()
+    import tempfile
+    with tempfile.TemporaryDirectory() as td:
+        o = Path(td) / "m.o"
+        o.write_bytes(b"\xcf\xfa\xed\xfe" + b"\x00" * 28)  # MH_MAGIC_64 (LE)
+        assert mod.object_symbol_name(o, "fwk_fn") == "_fwk_fn"
+        o32 = Path(td) / "m32.o"
+        o32.write_bytes(b"\xce\xfa\xed\xfe" + b"\x00" * 28)  # MH_MAGIC (LE)
+        assert mod.object_symbol_name(o32, "fwk_fn") == "_fwk_fn"
+
+
+def test_object_symbol_name_elf_and_coff_unchanged():
+    """Non-Mach-O objects keep the C name: ELF (Linux lanes) and a non-magic
+    blob (COFF has no single 4-byte magic; absence of Mach-O magic must mean
+    'no prefix', preserving today's behavior everywhere else)."""
+    mod = _load_module()
+    import tempfile
+    with tempfile.TemporaryDirectory() as td:
+        o = Path(td) / "e.o"
+        o.write_bytes(b"\x7fELF" + b"\x00" * 28)
+        assert mod.object_symbol_name(o, "fwk_fn") == "fwk_fn"
+        c = Path(td) / "c.obj"
+        c.write_bytes(b"\x64\x86\x00\x00" + b"\x00" * 28)
+        assert mod.object_symbol_name(c, "fwk_fn") == "fwk_fn"
+
+
+def test_object_symbol_name_missing_file_raises():
+    """Missing .o keeps the established 'object file not found' diagnostic
+    (exit-2 class), now raised at the naming seam which runs first."""
+    mod = _load_module()
+    try:
+        mod.object_symbol_name(Path("/nonexistent/x.o"), "fwk_fn")
+        assert False, "expected RuntimeError"
+    except RuntimeError as e:
+        assert "object file not found" in str(e), str(e)
+
+
 def test_padding_strip_does_not_swallow_real_instruction():
     """Negative control: a trailing NON-padding instruction (an extra vaddps)
     must remain and still cause a divergence -- the strip is padding-only."""

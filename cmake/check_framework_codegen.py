@@ -222,6 +222,46 @@ def resolve_object(build_lib_dir: Path, machine_o: str) -> Path:
         f"({len(matches)} matches): {[str(m) for m in matches]}")
 
 
+# Mach-O object-file magics (as the first 4 bytes appear on disk): thin
+# 64-/32-bit little-endian, and fat/universal (big-endian on disk) 32/64.
+_MACHO_MAGICS = {
+    b"\xcf\xfa\xed\xfe",  # MH_MAGIC_64
+    b"\xce\xfa\xed\xfe",  # MH_MAGIC
+    b"\xca\xfe\xba\xbe",  # FAT_MAGIC
+    b"\xca\xfe\xba\xbf",  # FAT_MAGIC_64
+}
+
+
+def object_symbol_name(o_file: Path, symbol: str) -> str:
+    """Map a C-level symbol name to the label it carries in this object file.
+
+    Mach-O (Darwin ABI) prepends an underscore to every C symbol, so the
+    disassembly label for volk_32f_x2_add_32f_a_avx is
+    _volk_32f_x2_add_32f_a_avx; ELF and COFF-x64 use the C name unchanged.
+    Keyed on the object file's magic bytes rather than the host platform so a
+    cross-compiled Mach-O object resolves correctly anywhere
+    (mtibbits/volk#225 -- on macOS the unprefixed lookup made the bootstrap
+    tuple skip as 'symbol not found', zero coverage under the #165 guard).
+
+    Blind-spot shape (what this helper CANNOT decide): detection is a
+    positive Mach-O check on 4 magics (thin LE 32/64 + fat 32/64).
+    Anything else -- ELF, COFF (which has no single 4-byte magic), or a
+    format outside the support set -- keeps the C name unchanged, which is
+    correct for every non-Mach-O lane CI builds today. Big-endian thin
+    Mach-O (ppc-era) is deliberately not recognized: no such target exists
+    in the CI matrix or support set. If a misclassification ever happens,
+    SymbolNotEmittedError's similar-labels report is the loud signal (the
+    underscored twin shows up there).
+    """
+    if not o_file.is_file():
+        raise RuntimeError(f"object file not found: {o_file}")
+    with o_file.open("rb") as f:
+        magic = f.read(4)
+    if magic in _MACHO_MAGICS:
+        return "_" + symbol
+    return symbol
+
+
 def _disassemble(o_file: Path, objdump: str, symbol: str = None) -> str:
     if not o_file.is_file():
         raise RuntimeError(f"object file not found: {o_file}")
