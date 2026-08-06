@@ -7,6 +7,10 @@
  * SPDX-License-Identifier: LGPL-3.0-or-later
  */
 
+// Under the ASAN build type this TU is compiled with -fno-sanitize=alignment
+// (see lib/CMakeLists.txt, #221): UBSan will NOT report misaligned access from
+// anything added to this file — the planted faults must stay real faults.
+
 #include "qa_canary_kernel.h"
 
 #include "volk/volk_complex.h" // lv_32fc_t/lv_cmake (planted power pair, #92)
