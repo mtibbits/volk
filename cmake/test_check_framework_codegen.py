@@ -632,8 +632,8 @@ def test_per_kernel_all_skip_fails():
         capture_output=True, text=True)
     assert result.returncode == 1, (result.returncode, result.stdout, result.stderr)
     assert "CHECK FAILED" in result.stderr, result.stderr
-    guard_lines = [l for l in result.stderr.splitlines()
-                   if "zero codegen coverage for kernel(s):" in l]
+    guard_lines = [ln for ln in result.stderr.splitlines()
+                   if "zero codegen coverage for kernel(s):" in ln]
     assert guard_lines, result.stderr
     assert "hole" in guard_lines[0], result.stderr
     assert "covd" not in guard_lines[0], result.stderr
