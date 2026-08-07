@@ -915,6 +915,31 @@ if(ENABLE_TESTING)
                 "HARNESS_MISALIGNED=1;UBSAN_OPTIONS=halt_on_error=1;ASAN_OPTIONS=handle_segv=0:handle_sigbus=0:handle_sigill=0:allow_user_segv_handler=1"
         )
     endif()
+    # #162: puppet kernels are covered in misaligned mode via fork isolation.
+    # The pass regex pins the whole contract observably: the rotator2 puppet
+    # must produce a real, fork-routed ok row (not the pre-#162 skip, and not
+    # a silent loss of the fork routing -- the "(fork-isolated)" tag is printed
+    # only on the puppet path). The fail regex reds the lane on any recorded
+    # FAIL row or a lost negative control (either pair; the fork-path pair is
+    # the #101-class regression proof: a planted unaligned fault in a forked
+    # child must be recorded while the run continues). POSIX-only: the mode is
+    # signal/fork-based and compiles to a fail-closed skip on WIN32.
+    if(NOT WIN32)
+        add_test(NAME qa_misaligned_puppet_control
+                 COMMAND volk_test_correctness volk_32fc_s32fc_rotator2puppet_32fc)
+        set_tests_properties(
+            qa_misaligned_puppet_control
+            PROPERTIES
+                TIMEOUT
+                600
+                PASS_REGULAR_EXPRESSION
+                "ok    \\[misaligned\\] volk_32fc_s32fc_rotator2puppet_32fc \\(fork-isolated\\)"
+                FAIL_REGULAR_EXPRESSION
+                "NEGATIVE CONTROL LOST;FAIL  \\[misaligned\\]"
+                ENVIRONMENT
+                "HARNESS_MISALIGNED=1;UBSAN_OPTIONS=halt_on_error=1;ASAN_OPTIONS=handle_segv=0:handle_sigbus=0:handle_sigill=0:allow_user_segv_handler=1"
+        )
+    endif()
     target_link_libraries(volk_test_all fmt::fmt)
     target_link_libraries(volk_test_correctness fmt::fmt)
 
