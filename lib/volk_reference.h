@@ -32,8 +32,10 @@
 //             outputs[0][0]); the harness zero-fills both sides so untouched
 //             tails compare equal. A wrong-prefix oracle IS caught (fcompare
 //             runs the full vlen, so it diverges from the impl's zero tail);
-//             keep the count consistent with volk_buffer_roles.cc, which the
-//             canary side consults.
+//             for kernels present in BOTH registries, keep the prefix count
+//             consistent with the volk_buffer_roles.cc entry the canary side
+//             consults. Membership itself diverges by design (#191): buffer
+//             roles cover the whole fixed-output class, oracles stay opt-in.
 //   scalar  : test_params.scalar() — real part carries an s32f scalar
 //             (e.g. power exponent, atan2 normalizeFactor); full value for s32fc.
 //   vlen    : the USER vlen (number of elements), not the twiddled buffer size.

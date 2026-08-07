@@ -102,8 +102,10 @@ the kernel's numbers and cite this section.
 - **Escaped defect:** tail one-past over/under-run class (`30ab2b0`).
 - **How:** each output buffer is its own malloc with leading/trailing sentinel
   guards; two runs with distinct sentinels flag guard writes (always a defect)
-  and never-written in-bounds elements (`partial` — expected for
-  reduction/index kernels with fixed-size outputs). ASan redzones bracket the
+  and never-written in-bounds elements (`partial` for kernels not in the #161
+  buffer-role registry). Kernels registered in the buffer-role registry — every
+  fixed-output reduction/index kernel in the QA roster, as of #191 — instead get
+  a hard `ok`/`FAIL` against their declared cardinality. ASan redzones bracket the
   guarded buffers for far-past coverage (demo gated to ASan builds).
 
 ### 4. Input-immutability canary (#90)
