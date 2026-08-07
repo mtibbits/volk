@@ -134,26 +134,38 @@ the kernel's numbers and cite this section.
   aligned/misaligned/compare cycle runs in a forked child; a fault kills only
   the child and the parent records it from the wait status + a phase pipe
   (fail-closed: an impl whose fork setup fails is not counted, so an
-  all-failed kernel reports `skip`, never `ok`). Puppet rows carry a
-  `(fork-isolated)` stdout tag so the routing is observable. One policy
-  exclusion remains: `volk_8u_conv_k7_r2puppet_8u` prints
-  `skip … (excluded: #96 conv_k7)` until its decision-buffer overflow (#96)
-  lands — the corruption is child-contained but would hard-red every ASan
-  lane for a known, tracked defect. A second negative-control pair (the same
-  planted ok/fault kernels routed through the fork path) runs in **every**
-  misaligned invocation, including the `qa_strict_misaligned_canary` lane;
-  losing it aborts with exit 2. This pair is the regression proof for the
-  #101 defect class (an unaligned fault in a puppet-only worker), pinned in
-  CI by the ctest `qa_misaligned_puppet_control` (POSIX, plain + sanitizer
-  builds), whose pass/fail regexes require the rotator2 puppet's fork-routed
-  `ok` row and forbid FAIL rows or NC loss ("covered AND clean").
+  all-failed kernel reports `skip (fork setup failed: N impl-runs)`, never
+  `ok`; partial losses print a `setup-failed impl-runs: N` qualifier on the
+  row). Puppet rows carry a `(fork-isolated)` stdout tag derived from the
+  summary the fork branch itself reports — the tag observes the routing that
+  happened, not the predicate that selects it. One policy exclusion remains:
+  `volk_8u_conv_k7_r2puppet_8u` prints `skip … (excluded: #96 conv_k7)`
+  until its decision-buffer overflow (#96) lands — the corruption is
+  child-contained but would hard-red every ASan lane for a known, tracked
+  defect. A fork-path negative-control **trio** (planted ok, fault, and
+  alignment-sensitive-diverging kernels routed through forked children) runs
+  in **every** misaligned invocation, including the
+  `qa_strict_misaligned_canary` lane; losing any of the three verdict
+  transports (ok / crash / diverged) aborts with exit 2. The fault twin is
+  the regression proof for the #101 defect class (an unaligned fault in a
+  puppet-only worker), pinned by the ctest `qa_misaligned_puppet_control`,
+  whose pass/fail regexes require the rotator2 puppet's fork-routed `ok` row
+  and forbid FAIL rows, NC loss, or setup-failed qualifiers ("covered AND
+  clean"). That ctest registers by default on **Linux x86_64 only** (the
+  validated platform; CMake option `VOLK_MISALIGNED_PUPPET_CTEST`, opt-in
+  elsewhere) and never on static-dispatch builds, where
+  `volk_get_alignment()` is 1 and the mode's degenerate-alignment guard
+  fails closed by design — broadening to other arches/OSes after a
+  cross-platform probe is a tracked follow-up.
 - **Mapping-completeness note (#162):** for each puppet the sweep compares the
   master kernel's impl-name list against the puppet's wrappers and prints a
   stderr `note` for any master impl with no same-named wrapper — a stale
   puppet silently caps coverage for its whole kernel class (the
   gnuradio/volk#570 popcnt lesson). Advisory, name-set only: a wrapper that
   exists but calls the *wrong* master impl is a source-level property this
-  check cannot see.
+  check cannot see. The computation is self-checked at mode start against
+  hand-built descs (must fire on a planted gap AND stay quiet on a complete
+  pair; any misclassification is NC-LOST exit 2).
 - **ASan note:** run with
   `ASAN_OPTIONS=handle_segv=0:handle_sigbus=0:handle_sigill=0:allow_user_segv_handler=1`
   or ASan's handler wins and aborts on the first planted fault.

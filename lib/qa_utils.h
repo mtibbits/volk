@@ -380,6 +380,11 @@ struct volk_misaligned_summary {
     // counted in checked_impls/applied (fail-closed), but the count is
     // surfaced so a partially-exercised kernel cannot print a bare ok row.
     int setup_failed = 0;
+    // #162: true iff at least one impl actually ran under FORK isolation --
+    // reported from inside the fork branch itself, so the driver's
+    // "(fork-isolated)" row tag observes the routing that happened, not the
+    // predicate that was supposed to select it.
+    bool fork_isolated = false;
     // #92 triage detail (same convention as volk_canary_summary).
     std::vector<std::string> checked_impls;
     std::vector<std::string> crashed_impls;

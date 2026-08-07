@@ -939,15 +939,27 @@ if(ENABLE_TESTING)
     # continues). NOTE: setting PASS_REGULAR_EXPRESSION makes ctest IGNORE the
     # process exit code -- the NC blocks run before the sweep row is printed,
     # so an NC loss is still caught by the fail regex; that ordering is
-    # load-bearing. Registration is gated to x86_64 POSIX hosts: this is a
-    # HARD covered-and-clean contract, and x86_64 (plain/ASan/UBSan) is the
-    # validated set. The misaligned mode has never run in CI on the QEMU
-    # arches (armv7/ppc64le/s390x/riscv64) or aarch64 -- enabling it there
-    # blind risks lane-redding on alignment behavior nobody has probed
-    # (degenerate volk_get_alignment(), QEMU fork semantics, arch-specific
-    # divergence). Broadening after a cross-arch probe is a filed follow-up;
-    # other hosts can opt in with -DVOLK_MISALIGNED_PUPPET_CTEST=ON.
-    if(NOT WIN32 AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|amd64|AMD64)$")
+    # load-bearing. The fail regex also reds on "setup-failed impl-runs": a
+    # partially-exercised kernel (some fork/pipe setups lost) must not pass as
+    # covered. Registration is gated to Linux x86_64 hosts by default: the
+    # contract is HARD covered-and-clean, and the validated evidence is one
+    # Linux x86-64 box across plain / ASAN-build-type / Debug+UBSan-flag
+    # configs plus local static and static-dispatch(generic) probes. The
+    # misaligned mode has never run in CI on the QEMU arches
+    # (armv7/ppc64le/s390x/riscv64), aarch64, or macOS -- enabling it there
+    # blind risks lane-redding on behavior nobody has probed (degenerate
+    # volk_get_alignment(), QEMU fork semantics, arch-specific divergence,
+    # platform libc). Static-dispatch builds are excluded outright: with a
+    # single statically dispatched machine (CI pins "generic") the misaligned
+    # mode's degenerate-alignment guard fails closed NC-LOST -- probed live:
+    # volk_get_alignment()==1 cannot misalign anything, the mode is
+    # inapplicable by design, and the hard ctest would red the lane.
+    # Broadening after a cross-platform probe is a filed follow-up; other
+    # hosts can opt in with -DVOLK_MISALIGNED_PUPPET_CTEST=ON.
+    if(NOT WIN32
+       AND CMAKE_SYSTEM_NAME STREQUAL "Linux"
+       AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|amd64|AMD64)$"
+       AND NOT VOLK_STATIC_DISPATCH)
         set(VOLK_MISALIGNED_PUPPET_CTEST_DEFAULT ON)
     else()
         set(VOLK_MISALIGNED_PUPPET_CTEST_DEFAULT OFF)
@@ -966,7 +978,7 @@ if(ENABLE_TESTING)
                 PASS_REGULAR_EXPRESSION
                 "ok    \\[misaligned\\] volk_32fc_s32fc_rotator2puppet_32fc \\(fork-isolated\\)"
                 FAIL_REGULAR_EXPRESSION
-                "NEGATIVE CONTROL LOST;FAIL  \\[misaligned\\]"
+                "NEGATIVE CONTROL LOST;FAIL  \\[misaligned\\];setup-failed impl-runs"
                 ENVIRONMENT
                 "HARNESS_MISALIGNED=1;UBSAN_OPTIONS=halt_on_error=1;ASAN_OPTIONS=handle_segv=0:handle_sigbus=0:handle_sigill=0:allow_user_segv_handler=1"
         )

@@ -41,6 +41,11 @@
 #include <fmt/format.h>
 #include <fmt/ostream.h>
 
+#ifndef _WIN32
+#include <sys/wait.h> // waitpid/WIFSIGNALED (fork-isolation parent, #162)
+#include <unistd.h>   // fork/pipe/read/write/_exit (fork isolation, #162)
+#endif
+
 // Warmup time for CPU frequency scaling (ms)
 static double g_warmup_ms = 2000.0;
 static bool g_warmup_done = false;
@@ -2565,9 +2570,6 @@ run_volk_misaligned_test(volk_func_desc_t /*desc*/,
 }
 #else
 
-#include <sys/wait.h>
-#include <unistd.h>
-
 namespace {
 // #91: SIGSEGV/SIGBUS/SIGILL isolation for misaligned-impl runs. An aligned SIMD
 // load on a misaligned address raises a hardware signal, not a C++ exception, so
@@ -3013,7 +3015,13 @@ run_volk_misaligned_test(volk_func_desc_t desc,
             // checked_impls are set HERE, only after a child actually ran -- a
             // pipe()/fork() failure leaves this impl uncounted so an all-failed
             // kernel reports skip, never a green ok over never-run code (#162
-            // fail-closed).
+            // fail-closed). Fork-safety invariant: the process-wide fault
+            // handlers are installed, but g_misaligned_window_open is ALWAYS 0
+            // at this fork point (fork_isolation is a whole-call flag, so no
+            // sigsetjmp window can be open here) -- a fault in the child
+            // therefore re-raises with default disposition instead of
+            // longjmp-ing through the child's copy of a stale jmp_buf. Any
+            // future per-impl routing change must preserve this.
             const char* arch_cstr = arch.c_str();
             // Flush ALL C output streams pre-fork (iostreams are tied to them
             // in this binary) so the child cannot double-emit buffered output
@@ -3072,6 +3080,7 @@ run_volk_misaligned_test(volk_func_desc_t desc,
             if (nread < 0)
                 nread = 0;
             summary.applied = true;                // a child ran: this impl was exercised
+            summary.fork_isolated = true; // routing OBSERVED, not inferred (#162)
             summary.checked_impls.push_back(arch); // #92 triage detail
             const bool completed = (WIFEXITED(status) && WEXITSTATUS(status) == 0 &&
                                     nread == 3 && phases[0] == 'A' && phases[1] == 'M');

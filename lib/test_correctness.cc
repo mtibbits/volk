@@ -1097,7 +1097,8 @@ int main(int argc, char* argv[])
             std::vector<unsigned int> crash_vlens;
             std::vector<unsigned int> diverge_vlens;
             bool any_applied = false;
-            int setup_failed_total = 0; // #162: fork/pipe setup losses
+            bool any_fork_isolated = false; // #162: routing OBSERVED via summary
+            int setup_failed_total = 0;     // #162: fork/pipe setup losses
             std::set<std::string> impls_seen;
             std::map<std::string, std::vector<unsigned int>> crash_fails;
             std::map<std::string, std::vector<unsigned int>> diverge_fails;
@@ -1105,6 +1106,8 @@ int main(int argc, char* argv[])
                 const volk_misaligned_summary s = quiet_misaligned_run(tc, v);
                 if (s.applied)
                     any_applied = true;
+                if (s.fork_isolated)
+                    any_fork_isolated = true;
                 setup_failed_total += s.setup_failed;
                 if (s.crashed)
                     crash_vlens.push_back(v);
@@ -1118,8 +1121,15 @@ int main(int argc, char* argv[])
                     diverge_fails[impl].push_back(v);
             }
             if (!any_applied && crash_vlens.empty() && diverge_vlens.empty()) {
-                std::cout << "skip  [misaligned] " << tc.name()
-                          << " (no checkable unaligned impl)\n";
+                // #162: attribute a total fork-setup loss to the harness, not
+                // the kernel -- "(no checkable unaligned impl)" would misdirect
+                // triage when the impls were checkable and fork()/pipe() failed.
+                std::cout << "skip  [misaligned] " << tc.name();
+                if (setup_failed_total > 0)
+                    std::cout << " (fork setup failed: " << setup_failed_total
+                              << " impl-runs)\n";
+                else
+                    std::cout << " (no checkable unaligned impl)\n";
                 if (report)
                     std::fprintf(report, "%s,-,misaligned,skip,,\n", tc.name().c_str());
                 std::cout.flush();
@@ -1127,9 +1137,11 @@ int main(int argc, char* argv[])
             }
             ++a_tested;
             // #162: puppet rows carry the isolation tag so the fork routing is
-            // OBSERVABLE (a lost fork_isolation argument would drop the tag and
-            // red the qa_misaligned_puppet_control ctest, not pass silently).
-            const char* iso_tag = tc.is_puppet() ? " (fork-isolated)" : "";
+            // OBSERVABLE -- derived from summary.fork_isolated, which is set
+            // INSIDE the fork branch, never from the routing predicate itself.
+            // A lost fork_isolation argument drops the tag and reds the
+            // qa_misaligned_puppet_control ctest (mutation-proven).
+            const char* iso_tag = any_fork_isolated ? " (fork-isolated)" : "";
             if (!crash_vlens.empty() || !diverge_vlens.empty()) {
                 ++a_failed;
                 if (!crash_vlens.empty())
