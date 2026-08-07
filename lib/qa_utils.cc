@@ -2659,6 +2659,11 @@ private:
     uint8_t* raw_;
     void* ptr_;
 };
+
+// #162: one byte of the fork-path phase protocol ('A' aligned-run done,
+// 'M' misaligned-run done, then verdict 'O'/'D'). write(2) is fork-safe;
+// the parent classifies a short read as a crash in the unreached phase.
+void send_phase(int fd, char c) { (void)!write(fd, &c, 1); }
 } // namespace
 
 volk_misaligned_summary
@@ -2962,10 +2967,10 @@ run_volk_misaligned_test(volk_func_desc_t desc,
             // kernel reports skip, never a green ok over never-run code (#162
             // fail-closed).
             const char* arch_cstr = arch.c_str();
-            std::fflush(stdout);
-            std::fflush(stderr);
-            std::cout.flush();
-            std::cerr.flush();
+            // Flush ALL C output streams pre-fork (iostreams are tied to them
+            // in this binary) so the child cannot double-emit buffered output
+            // through the driver's muting fds.
+            std::fflush(nullptr);
             int pfd[2];
             if (pipe(pfd) != 0) {
                 std::cerr << name << ": pipe() failed for arch " << arch
@@ -2982,6 +2987,9 @@ run_volk_misaligned_test(volk_func_desc_t desc,
             }
             if (pid == 0) {
                 close(pfd[0]);
+                // Child cycle mirrors the signal path's buffer discipline below
+                // (same #98 vlen_twiddle seeding rationale, same zero-prefill
+                // contract) minus the sigsetjmp windows -- keep both in sync.
                 // ---- child: aligned reference run (no sigsetjmp window) ----
                 std::vector<void*> abuffs;
                 for (size_t j = 0; j < d.both_sigs.size(); j++) {
@@ -2994,10 +3002,7 @@ run_volk_misaligned_test(volk_func_desc_t desc,
                     memset(abuffs[j], 0, out_bytes);
                 }
                 run_impl_direct(abuffs, arch_cstr);
-                {
-                    const char ph = 'A';
-                    (void)!write(pfd[1], &ph, 1);
-                }
+                send_phase(pfd[1], 'A');
                 // ---- child: misaligned run, identical inputs ----
                 std::vector<std::unique_ptr<misaligned_buffer>> mbufs;
                 std::vector<void*> buffs;
@@ -3023,10 +3028,7 @@ run_volk_misaligned_test(volk_func_desc_t desc,
                     memcpy(buffs[d.outputsig.size() + k], d.inbuffs[k], in_bytes);
                 }
                 run_impl_direct(buffs, arch_cstr);
-                {
-                    const char ph = 'M';
-                    (void)!write(pfd[1], &ph, 1);
-                }
+                send_phase(pfd[1], 'M');
                 // ---- child: compare (same helper as the signal path) ----
                 bool child_diverged = false;
                 for (size_t j = 0; j < d.both_sigs.size(); j++) {
@@ -3039,10 +3041,7 @@ run_volk_misaligned_test(volk_func_desc_t desc,
                                   << ") [forked child]\n";
                     }
                 }
-                {
-                    const char verdict = child_diverged ? 'D' : 'O';
-                    (void)!write(pfd[1], &verdict, 1);
-                }
+                send_phase(pfd[1], child_diverged ? 'D' : 'O');
                 std::fflush(stderr);
                 _exit(0); // NEVER exit(): no double stdio flush, no atexit
             }

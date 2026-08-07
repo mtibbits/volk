@@ -36,8 +36,9 @@
 #include "volk_reference.h" // for the independent double-precision oracle registry (#88)
 #include <volk/volk.h>
 
-#include <cstdio>  // fflush
-#include <cstdlib> // getenv
+#include <algorithm> // std::find (mapping-completeness note, #162)
+#include <cstdio>    // fflush
+#include <cstdlib>   // getenv
 #include <iostream>
 #include <map> // per-impl failed-vlen accumulation (#92 triage report)
 #include <set> // per-impl seen-set (#92 triage report)
@@ -372,8 +373,7 @@ static volk_misaligned_summary quiet_misaligned_run(volk_test_case_t& tc, unsign
                                            &results,
                                            kFloatEdges,
                                            kComplexEdges,
-                                           /*fork_isolation=*/tc.puppet_master_name() !=
-                                               "NULL");
+                                           /*fork_isolation=*/tc.is_puppet());
     } catch (...) {
         threw = true;
         summary = volk_misaligned_summary(); // applied=false -> skip
@@ -951,33 +951,25 @@ int main(int argc, char* argv[])
         // class in a puppet-only worker now surfaces. Any deviation = broken fork
         // path, exit 2. Runs in every misaligned invocation (incl. the
         // qa_strict_misaligned_canary lane).
-        nc.clear();
-        const volk_misaligned_summary pok_sum =
-            run_volk_misaligned_test(volk_canary_desc(),
-                                     (void (*)())(&volk_32f_canaryok_32f),
-                                     "volk_32f_canaryokpuppet_32f",
-                                     scalar,
-                                     tol,
-                                     false /*absolute_mode*/,
-                                     nc_vlen,
-                                     &nc,
-                                     kFloatEdges,
-                                     kComplexEdges,
-                                     /*fork_isolation=*/true);
-        nc.clear();
+        auto run_fork_nc = [&](void (*kernel)(), const char* nc_name) {
+            nc.clear();
+            return run_volk_misaligned_test(volk_canary_desc(),
+                                            kernel,
+                                            nc_name,
+                                            scalar,
+                                            tol,
+                                            false /*absolute_mode*/,
+                                            nc_vlen,
+                                            &nc,
+                                            kFloatEdges,
+                                            kComplexEdges,
+                                            /*fork_isolation=*/true);
+        };
+        const volk_misaligned_summary pok_sum = run_fork_nc(
+            (void (*)())(&volk_32f_canaryok_32f), "volk_32f_canaryokpuppet_32f");
         const volk_misaligned_summary pfault_sum =
-            run_volk_misaligned_test(volk_canary_desc(),
-                                     (void (*)())(&volk_32f_misalignedfault_32f),
-                                     "volk_32f_misalignedfaultpuppet_32f",
-                                     scalar,
-                                     tol,
-                                     false /*absolute_mode*/,
-                                     nc_vlen,
-                                     &nc,
-                                     kFloatEdges,
-                                     kComplexEdges,
-                                     /*fork_isolation=*/true);
-        nc.clear();
+            run_fork_nc((void (*)())(&volk_32f_misalignedfault_32f),
+                        "volk_32f_misalignedfaultpuppet_32f");
         const char* pnc_err = nullptr;
         if (pok_sum.crashed || pok_sum.diverged) {
             pnc_err = "the correct planted kernel was flagged through the fork-"
@@ -1032,18 +1024,14 @@ int main(int argc, char* argv[])
             // the puppet's impl list is the coverage ceiling for a puppet-only
             // kernel class. Name-set check only: a wrapper that exists but calls
             // the WRONG master impl is out of reach here (source-level property).
-            if (tc.puppet_master_name() != "NULL" && tc.has_master_desc()) {
+            if (tc.is_puppet()) {
+                const std::vector<std::string> master_impls =
+                    get_arch_list(tc.master_desc());
+                const std::vector<std::string> puppet_impls = get_arch_list(tc.desc());
                 std::vector<std::string> unmapped;
-                for (size_t mi = 0; mi < tc.master_desc().n_impls; ++mi) {
-                    const std::string m = tc.master_desc().impl_names[mi];
-                    bool found = false;
-                    for (size_t pi = 0; pi < tc.desc().n_impls; ++pi) {
-                        if (m == tc.desc().impl_names[pi]) {
-                            found = true;
-                            break;
-                        }
-                    }
-                    if (!found)
+                for (const std::string& m : master_impls) {
+                    if (std::find(puppet_impls.begin(), puppet_impls.end(), m) ==
+                        puppet_impls.end())
                         unmapped.push_back(m);
                 }
                 if (!unmapped.empty()) {
@@ -1088,8 +1076,7 @@ int main(int argc, char* argv[])
             // #162: puppet rows carry the isolation tag so the fork routing is
             // OBSERVABLE (a lost fork_isolation argument would drop the tag and
             // red the qa_misaligned_puppet_control ctest, not pass silently).
-            const char* iso_tag =
-                (tc.puppet_master_name() != "NULL") ? " (fork-isolated)" : "";
+            const char* iso_tag = tc.is_puppet() ? " (fork-isolated)" : "";
             if (!crash_vlens.empty() || !diverge_vlens.empty()) {
                 ++a_failed;
                 if (!crash_vlens.empty())
