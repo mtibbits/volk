@@ -657,12 +657,16 @@ int main(int argc, char* argv[])
 
         // Best-effort per-kernel canary sweep over the real kernels.
         //   FAIL    -> a GUARD violation (write past the end / before index 0): a
-        //              real buffer over/under-run, the issue's core blind spot.
-        //   partial -> an in-bounds element left unwritten with NO guard violation:
-        //              expected for reduction/index/accumulator kernels (fixed-size
-        //              scalar output, not num_points elements), which the signature
-        //              cannot distinguish from a real map under-write — surfaced for
-        //              triage, not counted as a failure.
+        //              real buffer over/under-run, the issue's core blind spot —
+        //              or, for a registered kernel, an under-written contracted
+        //              region (#161/#191).
+        //   partial -> an in-bounds element left unwritten with NO guard violation,
+        //              on a kernel NOT in the buffer-role registry — the signature
+        //              alone cannot distinguish a fixed-output kernel's unwritten
+        //              tail from a real map under-write; surfaced for triage, not
+        //              counted as a failure. The fixed-output class is registered
+        //              as of #191, so a fresh `partial` means an unregistered new
+        //              kernel or a real under-write.
         // Puppets are skipped: their output-buffer semantics differ from a plain map.
         std::cout << "# output-canary sweep: vlens 1..40, 131071, 1000003\n";
         std::cout.flush();

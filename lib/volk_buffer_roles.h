@@ -33,14 +33,16 @@
  * count for a reduction (e.g. 1 for a dot product / accumulator / single-index).
  * Before registering, verify the cardinality against the kernel header's doc
  * contract AND every impl's stores (a wrong count turns the canary's hard
- * verdict against the wrong contract). Unregistered kernels keep today's
- * verdict exactly.
+ * verdict against the wrong contract). New fixed-output kernels are expected
+ * to be registered here -- an unregistered one reverts its canary verdict to
+ * the `part` hedge. Unregistered kernels keep today's verdict exactly.
  *
  * NOTE: output_elems is a single value applied to EVERY output buffer of the
- * kernel; it assumes all outputs share one cardinality (true for the single-output
- * reductions registered today). A kernel with multiple outputs of differing
- * cardinalities would need a per-output vector -- a planned extension, not yet
- * needed.
+ * kernel; it assumes all outputs share one cardinality (true for every kernel
+ * registered today, including the two-output volk_32f_stddev_and_mean_32f_x2,
+ * whose stddev and mean buffers each hold 1 element). A kernel with multiple
+ * outputs of differing cardinalities would need a per-output vector -- a
+ * planned extension, not yet needed.
  */
 
 #ifndef INCLUDED_VOLK_BUFFER_ROLES_H
