@@ -3032,7 +3032,7 @@ run_volk_misaligned_test(volk_func_desc_t desc,
                 std::cerr << name << ": pipe() failed for arch " << arch
                           << " -- impl not exercised (not counted)\n";
                 summary.setup_failed++; // surfaced on the driver's row (#162)
-                continue; // fail closed: neither applied nor checked
+                continue;               // fail closed: neither applied nor checked
             }
             const pid_t pid = fork();
             if (pid < 0) {
@@ -3041,7 +3041,7 @@ run_volk_misaligned_test(volk_func_desc_t desc,
                 std::cerr << name << ": fork() failed for arch " << arch
                           << " -- impl not exercised (not counted)\n";
                 summary.setup_failed++; // surfaced on the driver's row (#162)
-                continue; // fail closed
+                continue;               // fail closed
             }
             if (pid == 0) {
                 close(pfd[0]);
@@ -3079,7 +3079,7 @@ run_volk_misaligned_test(volk_func_desc_t desc,
             close(pfd[0]);
             if (nread < 0)
                 nread = 0;
-            summary.applied = true;                // a child ran: this impl was exercised
+            summary.applied = true;       // a child ran: this impl was exercised
             summary.fork_isolated = true; // routing OBSERVED, not inferred (#162)
             summary.checked_impls.push_back(arch); // #92 triage detail
             const bool completed = (WIFEXITED(status) && WEXITSTATUS(status) == 0 &&
