@@ -36,8 +36,9 @@
 #include "volk_reference.h" // for the independent double-precision oracle registry (#88)
 #include <volk/volk.h>
 
-#include <cstdio>  // fflush
-#include <cstdlib> // getenv
+#include <algorithm> // std::find (mapping-completeness note, #162)
+#include <cstdio>    // fflush
+#include <cstdlib>   // getenv
 #include <iostream>
 #include <map> // per-impl failed-vlen accumulation (#92 triage report)
 #include <set> // per-impl seen-set (#92 triage report)
@@ -341,9 +342,29 @@ static volk_immutability_summary quiet_immutability_run(volk_test_case_t& tc,
     return summary;
 }
 
+// #162: master impls with no same-named puppet wrapper -- the puppet's impl
+// list is the coverage ceiling for a puppet-only kernel class, so an unmapped
+// master impl is invisible to EVERY qa mode. Name-set check only: a wrapper
+// that exists but calls the WRONG master impl is out of reach here
+// (source-level property). Self-checked by the misaligned mode's mapping-note
+// negative control against hand-built descs.
+static std::vector<std::string> unmapped_master_impls(volk_func_desc_t master,
+                                                      volk_func_desc_t puppet)
+{
+    const std::vector<std::string> master_impls = get_arch_list(master);
+    const std::vector<std::string> puppet_impls = get_arch_list(puppet);
+    std::vector<std::string> unmapped;
+    for (const std::string& m : master_impls) {
+        if (std::find(puppet_impls.begin(), puppet_impls.end(), m) == puppet_impls.end())
+            unmapped.push_back(m);
+    }
+    return unmapped;
+}
+
 // #91: run the misaligned check for one (kernel, vlen) with stdout muted (mirrors
 // quiet_immutability_run). Hardware faults are handled INSIDE
-// run_volk_misaligned_test by the signal path (-> summary.crashed); a C++
+// run_volk_misaligned_test -- by the signal path for non-puppets, by fork
+// isolation (#162) for puppets (-> summary.crashed either way); a C++
 // exception here is non-signal harness plumbing, out of #91 scope -- report it
 // skipped (applied stays false) with a note rather than mislabeling it.
 static volk_misaligned_summary quiet_misaligned_run(volk_test_case_t& tc, unsigned int v)
@@ -371,7 +392,8 @@ static volk_misaligned_summary quiet_misaligned_run(volk_test_case_t& tc, unsign
                                            v /*vlen*/,
                                            &results,
                                            kFloatEdges,
-                                           kComplexEdges);
+                                           kComplexEdges,
+                                           /*fork_isolation=*/tc.is_puppet());
     } catch (...) {
         threw = true;
         summary = volk_misaligned_summary(); // applied=false -> skip
@@ -942,21 +964,131 @@ int main(int argc, char* argv[])
         std::cerr << "misaligned negative control OK: ok-kernel clean, aligned-load "
                      "kernel crash recorded and the run continued.\n";
 
+        // #162: same negative-control pair through the FORK-isolation path that
+        // puppet test cases use. Asserts (a) the ok-kernel is clean through a
+        // forked child (no over-report), (b) a planted unaligned fault in a child
+        // is RECORDED as a crash while THIS process continues -- the #101 defect
+        // class in a puppet-only worker now surfaces. Any deviation = broken fork
+        // path, exit 2. Runs in every misaligned invocation (incl. the
+        // qa_strict_misaligned_canary lane).
+        auto run_fork_nc = [&](void (*kernel)(), const char* nc_name) {
+            nc.clear();
+            return run_volk_misaligned_test(volk_canary_desc(),
+                                            kernel,
+                                            nc_name,
+                                            scalar,
+                                            tol,
+                                            false /*absolute_mode*/,
+                                            nc_vlen,
+                                            &nc,
+                                            kFloatEdges,
+                                            kComplexEdges,
+                                            /*fork_isolation=*/true);
+        };
+        const volk_misaligned_summary pok_sum = run_fork_nc(
+            (void (*)())(&volk_32f_canaryok_32f), "volk_32f_canaryokpuppet_32f");
+        const volk_misaligned_summary pfault_sum =
+            run_fork_nc((void (*)())(&volk_32f_misalignedfault_32f),
+                        "volk_32f_misalignedfaultpuppet_32f");
+        // #162: the DIVERGED verdict rides its own transport (the child's
+        // third phase byte), which the fault twin cannot exercise -- a planted
+        // alignment-sensitive kernel proves the 'D' path end to end.
+        const volk_misaligned_summary pdiv_sum =
+            run_fork_nc((void (*)())(&volk_32f_misaligneddiverge_32f),
+                        "volk_32f_misaligneddivergepuppet_32f");
+        const char* pnc_err = nullptr;
+        if (pok_sum.crashed || pok_sum.diverged) {
+            pnc_err = "the correct planted kernel was flagged through the fork-"
+                      "isolation (puppet) path -- the forked detector over-reports";
+        } else if (!pok_sum.applied || !pfault_sum.applied || !pdiv_sum.applied) {
+            pnc_err = "the fork-isolation (puppet) path could not run at all -- "
+                      "puppet kernels would silently lose misaligned coverage";
+        } else if (!pfault_sum.crashed) {
+            pnc_err = "the planted aligned-load kernel did not produce a recorded "
+                      "crash through the fork-isolation (puppet) path -- child "
+                      "fault classification is broken";
+        } else if (pdiv_sum.crashed || !pdiv_sum.diverged) {
+            pnc_err = "the planted alignment-sensitive kernel did not produce a "
+                      "recorded DIVERGENCE through the fork-isolation (puppet) "
+                      "path -- the child's diverged-verdict transport is broken";
+        }
+        if (pnc_err) {
+            std::cerr << "NEGATIVE CONTROL LOST (fork path): " << pnc_err
+                      << ". Aborting.\n";
+            if (report)
+                std::fclose(report);
+            return 2;
+        }
+        std::cerr << "misaligned fork-path negative control OK: ok-kernel clean "
+                     "through fork isolation, child crash recorded, child "
+                     "divergence recorded, and the run continued.\n";
+
+        // #162: mapping-note self-check. The unmapped-impl computation below
+        // (unmapped_master_impls) is advisory output with no failing consumer,
+        // so a broken comparison would be invisible -- prove it can both fire
+        // and stay quiet against two hand-built descs before trusting its
+        // silence over the real catalog.
+        {
+            static const char* mc_master_names[] = { "generic", "u_planted" };
+            static const int mc_master_deps[] = { 0, 0 };
+            static const bool mc_master_align[] = { false, false };
+            volk_func_desc_t mc_master;
+            mc_master.impl_names = mc_master_names;
+            mc_master.impl_deps = mc_master_deps;
+            mc_master.impl_alignment = mc_master_align;
+            mc_master.n_impls = 2;
+            const std::vector<std::string> um_fire =
+                unmapped_master_impls(mc_master, volk_canary_desc());
+            const std::vector<std::string> um_quiet =
+                unmapped_master_impls(volk_canary_desc(), mc_master);
+            if (um_fire.size() != 1 || um_fire[0] != "u_planted" || !um_quiet.empty()) {
+                std::cerr << "NEGATIVE CONTROL LOST (mapping note): the "
+                             "unmapped-master-impl computation misclassified a "
+                             "hand-built desc pair -- its silence over the real "
+                             "catalog cannot be trusted. Aborting.\n";
+                if (report)
+                    std::fclose(report);
+                return 2;
+            }
+        }
+
         // Per-kernel misaligned sweep over the real kernels (unaligned impls only).
         //   FAIL -> an impl crashed on misaligned buffers or diverged from the
         //           the SAME impl's aligned run (both always defects).
-        //   skip -> puppet / unsupported signature / nothing observed (fail closed).
-        // Puppets are skipped -- load-bearing here: it is what keeps the longjmp
-        // safety argument airtight (no impl with internal allocation runs under the
-        // signal guard) and keeps #96's conv_k7 out of this mode.
+        //   skip -> excluded / unsupported signature / nothing observed (fail
+        //           closed).
         std::cout << "# misaligned sweep: vlens 1..40, 131071, 1000003\n";
         std::cout.flush();
         int a_tested = 0, a_failed = 0, a_crashed = 0, a_diverged = 0;
         for (auto& tc : test_cases) {
             if (!filter.empty() && tc.name() != filter)
                 continue;
-            if (tc.puppet_master_name() != "NULL") {
-                std::cout << "skip  [misaligned] " << tc.name() << " (puppet)\n";
+            // #162 mapping-completeness note (stderr, advisory; BEFORE the
+            // conv_k7 exclusion so every puppet -- excluded ones included --
+            // gets a completeness check, as the harness README states).
+            // Self-checked by the mapping-note negative control above.
+            if (tc.is_puppet()) {
+                const std::vector<std::string> unmapped =
+                    unmapped_master_impls(tc.master_desc(), tc.desc());
+                if (!unmapped.empty()) {
+                    std::cerr << "note  [misaligned] " << tc.name() << ": master "
+                              << tc.puppet_master_name()
+                              << " impls with no puppet wrapper:";
+                    for (const std::string& m : unmapped)
+                        std::cerr << " " << m;
+                    std::cerr << "\n";
+                }
+            }
+            // #162: puppets now run under FORK isolation (routed by
+            // quiet_misaligned_run via fork_isolation), so the longjmp safety
+            // argument is untouched: no impl with internal allocation ever runs
+            // under the signal guard. The only remaining puppet skip is policy:
+            // conv_k7's decision-buffer overflow (#96, OPEN) corrupts the child
+            // heap at multi-vlen and would hard-red every ASan lane for a known,
+            // separately-tracked defect.
+            if (tc.name() == "volk_8u_conv_k7_r2puppet_8u") {
+                std::cout << "skip  [misaligned] " << tc.name()
+                          << " (excluded: #96 conv_k7)\n";
                 if (report)
                     std::fprintf(report, "%s,-,misaligned,skip,,\n", tc.name().c_str());
                 std::cout.flush();
@@ -965,6 +1097,8 @@ int main(int argc, char* argv[])
             std::vector<unsigned int> crash_vlens;
             std::vector<unsigned int> diverge_vlens;
             bool any_applied = false;
+            bool any_fork_isolated = false; // #162: routing OBSERVED via summary
+            int setup_failed_total = 0;     // #162: fork/pipe setup losses
             std::set<std::string> impls_seen;
             std::map<std::string, std::vector<unsigned int>> crash_fails;
             std::map<std::string, std::vector<unsigned int>> diverge_fails;
@@ -972,6 +1106,9 @@ int main(int argc, char* argv[])
                 const volk_misaligned_summary s = quiet_misaligned_run(tc, v);
                 if (s.applied)
                     any_applied = true;
+                if (s.fork_isolated)
+                    any_fork_isolated = true;
+                setup_failed_total += s.setup_failed;
                 if (s.crashed)
                     crash_vlens.push_back(v);
                 if (s.diverged)
@@ -984,21 +1121,34 @@ int main(int argc, char* argv[])
                     diverge_fails[impl].push_back(v);
             }
             if (!any_applied && crash_vlens.empty() && diverge_vlens.empty()) {
-                std::cout << "skip  [misaligned] " << tc.name()
-                          << " (no checkable unaligned impl)\n";
+                // #162: attribute a total fork-setup loss to the harness, not
+                // the kernel -- "(no checkable unaligned impl)" would misdirect
+                // triage when the impls were checkable and fork()/pipe() failed.
+                std::cout << "skip  [misaligned] " << tc.name();
+                if (setup_failed_total > 0)
+                    std::cout << " (fork setup failed: " << setup_failed_total
+                              << " impl-runs)\n";
+                else
+                    std::cout << " (no checkable unaligned impl)\n";
                 if (report)
                     std::fprintf(report, "%s,-,misaligned,skip,,\n", tc.name().c_str());
                 std::cout.flush();
                 continue;
             }
             ++a_tested;
+            // #162: puppet rows carry the isolation tag so the fork routing is
+            // OBSERVABLE -- derived from summary.fork_isolated, which is set
+            // INSIDE the fork branch, never from the routing predicate itself.
+            // A lost fork_isolation argument drops the tag and reds the
+            // qa_misaligned_puppet_control ctest (mutation-proven).
+            const char* iso_tag = any_fork_isolated ? " (fork-isolated)" : "";
             if (!crash_vlens.empty() || !diverge_vlens.empty()) {
                 ++a_failed;
                 if (!crash_vlens.empty())
                     ++a_crashed;
                 if (!diverge_vlens.empty())
                     ++a_diverged;
-                std::cout << "FAIL  [misaligned] " << tc.name();
+                std::cout << "FAIL  [misaligned] " << tc.name() << iso_tag;
                 if (!crash_vlens.empty()) {
                     std::cout << "  crash vlens:";
                     for (unsigned int v : crash_vlens)
@@ -1010,8 +1160,13 @@ int main(int argc, char* argv[])
                         std::cout << " " << v;
                 }
             } else {
-                std::cout << "ok    [misaligned] " << tc.name();
+                std::cout << "ok    [misaligned] " << tc.name() << iso_tag;
             }
+            // #162: a partially-exercised kernel must not print a bare ok row
+            // -- fork/pipe setup losses are uncounted (fail-closed) but their
+            // count is surfaced right where the coverage claim is made.
+            if (setup_failed_total > 0)
+                std::cout << "  setup-failed impl-runs: " << setup_failed_total;
             std::cout << "\n";
             if (report) {
                 // Crash and diverge rows are both FAIL; an impl hit by both

@@ -19,12 +19,15 @@
 // function names of the pattern kernel_name_*
 
 // for puppets we need to get all the func_variants for the puppet and just
-// keep track of the actual function name to write to results
+// keep track of the actual function name to write to results. #162: the
+// master's func_desc is captured too, so the harness can check the puppet's
+// wrapper list against the master's impl list (mapping-completeness note).
 #define VOLK_INIT_PUPP(func, puppet_master_func, test_params) \
     volk_test_case_t(func##_get_func_desc(),                  \
                      (void (*)())func##_manual,               \
                      std::string(#func),                      \
                      std::string(#puppet_master_func),        \
+                     puppet_master_func##_get_func_desc(),    \
                      test_params)
 
 #define VOLK_INIT_TEST(func, test_params)       \

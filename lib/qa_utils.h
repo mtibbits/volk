@@ -160,13 +160,23 @@ private:
     std::string _name;
     volk_test_params_t _test_parameters;
     std::string _puppet_master_name;
+    // #162: the puppet MASTER's own dispatch metadata, captured by
+    // VOLK_INIT_PUPP so the harness can compare the master's impl list against
+    // the puppet's wrappers (mapping-completeness). Points at the kernel's
+    // static tables; by-value copy is safe. Value-initialized (all null/zero)
+    // for non-puppets -- is_puppet() is the validity discriminator.
+    volk_func_desc_t _master_desc{};
 
 public:
     volk_func_desc_t desc() { return _desc; };
     void (*kernel_ptr())() { return _kernel_ptr; };
     std::string name() { return _name; };
     std::string puppet_master_name() { return _puppet_master_name; };
+    // #162: the one puppet discriminator (the puppet ctor is the only path
+    // that sets a master name, and it always supplies the master desc).
+    bool is_puppet() { return _puppet_master_name != "NULL"; };
     volk_test_params_t test_parameters() { return _test_parameters; };
+    volk_func_desc_t master_desc() { return _master_desc; };
     // normal ctor
     volk_test_case_t(volk_func_desc_t desc,
                      void (*t_kernel_ptr)(),
@@ -182,12 +192,14 @@ public:
                      void (*t_kernel_ptr)(),
                      std::string name,
                      std::string puppet_master_name,
+                     volk_func_desc_t master_desc,
                      volk_test_params_t test_parameters)
         : _desc(desc),
           _kernel_ptr(t_kernel_ptr),
           _name(name),
           _test_parameters(test_parameters),
-          _puppet_master_name(puppet_master_name){};
+          _puppet_master_name(puppet_master_name),
+          _master_desc(master_desc){};
 };
 
 class volk_qa_aligned_mem_pool
@@ -364,6 +376,15 @@ struct volk_misaligned_summary {
     bool crashed = false;
     bool diverged = false;
     bool applied = false;
+    // #162: impls whose fork/pipe setup failed (fork path only). They are NOT
+    // counted in checked_impls/applied (fail-closed), but the count is
+    // surfaced so a partially-exercised kernel cannot print a bare ok row.
+    int setup_failed = 0;
+    // #162: true iff at least one impl actually ran under FORK isolation --
+    // reported from inside the fork branch itself, so the driver's
+    // "(fork-isolated)" row tag observes the routing that happened, not the
+    // predicate that was supposed to select it.
+    bool fork_isolated = false;
     // #92 triage detail (same convention as volk_canary_summary).
     std::vector<std::string> checked_impls;
     std::vector<std::string> crashed_impls;
@@ -378,6 +399,11 @@ struct volk_misaligned_summary {
 // volk_test_params_t) -- approximate kernels (log2, expfast, tan, ...) carry
 // looser tolerances than the harness default, and using anything else
 // false-positives them.
+// fork_isolation (#162): run each impl's whole aligned/misaligned/compare
+// cycle in a forked child instead of under the sigsetjmp signal guard --
+// required for impls that may allocate internally (puppets), where the
+// longjmp soundness argument does not hold. Fail-closed: an impl whose
+// fork/pipe setup fails is not counted as checked.
 volk_misaligned_summary run_volk_misaligned_test(
     volk_func_desc_t,
     void (*)(),
@@ -388,7 +414,8 @@ volk_misaligned_summary run_volk_misaligned_test(
     unsigned int,
     std::vector<volk_test_results_t>* results = NULL,
     const std::vector<float>& float_edge_cases = std::vector<float>(),
-    const std::vector<lv_32fc_t>& complex_edge_cases = std::vector<lv_32fc_t>());
+    const std::vector<lv_32fc_t>& complex_edge_cases = std::vector<lv_32fc_t>(),
+    bool fork_isolation = false);
 
 #define VOLK_PROFILE(func, test_params, results) \
     run_volk_tests(func##_get_func_desc(),       \

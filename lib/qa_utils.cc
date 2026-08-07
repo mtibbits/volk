@@ -41,6 +41,11 @@
 #include <fmt/format.h>
 #include <fmt/ostream.h>
 
+#ifndef _WIN32
+#include <sys/wait.h> // waitpid/WIFSIGNALED (fork-isolation parent, #162)
+#include <unistd.h>   // fork/pipe/read/write/_exit (fork isolation, #162)
+#endif
+
 // Warmup time for CPU frequency scaling (ms)
 static double g_warmup_ms = 2000.0;
 static bool g_warmup_done = false;
@@ -2555,7 +2560,8 @@ run_volk_misaligned_test(volk_func_desc_t /*desc*/,
                          unsigned int /*vlen*/,
                          std::vector<volk_test_results_t>* /*results*/,
                          const std::vector<float>& /*float_edge_cases*/,
-                         const std::vector<lv_32fc_t>& /*complex_edge_cases*/)
+                         const std::vector<lv_32fc_t>& /*complex_edge_cases*/,
+                         bool /*fork_isolation*/)
 {
     std::cerr << "misaligned mode: unsupported on this platform (POSIX signal "
                  "isolation required): "
@@ -2569,10 +2575,11 @@ namespace {
 // load on a misaligned address raises a hardware signal, not a C++ exception, so
 // catch(...) cannot trap it. sigsetjmp/siglongjmp is sound HERE because every
 // exercised impl is a pure computational loop over harness-owned buffers (the
-// driver skips puppets): no locks, allocations, or unwind-relevant state can be
-// in flight at the faulting instruction, and the dispatch deliberately uses
-// direct casted calls so no C++ frame with a non-trivial destructor sits between
-// the sigsetjmp and the fault.
+// driver routes puppets to the fork-isolation path -- see fork_isolation, #162 --
+// so no impl with internal allocation runs under the signal guard): no locks,
+// allocations, or unwind-relevant state can be in flight at the faulting
+// instruction, and the dispatch deliberately uses direct casted calls so no C++
+// frame with a non-trivial destructor sits between the sigsetjmp and the fault.
 // Single-threaded qa binary by design: process-wide handlers + globals are safe
 // (the faults are synchronous; there is no second thread to race).
 sigjmp_buf g_misaligned_jmp;
@@ -2654,6 +2661,11 @@ private:
     uint8_t* raw_;
     void* ptr_;
 };
+
+// #162: one byte of the fork-path phase protocol ('A' aligned-run done,
+// 'M' misaligned-run done, then verdict 'O'/'D'). write(2) is fork-safe;
+// the parent classifies a short read as a crash in the unreached phase.
+void send_phase(int fd, char c) { (void)!write(fd, &c, 1); }
 } // namespace
 
 volk_misaligned_summary
@@ -2666,7 +2678,8 @@ run_volk_misaligned_test(volk_func_desc_t desc,
                          unsigned int vlen,
                          std::vector<volk_test_results_t>* results,
                          const std::vector<float>& float_edge_cases,
-                         const std::vector<lv_32fc_t>& complex_edge_cases)
+                         const std::vector<lv_32fc_t>& complex_edge_cases,
+                         bool fork_isolation)
 {
     volk_misaligned_summary summary;
 
@@ -2931,6 +2944,54 @@ run_volk_misaligned_test(volk_func_desc_t desc,
     // write only a fixed-size scalar into out[0..k), and output cardinality
     // cannot be derived from the signature (#89 lesson). With a common prefill,
     // never-written regions are 0 == 0 and only kernel-written elements compare.
+
+    // Buffer-cycle helpers shared by the signal path and the #162 fork path so
+    // the two cannot drift (both run OUTSIDE any sigsetjmp window; only the
+    // run_impl_direct calls sit inside one, so the setjmp-clobber discipline is
+    // untouched by this sharing).
+    // Aligned reference side: this impl's pool buffers, outputs zero-prefilled.
+    auto gather_aligned_buffs = [&](size_t impl_idx) {
+        std::vector<void*> abuffs;
+        for (size_t j = 0; j < d.both_sigs.size(); j++) {
+            abuffs.push_back(d.test_data[impl_idx][j]);
+        }
+        for (size_t j = 0; j < d.outputsig.size(); j++) {
+            const size_t out_bytes = static_cast<size_t>(vlen) * d.outputsig[j].size *
+                                     (d.outputsig[j].is_complex ? 2 : 1);
+            memset(abuffs[j], 0, out_bytes);
+        }
+        return abuffs;
+    };
+    // Misaligned test side: own-malloc misaligned copies, identical inputs.
+    // vlen_twiddle padding: the misaligned copy must span the same seeded
+    // region as the aligned pool buffer so a fixed-element over-read reads
+    // identical bytes on both sides (#98; a mere zero-fill would make the
+    // vlen < 5 comparison vacuous).
+    auto build_misaligned_buffs =
+        [&](std::vector<std::unique_ptr<misaligned_buffer>>& mbufs) {
+            std::vector<void*> buffs;
+            for (size_t j = 0; j < d.both_sigs.size(); j++) {
+                const size_t elem =
+                    d.both_sigs[j].size * (d.both_sigs[j].is_complex ? 2 : 1);
+                const size_t bytes = static_cast<size_t>(vlen + vlen_twiddle) * elem;
+                mbufs.push_back(
+                    std::make_unique<misaligned_buffer>(bytes, alignment, elem));
+                buffs.push_back(mbufs.back()->data());
+            }
+            for (size_t j = 0; j < d.outputsig.size(); j++) {
+                const size_t out_bytes = static_cast<size_t>(vlen) * d.outputsig[j].size *
+                                         (d.outputsig[j].is_complex ? 2 : 1);
+                memset(buffs[j], 0, out_bytes);
+            }
+            for (size_t k = 0; k < d.inputsig.size(); k++) {
+                const size_t elem =
+                    d.inputsig[k].size * (d.inputsig[k].is_complex ? 2 : 1);
+                const size_t in_bytes = static_cast<size_t>(vlen + vlen_twiddle) * elem;
+                memcpy(buffs[d.outputsig.size() + k], d.inbuffs[k], in_bytes);
+            }
+            return buffs;
+        };
+
     scoped_fault_isolation guard_signals;
 
     for (size_t i = 0; i < d.arch_list.size(); i++) {
@@ -2939,19 +3000,118 @@ run_volk_misaligned_test(volk_func_desc_t desc,
         if (desc.impl_alignment[orig_idx]) {
             continue; // aligned-only impl: allowed to assume alignment, not under test
         }
+
+        if (fork_isolation) {
+            // #162: process-level isolation for impls that may allocate internally
+            // (puppets) -- the longjmp-under-signal-guard soundness argument does
+            // not hold for them (see the block comment above
+            // scoped_fault_isolation), so recovery is waitpid, not siglongjmp. The
+            // whole aligned/misaligned/compare cycle runs in a forked child; a
+            // fault reaches misaligned_fault_handler with NO window open,
+            // re-raises with default disposition, and kills only the child. Phase
+            // pipe: 'A' aligned-run done, 'M' misaligned-run done, then verdict
+            // 'O' (ok) / 'D' (diverged); a short read + wait status attributes a
+            // crash to the phase that died. Bookkeeping note: applied /
+            // checked_impls are set HERE, only after a child actually ran -- a
+            // pipe()/fork() failure leaves this impl uncounted so an all-failed
+            // kernel reports skip, never a green ok over never-run code (#162
+            // fail-closed). Fork-safety invariant: the process-wide fault
+            // handlers are installed, but g_misaligned_window_open is ALWAYS 0
+            // at this fork point (fork_isolation is a whole-call flag, so no
+            // sigsetjmp window can be open here) -- a fault in the child
+            // therefore re-raises with default disposition instead of
+            // longjmp-ing through the child's copy of a stale jmp_buf. Any
+            // future per-impl routing change must preserve this.
+            const char* arch_cstr = arch.c_str();
+            // Flush ALL C output streams pre-fork (iostreams are tied to them
+            // in this binary) so the child cannot double-emit buffered output
+            // through the driver's muting fds.
+            std::fflush(nullptr);
+            int pfd[2];
+            if (pipe(pfd) != 0) {
+                std::cerr << name << ": pipe() failed for arch " << arch
+                          << " -- impl not exercised (not counted)\n";
+                summary.setup_failed++; // surfaced on the driver's row (#162)
+                continue; // fail closed: neither applied nor checked
+            }
+            const pid_t pid = fork();
+            if (pid < 0) {
+                close(pfd[0]);
+                close(pfd[1]);
+                std::cerr << name << ": fork() failed for arch " << arch
+                          << " -- impl not exercised (not counted)\n";
+                summary.setup_failed++; // surfaced on the driver's row (#162)
+                continue; // fail closed
+            }
+            if (pid == 0) {
+                close(pfd[0]);
+                // ---- child: aligned reference run (no sigsetjmp window) ----
+                std::vector<void*> abuffs = gather_aligned_buffs(i);
+                run_impl_direct(abuffs, arch_cstr);
+                send_phase(pfd[1], 'A');
+                // ---- child: misaligned run, identical inputs ----
+                std::vector<std::unique_ptr<misaligned_buffer>> mbufs;
+                std::vector<void*> buffs = build_misaligned_buffs(mbufs);
+                run_impl_direct(buffs, arch_cstr);
+                send_phase(pfd[1], 'M');
+                // ---- child: compare (same helper as the signal path) ----
+                bool child_diverged = false;
+                for (size_t j = 0; j < d.both_sigs.size(); j++) {
+                    double max_err = 0.0;
+                    if (compare_buffer(j, abuffs[j], buffs[j], max_err)) {
+                        child_diverged = true;
+                        std::cerr << name << ": output diverged between aligned and "
+                                  << "misaligned runs on arch " << arch << " (buffer "
+                                  << j << ", vlen " << vlen << ", max_err " << max_err
+                                  << ") [forked child]\n";
+                    }
+                }
+                send_phase(pfd[1], child_diverged ? 'D' : 'O');
+                std::fflush(stderr);
+                _exit(0); // NEVER exit(): no double stdio flush, no atexit
+            }
+            // ---- parent: classify, then do the bookkeeping ----
+            close(pfd[1]);
+            int status = 0;
+            (void)waitpid(pid, &status, 0);
+            char phases[3] = { 0, 0, 0 };
+            ssize_t nread = read(pfd[0], phases, sizeof(phases));
+            close(pfd[0]);
+            if (nread < 0)
+                nread = 0;
+            summary.applied = true;                // a child ran: this impl was exercised
+            summary.fork_isolated = true; // routing OBSERVED, not inferred (#162)
+            summary.checked_impls.push_back(arch); // #92 triage detail
+            const bool completed = (WIFEXITED(status) && WEXITSTATUS(status) == 0 &&
+                                    nread == 3 && phases[0] == 'A' && phases[1] == 'M');
+            if (!completed) {
+                summary.crashed = true;
+                summary.crashed_impls.push_back(arch); // #92: once per arch
+                const char* phase = (nread < 1)   ? "ALIGNED buffers"
+                                    : (nread < 2) ? "misaligned buffers"
+                                                  : "compare/exit";
+                if (WIFSIGNALED(status))
+                    std::cerr << name << ": impl crashed on " << phase << " on arch "
+                              << arch << " (signal " << WTERMSIG(status) << ", vlen "
+                              << vlen << ") [forked child]\n";
+                else
+                    std::cerr << name << ": impl child exited abnormally on " << phase
+                              << " on arch " << arch << " (status " << status << ", vlen "
+                              << vlen << ") [forked child]\n";
+                continue;
+            }
+            if (phases[2] == 'D') {
+                summary.diverged = true;
+                summary.diverged_impls.push_back(arch); // #92: once per arch
+            }
+            continue; // fork path complete for this arch; skip the signal path
+        }
+
         summary.applied = true;
         summary.checked_impls.push_back(arch); // #92 triage detail
 
         // ---- Reference run: this impl on its ALIGNED pool buffers ----
-        std::vector<void*> abuffs;
-        for (size_t j = 0; j < d.both_sigs.size(); j++) {
-            abuffs.push_back(d.test_data[i][j]);
-        }
-        for (size_t j = 0; j < d.outputsig.size(); j++) {
-            const size_t out_bytes = static_cast<size_t>(vlen) * d.outputsig[j].size *
-                                     (d.outputsig[j].is_complex ? 2 : 1);
-            memset(abuffs[j], 0, out_bytes);
-        }
+        std::vector<void*> abuffs = gather_aligned_buffs(i);
         const char* arch_cstr = arch.c_str(); // materialized BEFORE sigsetjmp
         g_misaligned_sig = 0;
         // setjmp-clobber discipline: NOTHING may be modified between a sigsetjmp
@@ -2974,28 +3134,7 @@ run_volk_misaligned_test(volk_func_desc_t desc,
 
         // ---- Test run: the SAME impl on misaligned buffers, identical inputs ----
         std::vector<std::unique_ptr<misaligned_buffer>> mbufs;
-        std::vector<void*> buffs;
-        for (size_t j = 0; j < d.both_sigs.size(); j++) {
-            const size_t elem = d.both_sigs[j].size * (d.both_sigs[j].is_complex ? 2 : 1);
-            // vlen_twiddle padding here too: the misaligned copy must span the same
-            // seeded region as the aligned pool buffer so a fixed-element over-read
-            // reads identical bytes on both sides (#98).
-            const size_t bytes = static_cast<size_t>(vlen + vlen_twiddle) * elem;
-            mbufs.push_back(std::make_unique<misaligned_buffer>(bytes, alignment, elem));
-            buffs.push_back(mbufs.back()->data());
-        }
-        for (size_t j = 0; j < d.outputsig.size(); j++) {
-            const size_t out_bytes = static_cast<size_t>(vlen) * d.outputsig[j].size *
-                                     (d.outputsig[j].is_complex ? 2 : 1);
-            memset(buffs[j], 0, out_bytes);
-        }
-        for (size_t k = 0; k < d.inputsig.size(); k++) {
-            // Copy the full seeded region (vlen + vlen_twiddle), matching the aligned
-            // pool pre-image, so fixed-element over-reads see identical bytes (#98).
-            const size_t elem = d.inputsig[k].size * (d.inputsig[k].is_complex ? 2 : 1);
-            const size_t in_bytes = static_cast<size_t>(vlen + vlen_twiddle) * elem;
-            memcpy(buffs[d.outputsig.size() + k], d.inbuffs[k], in_bytes);
-        }
+        std::vector<void*> buffs = build_misaligned_buffs(mbufs);
 
         g_misaligned_sig = 0;
         if (sigsetjmp(g_misaligned_jmp, 1) == 0) {
