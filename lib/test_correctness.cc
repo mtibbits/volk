@@ -371,7 +371,9 @@ static volk_misaligned_summary quiet_misaligned_run(volk_test_case_t& tc, unsign
                                            v /*vlen*/,
                                            &results,
                                            kFloatEdges,
-                                           kComplexEdges);
+                                           kComplexEdges,
+                                           /*fork_isolation=*/tc.puppet_master_name() !=
+                                               "NULL");
     } catch (...) {
         threw = true;
         summary = volk_misaligned_summary(); // applied=false -> skip
@@ -1002,18 +1004,24 @@ int main(int argc, char* argv[])
         // Per-kernel misaligned sweep over the real kernels (unaligned impls only).
         //   FAIL -> an impl crashed on misaligned buffers or diverged from the
         //           the SAME impl's aligned run (both always defects).
-        //   skip -> puppet / unsupported signature / nothing observed (fail closed).
-        // Puppets are skipped -- load-bearing here: it is what keeps the longjmp
-        // safety argument airtight (no impl with internal allocation runs under the
-        // signal guard) and keeps #96's conv_k7 out of this mode.
+        //   skip -> excluded / unsupported signature / nothing observed (fail
+        //           closed).
         std::cout << "# misaligned sweep: vlens 1..40, 131071, 1000003\n";
         std::cout.flush();
         int a_tested = 0, a_failed = 0, a_crashed = 0, a_diverged = 0;
         for (auto& tc : test_cases) {
             if (!filter.empty() && tc.name() != filter)
                 continue;
-            if (tc.puppet_master_name() != "NULL") {
-                std::cout << "skip  [misaligned] " << tc.name() << " (puppet)\n";
+            // #162: puppets now run under FORK isolation (routed by
+            // quiet_misaligned_run via fork_isolation), so the longjmp safety
+            // argument is untouched: no impl with internal allocation ever runs
+            // under the signal guard. The only remaining puppet skip is policy:
+            // conv_k7's decision-buffer overflow (#96, OPEN) corrupts the child
+            // heap at multi-vlen and would hard-red every ASan lane for a known,
+            // separately-tracked defect.
+            if (tc.name() == "volk_8u_conv_k7_r2puppet_8u") {
+                std::cout << "skip  [misaligned] " << tc.name()
+                          << " (excluded: #96 conv_k7)\n";
                 if (report)
                     std::fprintf(report, "%s,-,misaligned,skip,,\n", tc.name().c_str());
                 std::cout.flush();
@@ -1049,13 +1057,18 @@ int main(int argc, char* argv[])
                 continue;
             }
             ++a_tested;
+            // #162: puppet rows carry the isolation tag so the fork routing is
+            // OBSERVABLE (a lost fork_isolation argument would drop the tag and
+            // red the qa_misaligned_puppet_control ctest, not pass silently).
+            const char* iso_tag =
+                (tc.puppet_master_name() != "NULL") ? " (fork-isolated)" : "";
             if (!crash_vlens.empty() || !diverge_vlens.empty()) {
                 ++a_failed;
                 if (!crash_vlens.empty())
                     ++a_crashed;
                 if (!diverge_vlens.empty())
                     ++a_diverged;
-                std::cout << "FAIL  [misaligned] " << tc.name();
+                std::cout << "FAIL  [misaligned] " << tc.name() << iso_tag;
                 if (!crash_vlens.empty()) {
                     std::cout << "  crash vlens:";
                     for (unsigned int v : crash_vlens)
@@ -1067,7 +1080,7 @@ int main(int argc, char* argv[])
                         std::cout << " " << v;
                 }
             } else {
-                std::cout << "ok    [misaligned] " << tc.name();
+                std::cout << "ok    [misaligned] " << tc.name() << iso_tag;
             }
             std::cout << "\n";
             if (report) {
