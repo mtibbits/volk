@@ -895,22 +895,90 @@ if(ENABLE_TESTING)
     # The planted misaligned-fault control must keep its raw movaps, but
     # UBSan's alignment check reports it BEFORE the deliberate fault, so a
     # strict lane (halt_on_error=1) dies pre-sweep. Exempt this one test-only
-    # TU under the sanitizer build type (#221; details: harness README,
-    # Platform notes). A function-level no_sanitize attribute does NOT work
-    # here -- GCC generates the check inside the always-inlined _mm_load_ps.
-    # The qa_strict_misaligned_canary ctest is the regression detector: it
-    # goes red if the exemption is dropped, stops reaching the compile line,
-    # or the canary stops faulting (NC-LOST exit 2).
+    # TU (#221; details: harness README, Platform notes). A function-level
+    # no_sanitize attribute does NOT work here -- GCC generates the check
+    # inside the always-inlined _mm_load_ps. Applied on every POSIX build
+    # whose compiler accepts the flag (#162, widening #221's ASAN-build-type
+    # gate): UBSan can arrive via injected -fsanitize flags on ANY build type
+    # (e.g. sanitizer sweeps over Debug), not just CBTU=ASAN, and
+    # -fno-sanitize=alignment is a no-op when no sanitizer is enabled. The
+    # flag-support probe follows this file's check_cxx_compiler_flag idiom
+    # rather than asserting compiler behavior. The qa_strict_misaligned_canary
+    # ctest is the regression detector: it goes red if the exemption is
+    # dropped, stops reaching the compile line, or the canary stops faulting
+    # (NC-LOST exit 2).
+    if(NOT WIN32)
+        include(CheckCXXCompilerFlag)
+        check_cxx_compiler_flag("-fno-sanitize=alignment"
+                                HAVE_NO_SANITIZE_ALIGNMENT)
+        if(HAVE_NO_SANITIZE_ALIGNMENT)
+            set_property(
+                SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/qa_canary_kernel.cc
+                APPEND
+                PROPERTY COMPILE_OPTIONS "-fno-sanitize=alignment")
+        endif()
+    endif()
     if(NOT WIN32 AND CBTU STREQUAL "ASAN")
-        set_property(
-            SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/qa_canary_kernel.cc
-            APPEND
-            PROPERTY COMPILE_OPTIONS "-fno-sanitize=alignment")
         add_test(NAME qa_strict_misaligned_canary
                  COMMAND volk_test_correctness volk_32f_x3_sum_of_poly_32f)
         set_tests_properties(
             qa_strict_misaligned_canary
             PROPERTIES
+                ENVIRONMENT
+                "HARNESS_MISALIGNED=1;UBSAN_OPTIONS=halt_on_error=1;ASAN_OPTIONS=handle_segv=0:handle_sigbus=0:handle_sigill=0:allow_user_segv_handler=1"
+        )
+    endif()
+    # #162: puppet kernels are covered in misaligned mode via fork isolation.
+    # The pass regex pins the whole contract observably: the rotator2 puppet
+    # must produce a real, fork-routed ok row (not the pre-#162 skip, and not
+    # a silent loss of the fork routing -- the "(fork-isolated)" tag is printed
+    # only on the puppet path). The fail regex reds the lane on any recorded
+    # FAIL row or a lost negative control (any of the three pairs; the
+    # fork-path fault twin is the #101-class regression proof: a planted
+    # unaligned fault in a forked child must be recorded while the run
+    # continues). NOTE: setting PASS_REGULAR_EXPRESSION makes ctest IGNORE the
+    # process exit code -- the NC blocks run before the sweep row is printed,
+    # so an NC loss is still caught by the fail regex; that ordering is
+    # load-bearing. The fail regex also reds on "setup-failed impl-runs": a
+    # partially-exercised kernel (some fork/pipe setups lost) must not pass as
+    # covered. Registration is gated to Linux x86_64 hosts by default: the
+    # contract is HARD covered-and-clean, and the validated evidence is one
+    # Linux x86-64 box across plain / ASAN-build-type / Debug+UBSan-flag
+    # configs plus local static and static-dispatch(generic) probes. The
+    # misaligned mode has never run in CI on the QEMU arches
+    # (armv7/ppc64le/s390x/riscv64), aarch64, or macOS -- enabling it there
+    # blind risks lane-redding on behavior nobody has probed (degenerate
+    # volk_get_alignment(), QEMU fork semantics, arch-specific divergence,
+    # platform libc). Static-dispatch builds are excluded outright: with a
+    # single statically dispatched machine (CI pins "generic") the misaligned
+    # mode's degenerate-alignment guard fails closed NC-LOST -- probed live:
+    # volk_get_alignment()==1 cannot misalign anything, the mode is
+    # inapplicable by design, and the hard ctest would red the lane.
+    # Broadening after a cross-platform probe is a filed follow-up; other
+    # hosts can opt in with -DVOLK_MISALIGNED_PUPPET_CTEST=ON.
+    if(NOT WIN32
+       AND CMAKE_SYSTEM_NAME STREQUAL "Linux"
+       AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|amd64|AMD64)$"
+       AND NOT VOLK_STATIC_DISPATCH)
+        set(VOLK_MISALIGNED_PUPPET_CTEST_DEFAULT ON)
+    else()
+        set(VOLK_MISALIGNED_PUPPET_CTEST_DEFAULT OFF)
+    endif()
+    option(VOLK_MISALIGNED_PUPPET_CTEST
+           "Register the qa_misaligned_puppet_control ctest (#162)"
+           ${VOLK_MISALIGNED_PUPPET_CTEST_DEFAULT})
+    if(NOT WIN32 AND VOLK_MISALIGNED_PUPPET_CTEST)
+        add_test(NAME qa_misaligned_puppet_control
+                 COMMAND volk_test_correctness volk_32fc_s32fc_rotator2puppet_32fc)
+        set_tests_properties(
+            qa_misaligned_puppet_control
+            PROPERTIES
+                TIMEOUT
+                600
+                PASS_REGULAR_EXPRESSION
+                "ok    \\[misaligned\\] volk_32fc_s32fc_rotator2puppet_32fc \\(fork-isolated\\)"
+                FAIL_REGULAR_EXPRESSION
+                "NEGATIVE CONTROL LOST;FAIL  \\[misaligned\\];setup-failed impl-runs"
                 ENVIRONMENT
                 "HARNESS_MISALIGNED=1;UBSAN_OPTIONS=halt_on_error=1;ASAN_OPTIONS=handle_segv=0:handle_sigbus=0:handle_sigill=0:allow_user_segv_handler=1"
         )

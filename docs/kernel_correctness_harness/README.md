@@ -29,7 +29,7 @@ environment variable:
 | `HARNESS_CANARY=1` | output-buffer canary: guarded own-malloc buffers, two-sentinel over/under-write + unwritten-element checks | #89 |
 | `HARNESS_CANARY_ASAN_DEMO=1` | (with `HARNESS_CANARY`, ASan build only) far-past over-run demo proving the guarded buffers are ASan-bracketed | #89 |
 | `HARNESS_IMMUTABLE=1` | input-immutability canary: byte-exact post-run compare of every input against its pristine pre-image | #90 |
-| `HARNESS_MISALIGNED=1` | misaligned `_u_`-variant runs: every unaligned impl on deliberately misaligned buffers, with scoped signal trapping (POSIX only); strict-UBSan regression detector is the ctest `qa_strict_misaligned_canary` (ASAN build type only) | #91 / #221 |
+| `HARNESS_MISALIGNED=1` | misaligned `_u_`-variant runs: every unaligned impl on deliberately misaligned buffers, with scoped signal trapping (POSIX only); puppet kernels run under fork isolation with `(fork-isolated)`-tagged rows (ctest `qa_misaligned_puppet_control`); strict-UBSan regression detector is the ctest `qa_strict_misaligned_canary` (ASAN build type only) | #91 / #221 / #162 |
 | `HARNESS_COMBINED_NC=1` | combined negative control (the ctest `qa_harness_negative_control`) | #92 |
 | `HARNESS_REPORT=path` | write the per-kernel × per-impl CSV (format below) in any mode | #87 / #92 |
 | `HARNESS_VERBOSE=1` | unmute the per-impl stdout of the underlying qa runs | — |
@@ -126,9 +126,46 @@ the kernel's numbers and cite this section.
   element-aligned but vector-misaligned buffers; SIGSEGV/SIGBUS/SIGILL are
   trapped with a scoped handler (one crashing impl = one recorded FAIL, the
   run continues) and output is compared against the same impl's aligned run.
-  POSIX-only (compiled out to an explicit skip on Windows). Puppet kernels are
-  excluded by design (no internal-allocation impls under the signal guard) —
-  defects reachable only through puppets are outside this mode's coverage.
+  POSIX-only (compiled out to an explicit skip on Windows).
+- **Puppet kernels (#162):** covered via **fork isolation**, not the signal
+  guard — puppets may allocate internally (3 of the 15 registered puppets do,
+  incl. encodepolar's 7 `volk_malloc` sites), which would make
+  `longjmp`-under-signal-guard recovery unsound. Each puppet impl's whole
+  aligned/misaligned/compare cycle runs in a forked child; a fault kills only
+  the child and the parent records it from the wait status + a phase pipe
+  (fail-closed: an impl whose fork setup fails is not counted, so an
+  all-failed kernel reports `skip (fork setup failed: N impl-runs)`, never
+  `ok`; partial losses print a `setup-failed impl-runs: N` qualifier on the
+  row). Puppet rows carry a `(fork-isolated)` stdout tag derived from the
+  summary the fork branch itself reports — the tag observes the routing that
+  happened, not the predicate that selects it. One policy exclusion remains:
+  `volk_8u_conv_k7_r2puppet_8u` prints `skip … (excluded: #96 conv_k7)`
+  until its decision-buffer overflow (#96) lands — the corruption is
+  child-contained but would hard-red every ASan lane for a known, tracked
+  defect. A fork-path negative-control **trio** (planted ok, fault, and
+  alignment-sensitive-diverging kernels routed through forked children) runs
+  in **every** misaligned invocation, including the
+  `qa_strict_misaligned_canary` lane; losing any of the three verdict
+  transports (ok / crash / diverged) aborts with exit 2. The fault twin is
+  the regression proof for the #101 defect class (an unaligned fault in a
+  puppet-only worker), pinned by the ctest `qa_misaligned_puppet_control`,
+  whose pass/fail regexes require the rotator2 puppet's fork-routed `ok` row
+  and forbid FAIL rows, NC loss, or setup-failed qualifiers ("covered AND
+  clean"). That ctest registers by default on **Linux x86_64 only** (the
+  validated platform; CMake option `VOLK_MISALIGNED_PUPPET_CTEST`, opt-in
+  elsewhere) and never on static-dispatch builds, where
+  `volk_get_alignment()` is 1 and the mode's degenerate-alignment guard
+  fails closed by design — broadening to other arches/OSes after a
+  cross-platform probe is a tracked follow-up.
+- **Mapping-completeness note (#162):** for each puppet the sweep compares the
+  master kernel's impl-name list against the puppet's wrappers and prints a
+  stderr `note` for any master impl with no same-named wrapper — a stale
+  puppet silently caps coverage for its whole kernel class (the
+  gnuradio/volk#570 popcnt lesson). Advisory, name-set only: a wrapper that
+  exists but calls the *wrong* master impl is a source-level property this
+  check cannot see. The computation is self-checked at mode start against
+  hand-built descs (must fire on a planted gap AND stay quiet on a complete
+  pair; any misclassification is NC-LOST exit 2).
 - **ASan note:** run with
   `ASAN_OPTIONS=handle_segv=0:handle_sigbus=0:handle_sigill=0:allow_user_segv_handler=1`
   or ASan's handler wins and aborts on the first planted fault.
@@ -219,16 +256,17 @@ Retention: latest snapshot only — a new snapshot replaces the old files
   mode compiles to an explicit skip (no POSIX signals); everything else —
   including the combined negative control ctest — runs.
 - **ASan builds:** canary far-past demo is gated to ASan; misaligned mode needs
-  the `ASAN_OPTIONS` above. Under the ASAN build type the control-kernel TU
-  (`qa_canary_kernel.cc`) is compiled with `-fno-sanitize=alignment` so a strict
-  UBSan lane (`halt_on_error=1`) can run the misaligned mode — the planted
-  `movaps` still faults; only the pre-fault UBSan report is suppressed, and only
-  for that one test-only TU (#221). The ctest `qa_strict_misaligned_canary`
-  (registered on ASAN builds only) runs the strict misaligned mode and goes red
-  if the exemption is ever lost. The exemption follows the ASAN build type
-  only: a UBSan build configured another way (e.g. `-DCMAKE_BUILD_TYPE=Debug`
-  with `-fsanitize=undefined` in `CMAKE_CXX_FLAGS`) still reports the planted
-  load under `halt_on_error=1`.
+  the `ASAN_OPTIONS` above. The control-kernel TU (`qa_canary_kernel.cc`) is
+  compiled with `-fno-sanitize=alignment` on **every** non-Windows build
+  (#221, gate widened by #162) so any UBSan-enabled lane (`halt_on_error=1`)
+  can run the misaligned mode — the planted `movaps` still faults; only the
+  pre-fault UBSan report is suppressed, and only for that one test-only TU.
+  The flag is an accepted no-op when no sanitizer is enabled, and UBSan can
+  arrive via injected `-fsanitize=undefined` flags on any build type (e.g.
+  `-DCMAKE_BUILD_TYPE=Debug` sanitizer sweeps), not just `CBTU=ASAN` — which
+  is why the exemption no longer follows the build type. Only the
+  `qa_strict_misaligned_canary` ctest *registration* remains ASAN-gated; it
+  runs the strict misaligned mode and goes red if the exemption is ever lost.
 - **Default qa:** `volk_test_all` and the per-kernel `qa_volk_*` ctests are
   byte-for-byte unaffected by every capability here; all harness behavior is
   opt-in via the env toggles.
