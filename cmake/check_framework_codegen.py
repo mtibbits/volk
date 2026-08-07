@@ -29,15 +29,18 @@ Cross-compiler robustness (mtibbits/volk#145): benign codegen noise that differs
 by compiler is normalized away -- trailing alignment NOPs of any encoding and
 trailing `data16` padding are stripped (they pad the next function and belong to
 no function), and a symbol the compiler inlined rather than emitting standalone
-is skipped-with-warning since there is nothing to compare -- exit 0 only while
-real coverage remains: a run where EVERY declared tuple skipped, or a kernel
+is skipped-with-warning since there is nothing to compare (symbol names are
+first mapped to the object format's labels -- Mach-O prepends an underscore
+to C symbols, mtibbits/volk#225) -- exit 0 only while real coverage remains:
+a run where EVERY declared tuple skipped, or a kernel
 whose declared tuples ALL skipped, is a zero-coverage failure (exit 1;
 mtibbits/volk#165). A genuine post-normalization divergence still fails
 (exit 1); a genuinely unparsable non-padding line still errors (exit 2).
 
-Per-tuple opt-in `require_standalone` (bool, default off) flips that inlined-away
+Per-tuple opt-in `require_standalone` (bool, default off) flips that not-found
 outcome: for a tuple whose dispatch relies on the impl existing as a real,
-separately-dispatchable symbol, "inlined away" is a regression, so the checker
+separately-dispatchable symbol, a not-found label (genuinely inlined away, or
+absent) is a regression, so the checker
 hard-fails it (exit 1) instead of skip-with-warning. Orthogonal to
 `require_mnemonic`, which asserts which instructions a present symbol contains.
 
@@ -73,17 +76,27 @@ import subprocess
 import sys
 from collections import Counter
 from pathlib import Path
+from typing import Optional
 
 
 class SymbolNotEmittedError(RuntimeError):
-    """The compared symbol is absent from the object file because the compiler
-    inlined it rather than emitting it standalone (e.g. macOS clang on some
-    impls). There is nothing to compare, so main() skips the tuple with a
-    warning rather than failing the build -- subject to the aggregate
-    zero-coverage guard: a run (or a single kernel) whose declared tuples ALL
-    skip fails loudly instead (mtibbits/volk#165). Distinct from the other
-    RuntimeError cases (missing/ambiguous .o, unparsable line) which remain
-    hard errors (mtibbits/volk#145).
+    """The compared label is absent from the object file's disassembly --
+    the compiler inlined the impl rather than emitting it standalone, or the
+    label genuinely is not there. There is nothing to compare, so main()
+    skips the tuple with a warning rather than failing the build -- subject
+    to the aggregate zero-coverage guard: a run (or a single kernel) whose
+    declared tuples ALL skip fails loudly instead (mtibbits/volk#165).
+    Distinct from the other RuntimeError cases (missing/ambiguous .o,
+    unparsable line) which remain hard errors (mtibbits/volk#145).
+
+    NOTE (mtibbits/volk#225): "not found" once had a second, non-inlining
+    cause -- Mach-O's leading-underscore C mangling made the unprefixed
+    lookup miss labels that WERE present (measured on a Linux cross-compile
+    probe: an address-taken static-inline impl compiled for
+    x86_64-apple-macos was emitted standalone as _volk_32f_x2_add_32f_a_avx).
+    object_symbol_name() now maps C name -> object-file label per the file's
+    magic, and the error text reports similar labels seen, so a naming
+    mismatch is loud instead of masquerading as inlining.
     """
 
 
@@ -222,9 +235,64 @@ def resolve_object(build_lib_dir: Path, machine_o: str) -> Path:
         f"({len(matches)} matches): {[str(m) for m in matches]}")
 
 
-def _disassemble(o_file: Path, objdump: str, symbol: str = None) -> str:
+def _require_object_file(o_file: Path):
+    """Single owner of the missing-object diagnostic (exit-2 class), shared by
+    every seam that touches the file so the message cannot drift between
+    copies."""
     if not o_file.is_file():
         raise RuntimeError(f"object file not found: {o_file}")
+
+
+# Mach-O object-file magics (as the first 4 bytes appear on disk): thin
+# 64-/32-bit little-endian, and fat/universal (big-endian on disk) 32/64.
+_MACHO_MAGICS = {
+    b"\xcf\xfa\xed\xfe",  # MH_MAGIC_64
+    b"\xce\xfa\xed\xfe",  # MH_MAGIC
+    b"\xca\xfe\xba\xbe",  # FAT_MAGIC
+    b"\xca\xfe\xba\xbf",  # FAT_MAGIC_64
+}
+
+
+def object_symbol_name(o_file: Path, symbol: str) -> str:
+    """Map a C-level symbol name to the label it carries in this object file.
+
+    Mach-O (Darwin ABI) prepends an underscore to every C symbol, so the
+    disassembly label for volk_32f_x2_add_32f_a_avx is
+    _volk_32f_x2_add_32f_a_avx; ELF and COFF-x64 use the C name unchanged.
+    Keyed on the object file's magic bytes rather than the host platform so a
+    cross-compiled Mach-O object resolves correctly anywhere
+    (mtibbits/volk#225 -- on macOS the unprefixed lookup made the bootstrap
+    tuple skip as 'symbol not found', zero coverage under the #165 guard).
+
+    Blind-spot shape (what this helper CANNOT decide): detection is a
+    positive Mach-O check on 4 magics (thin LE 32/64 + fat 32/64).
+    Anything else -- ELF, COFF (which has no single 4-byte magic), or a
+    format outside the support set -- keeps the C name unchanged, which is
+    correct for every non-Mach-O lane CI builds today. Big-endian thin
+    Mach-O (ppc-era) is deliberately not recognized: no such target exists
+    in the CI matrix or support set. If a misclassification ever happens,
+    SymbolNotEmittedError's similar-labels report is the loud signal (the
+    underscored twin shows up there).
+    """
+    _require_object_file(o_file)
+    with o_file.open("rb") as f:
+        magic = f.read(4)
+    if magic in _MACHO_MAGICS:
+        return "_" + symbol
+    return symbol
+
+
+def _uses_symbol_filter(objdump: str) -> bool:
+    """True when _disassemble will pass --disassemble-symbols for this tool
+    (llvm-objdump only; GNU objdump has no equivalent). Shared predicate so
+    extract_function_body can know its fast-path output was FILTERED -- a
+    filtered disassembly of a wrong label contains zero labels, which would
+    starve the similar-labels diagnostic (mtibbits/volk#225)."""
+    return "llvm" in Path(objdump).name
+
+
+def _disassemble(o_file: Path, objdump: str, symbol: str = None) -> str:
+    _require_object_file(o_file)
     # NOTE: deliberately NOT using --symbolize-operands. It makes llvm-objdump
     # synthesize <L0>/<L1> branch labels that collide with the _label_line
     # parser. Plain --disassemble shows symbol headers as clean <name>: lines.
@@ -232,7 +300,7 @@ def _disassemble(o_file: Path, objdump: str, symbol: str = None) -> str:
     # Efficiency: llvm-objdump can disassemble a single symbol, skipping the
     # hundreds of other kernels in a machine .o. GNU objdump has no equivalent,
     # so only use it for llvm-objdump and fall back to whole-object otherwise.
-    if symbol and "llvm" in Path(objdump).name:
+    if symbol and _uses_symbol_filter(objdump):
         cmd.append(f"--disassemble-symbols={symbol}")
     cmd.append(str(o_file))
     result = subprocess.run(cmd, capture_output=True, text=True, check=False)
@@ -288,33 +356,72 @@ def _instr_from_match(m) -> dict:
 def extract_function_body(o_file: Path, symbol: str,
                           objdump: str = "llvm-objdump") -> list:
     """Disassemble `symbol` in o_file and return its whole-body instruction list.
-    Thin wrapper over extract_function_body_from_text (see it for the parse
-    contract); kept so callers and tests can pass a file path + objdump.
+    Maps the C name to the object file's label first (Mach-O prepends an
+    underscore, mtibbits/volk#225), then thin wrapper over
+    extract_function_body_from_text (see it for the parse contract); kept so
+    callers and tests can pass a file path + objdump. On a not-found label
+    after a FILTERED fast-path disassembly, retries unfiltered so the
+    similar-labels report is computed from the whole object, not from
+    filter-emptied output. The retry is behavior, not just diagnostics: if
+    the symbol filter fails to match a label that whole-object disassembly
+    does render (an objdump version/symbol-table quirk), the retry recovers
+    the extraction instead of skipping the tuple. (Defensive: no such
+    objdump has been observed in this matrix -- the retry exists for the
+    diagnostic, and the recovery is a free consequence.)
     """
-    text = _disassemble(o_file, objdump, symbol=symbol)
-    return extract_function_body_from_text(text, symbol, source_label=str(o_file))
+    label = object_symbol_name(o_file, symbol)
+    text = _disassemble(o_file, objdump, symbol=label)
+    try:
+        return extract_function_body_from_text(text, label,
+                                               source_label=str(o_file),
+                                               c_symbol=symbol)
+    except SymbolNotEmittedError:
+        if not _uses_symbol_filter(objdump):
+            raise
+        # The fast path FILTERED the disassembly to the requested label; when
+        # that label is wrong the output contains zero labels, which would
+        # starve the similar-labels diagnostic ("no similar labels among 0
+        # seen"). Retry unfiltered so the raised error can report what the
+        # object file actually contains (mtibbits/volk#225). Cost: skip path
+        # only -- a build whose tuples all resolve never pays it; each
+        # SKIPPED tuple (skips are exit-0) pays one whole-object disassembly.
+        # Fine at current tuple counts; memoise per .o if skips ever grow.
+        text = _disassemble(o_file, objdump)
+        return extract_function_body_from_text(text, label,
+                                               source_label=str(o_file),
+                                               c_symbol=symbol)
 
 
-def extract_function_body_from_text(text: str, symbol: str,
-                                    source_label: str = "<disassembly>") -> list:
+def extract_function_body_from_text(text: str, label: str,
+                                    source_label: str = "<disassembly>",
+                                    c_symbol: Optional[str] = None) -> list:
     """Return [{address, bytes, mnemonic, operands}, ...] for the whole body of
-    `symbol` in `text`: every instruction line from the `<symbol>:` header up to
-    (exclusive) the next symbol header or a blank line that ends the block.
-    Trailing inter-function padding (alignment NOPs / data16) is stripped.
+    the object-file label `label` in `text` (on Mach-O, callers pass the
+    underscore-prefixed label object_symbol_name() produced -- the underscore
+    is the harness's mapping, not part of the C name): every instruction line
+    from the `<label>:` header up to (exclusive) the next symbol header or a
+    blank line that ends the block. Trailing inter-function padding
+    (alignment NOPs / data16) is stripped.
 
-    Raises SymbolNotEmittedError if the symbol is absent (inlined, not emitted
+    Raises SymbolNotEmittedError if the label is absent (inlined, not emitted
     standalone) and RuntimeError if an in-body line is unparsable and not
-    recognizable padding, or if the body is empty.
+    recognizable padding, or if the body is empty. `c_symbol`, when given and
+    different from `label`, is quoted in the not-found message so a CI-log
+    reader can grep the manifest/tree for the name that actually appears
+    there (the label's underscore is the harness's Mach-O mapping and exists
+    nowhere in the sources).
     """
     in_body = False
     saw_symbol = False
     instrs = []
+    labels_seen = []
 
     for line in text.splitlines():
         m = _label_line.match(line)
         if m:
-            label = m.group(1)
-            if label == symbol:
+            label_name = m.group(1)
+            labels_seen.append(label_name)
+            if label_name == label:
                 in_body = True
                 saw_symbol = True
                 continue
@@ -347,15 +454,30 @@ def extract_function_body_from_text(text: str, symbol: str,
                 # silently dropped: a dropped instruction would weaken the
                 # comparison without anyone noticing.
                 raise RuntimeError(
-                    f"unparsable disassembly line for {symbol!r} in "
+                    f"unparsable disassembly line for {label!r} in "
                     f"{source_label}: {line!r}")
             instrs.append(_instr_from_match(mi))
 
     if not saw_symbol:
+        near = [seen for seen in labels_seen
+                if label in seen or seen in label]
+        if near:
+            # Closest-length first so the exact underscore twin cannot be
+            # truncated out of the window; say when truncation happened.
+            near = sorted(near, key=lambda seen: (abs(len(seen) - len(label)),
+                                                  seen))
+            shown = near[:8]
+            more = f" (+{len(near) - len(shown)} more)" if len(near) > 8 else ""
+            hint = f"similar labels present: {shown}{more}"
+        else:
+            hint = f"no similar labels among {len(labels_seen)} seen"
+        c_note = (f" (C symbol {c_symbol!r})"
+                  if c_symbol and c_symbol != label else "")
         raise SymbolNotEmittedError(
-            f"symbol {symbol!r} not found in disassembly of {source_label}. "
-            f"The impl must be emitted standalone (its address taken for the "
-            f"dispatch table) for its symbol to appear in the object file.")
+            f"symbol label {label!r}{c_note} not found in disassembly of "
+            f"{source_label}. The impl must be emitted standalone (its "
+            f"address taken for the dispatch table) for its label to appear "
+            f"in the object file; {hint}.")
     # Strip trailing padding (NOP family + data16): bytes emitted after the
     # function's final control-flow terminator to align the NEXT function. They
     # belong to no function and vary with inter-function layout, so they are not
@@ -365,7 +487,7 @@ def extract_function_body_from_text(text: str, symbol: str,
         instrs.pop()
     if not instrs:
         raise RuntimeError(
-            f"symbol {symbol!r} found in {source_label} but its body is empty")
+            f"symbol {label!r} found in {source_label} but its body is empty")
     return instrs
 
 
@@ -516,19 +638,20 @@ def main():
             b_instrs = extract_function_body(
                 b_o, t["impl_b"]["symbol"], objdump=args.objdump)
         except SymbolNotEmittedError as e:
-            # Opt-in (require_standalone): for tuples whose dispatch relies on the
-            # impl existing as a real, separately-dispatchable symbol, "inlined
-            # away" is a regression, not an acceptable outcome -- hard-fail it.
+            # Opt-in (require_standalone): for tuples whose dispatch relies
+            # on the impl existing as a real, separately-dispatchable symbol,
+            # a not-found label (inlined away, or absent under the name
+            # looked up) is a regression, not acceptable -- hard-fail it.
             if t.get("require_standalone"):
                 msg = ("require_standalone assertion FAILED: implementation "
-                       "was not emitted as a standalone dispatchable symbol "
-                       f"(inlined away). {e}")
+                       "was not emitted as a standalone dispatchable symbol. "
+                       f"{e}")
                 failures.append((tuple_id(t), msg))
                 continue
-            # Default: compiler inlined the impl rather than emitting it
-            # standalone (e.g. macOS clang): nothing to compare, so skip with a
-            # loud warning instead of failing the build. A present-but-divergent
-            # body is unaffected -- it still fails below.
+            # Default: no matching label in the object file -- inlined away,
+            # or emitted under a name we did not look up; nothing to compare,
+            # so skip with a loud warning instead of failing the build. A
+            # present-but-divergent body is unaffected -- it still fails below.
             print(f"codegen-equivalence: WARNING: skipping {tuple_id(t)}: {e}",
                   file=sys.stderr)
             skipped.append(tuple_id(t))
@@ -601,17 +724,23 @@ def main():
     if uncovered or checked == 0:
         if checked == 0:
             headline = "zero coverage"
-            lead = (f"All {len(tuples)} declared tuples were skipped (impl "
-                    "not emitted standalone),\nso nothing was verified. A "
-                    "toolchain change that inlines every compared\nimpl "
-                    "would otherwise turn this check into a silent no-op.")
+            lead = (f"All {len(tuples)} declared tuples were skipped (no "
+                    "matching label in the object file:\nthe impl was "
+                    "inlined away, or its label does not match the name "
+                    "looked up --\nthe per-tuple WARNING lines above report "
+                    "the labels actually present),\nso nothing was verified. "
+                    "A toolchain change that inlines or renames every\n"
+                    "compared impl would otherwise turn this check into a "
+                    "silent no-op.")
             shown = skipped
         else:
             headline = ("zero codegen coverage for kernel(s): "
                         + ", ".join(uncovered))
             lead = ("Every declared tuple for the named kernel(s) was "
-                    "skipped (impl not emitted\nstandalone), leaving them "
-                    "unverified while the rest of the run passed.")
+                    "skipped (no matching label\nin the object file -- "
+                    "inlined away, or a label/name mismatch; see the\n"
+                    "per-tuple WARNING lines), leaving them unverified while "
+                    "the rest of the\nrun passed.")
             # Name only the uncovered kernels' skips: a covered kernel's
             # incidental skip must not be presented as removable. Derived from
             # the skip list itself (not kernel membership) so the label stays
@@ -623,11 +752,14 @@ def main():
         print("", file=sys.stderr)
         print(lead, file=sys.stderr)
         print("", file=sys.stderr)
-        print("Fix the build so the symbols are emitted standalone (see the "
-              "README's\nrequire-standalone notes). Removing the affected "
-              "tuples from the manifest\nsilences the check instead of "
-              "fixing it -- a deliberate de-scoping that\nneeds review, not "
-              "an equivalent outcome. See mtibbits/volk#165.",
+        print("Fix the build so the symbols are emitted standalone, or the "
+              "harness's\nname->label mapping if the WARNING lines show the "
+              "impl present under\nanother name (see the README's "
+              "'Object-file labels' and 'Require-standalone\nassertion' "
+              "sections). Removing the "
+              "affected tuples from the manifest silences the check "
+              "instead\nof fixing it -- a deliberate de-scoping that needs "
+              "review, not an\nequivalent outcome. See mtibbits/volk#165.",
               file=sys.stderr)
         if checked == 0:
             print("Note: an emptied manifest prints ok (0 tuples declared); "

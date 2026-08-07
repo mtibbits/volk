@@ -35,9 +35,10 @@ function(ADD_CODEGEN_EQUIVALENCE_TUPLE)
     # REQUIRE_STANDALONE is an OPTIONAL boolean flag (orthogonal axis): pass the
     # bare keyword (no value) for a tuple whose dispatch relies on the impl
     # existing as a real, separately-dispatchable symbol. When set, the harness
-    # treats "inlined away" (SymbolNotEmittedError) as a hard failure instead of
-    # skip-with-warning. Omitted -> today's skip-with-warning behavior (subject
-    # to the aggregate zero-coverage guard, mtibbits/volk#165).
+    # treats a not-found label (SymbolNotEmittedError -- genuinely inlined
+    # away, or absent) as a hard failure instead of skip-with-warning.
+    # Omitted -> today's skip-with-warning behavior (subject to the
+    # aggregate zero-coverage guard, mtibbits/volk#165).
     cmake_parse_arguments(CGE
         "REQUIRE_STANDALONE" "${required_args};REQUIRE_MNEMONIC" "" ${ARGN})
 
