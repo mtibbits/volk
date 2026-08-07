@@ -244,16 +244,17 @@ Retention: latest snapshot only — a new snapshot replaces the old files
   mode compiles to an explicit skip (no POSIX signals); everything else —
   including the combined negative control ctest — runs.
 - **ASan builds:** canary far-past demo is gated to ASan; misaligned mode needs
-  the `ASAN_OPTIONS` above. Under the ASAN build type the control-kernel TU
-  (`qa_canary_kernel.cc`) is compiled with `-fno-sanitize=alignment` so a strict
-  UBSan lane (`halt_on_error=1`) can run the misaligned mode — the planted
-  `movaps` still faults; only the pre-fault UBSan report is suppressed, and only
-  for that one test-only TU (#221). The ctest `qa_strict_misaligned_canary`
-  (registered on ASAN builds only) runs the strict misaligned mode and goes red
-  if the exemption is ever lost. The exemption follows the ASAN build type
-  only: a UBSan build configured another way (e.g. `-DCMAKE_BUILD_TYPE=Debug`
-  with `-fsanitize=undefined` in `CMAKE_CXX_FLAGS`) still reports the planted
-  load under `halt_on_error=1`.
+  the `ASAN_OPTIONS` above. The control-kernel TU (`qa_canary_kernel.cc`) is
+  compiled with `-fno-sanitize=alignment` on **every** non-Windows build
+  (#221, gate widened by #162) so any UBSan-enabled lane (`halt_on_error=1`)
+  can run the misaligned mode — the planted `movaps` still faults; only the
+  pre-fault UBSan report is suppressed, and only for that one test-only TU.
+  The flag is an accepted no-op when no sanitizer is enabled, and UBSan can
+  arrive via injected `-fsanitize=undefined` flags on any build type (e.g.
+  `-DCMAKE_BUILD_TYPE=Debug` sanitizer sweeps), not just `CBTU=ASAN` — which
+  is why the exemption no longer follows the build type. Only the
+  `qa_strict_misaligned_canary` ctest *registration* remains ASAN-gated; it
+  runs the strict misaligned mode and goes red if the exemption is ever lost.
 - **Default qa:** `volk_test_all` and the per-kernel `qa_volk_*` ctests are
   byte-for-byte unaffected by every capability here; all harness behavior is
   opt-in via the env toggles.

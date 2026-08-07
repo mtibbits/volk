@@ -344,7 +344,8 @@ static volk_immutability_summary quiet_immutability_run(volk_test_case_t& tc,
 
 // #91: run the misaligned check for one (kernel, vlen) with stdout muted (mirrors
 // quiet_immutability_run). Hardware faults are handled INSIDE
-// run_volk_misaligned_test by the signal path (-> summary.crashed); a C++
+// run_volk_misaligned_test -- by the signal path for non-puppets, by fork
+// isolation (#162) for puppets (-> summary.crashed either way); a C++
 // exception here is non-signal harness plumbing, out of #91 scope -- report it
 // skipped (applied stays false) with a note rather than mislabeling it.
 static volk_misaligned_summary quiet_misaligned_run(volk_test_case_t& tc, unsigned int v)
