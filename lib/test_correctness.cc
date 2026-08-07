@@ -1027,6 +1027,34 @@ int main(int argc, char* argv[])
                 std::cout.flush();
                 continue;
             }
+            // #162 mapping-completeness note (stderr, advisory): a master impl
+            // with no same-named puppet wrapper is invisible to EVERY qa mode --
+            // the puppet's impl list is the coverage ceiling for a puppet-only
+            // kernel class. Name-set check only: a wrapper that exists but calls
+            // the WRONG master impl is out of reach here (source-level property).
+            if (tc.puppet_master_name() != "NULL" && tc.has_master_desc()) {
+                std::vector<std::string> unmapped;
+                for (size_t mi = 0; mi < tc.master_desc().n_impls; ++mi) {
+                    const std::string m = tc.master_desc().impl_names[mi];
+                    bool found = false;
+                    for (size_t pi = 0; pi < tc.desc().n_impls; ++pi) {
+                        if (m == tc.desc().impl_names[pi]) {
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (!found)
+                        unmapped.push_back(m);
+                }
+                if (!unmapped.empty()) {
+                    std::cerr << "note  [misaligned] " << tc.name() << ": master "
+                              << tc.puppet_master_name()
+                              << " impls with no puppet wrapper:";
+                    for (const std::string& m : unmapped)
+                        std::cerr << " " << m;
+                    std::cerr << "\n";
+                }
+            }
             std::vector<unsigned int> crash_vlens;
             std::vector<unsigned int> diverge_vlens;
             bool any_applied = false;

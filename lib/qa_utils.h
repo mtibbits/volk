@@ -160,6 +160,12 @@ private:
     std::string _name;
     volk_test_params_t _test_parameters;
     std::string _puppet_master_name;
+    // #162: the puppet MASTER's own dispatch metadata, captured by
+    // VOLK_INIT_PUPP so the harness can compare the master's impl list against
+    // the puppet's wrappers (mapping-completeness). Points at the kernel's
+    // static tables; by-value copy is safe.
+    volk_func_desc_t _master_desc;
+    bool _has_master_desc = false;
 
 public:
     volk_func_desc_t desc() { return _desc; };
@@ -167,6 +173,8 @@ public:
     std::string name() { return _name; };
     std::string puppet_master_name() { return _puppet_master_name; };
     volk_test_params_t test_parameters() { return _test_parameters; };
+    volk_func_desc_t master_desc() { return _master_desc; };
+    bool has_master_desc() { return _has_master_desc; };
     // normal ctor
     volk_test_case_t(volk_func_desc_t desc,
                      void (*t_kernel_ptr)(),
@@ -182,12 +190,15 @@ public:
                      void (*t_kernel_ptr)(),
                      std::string name,
                      std::string puppet_master_name,
+                     volk_func_desc_t master_desc,
                      volk_test_params_t test_parameters)
         : _desc(desc),
           _kernel_ptr(t_kernel_ptr),
           _name(name),
           _test_parameters(test_parameters),
-          _puppet_master_name(puppet_master_name){};
+          _puppet_master_name(puppet_master_name),
+          _master_desc(master_desc),
+          _has_master_desc(true){};
 };
 
 class volk_qa_aligned_mem_pool
