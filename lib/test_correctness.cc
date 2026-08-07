@@ -342,6 +342,25 @@ static volk_immutability_summary quiet_immutability_run(volk_test_case_t& tc,
     return summary;
 }
 
+// #162: master impls with no same-named puppet wrapper -- the puppet's impl
+// list is the coverage ceiling for a puppet-only kernel class, so an unmapped
+// master impl is invisible to EVERY qa mode. Name-set check only: a wrapper
+// that exists but calls the WRONG master impl is out of reach here
+// (source-level property). Self-checked by the misaligned mode's mapping-note
+// negative control against hand-built descs.
+static std::vector<std::string> unmapped_master_impls(volk_func_desc_t master,
+                                                      volk_func_desc_t puppet)
+{
+    const std::vector<std::string> master_impls = get_arch_list(master);
+    const std::vector<std::string> puppet_impls = get_arch_list(puppet);
+    std::vector<std::string> unmapped;
+    for (const std::string& m : master_impls) {
+        if (std::find(puppet_impls.begin(), puppet_impls.end(), m) == puppet_impls.end())
+            unmapped.push_back(m);
+    }
+    return unmapped;
+}
+
 // #91: run the misaligned check for one (kernel, vlen) with stdout muted (mirrors
 // quiet_immutability_run). Hardware faults are handled INSIDE
 // run_volk_misaligned_test -- by the signal path for non-puppets, by fork
@@ -971,17 +990,27 @@ int main(int argc, char* argv[])
         const volk_misaligned_summary pfault_sum =
             run_fork_nc((void (*)())(&volk_32f_misalignedfault_32f),
                         "volk_32f_misalignedfaultpuppet_32f");
+        // #162: the DIVERGED verdict rides its own transport (the child's
+        // third phase byte), which the fault twin cannot exercise -- a planted
+        // alignment-sensitive kernel proves the 'D' path end to end.
+        const volk_misaligned_summary pdiv_sum =
+            run_fork_nc((void (*)())(&volk_32f_misaligneddiverge_32f),
+                        "volk_32f_misaligneddivergepuppet_32f");
         const char* pnc_err = nullptr;
         if (pok_sum.crashed || pok_sum.diverged) {
             pnc_err = "the correct planted kernel was flagged through the fork-"
                       "isolation (puppet) path -- the forked detector over-reports";
-        } else if (!pok_sum.applied || !pfault_sum.applied) {
+        } else if (!pok_sum.applied || !pfault_sum.applied || !pdiv_sum.applied) {
             pnc_err = "the fork-isolation (puppet) path could not run at all -- "
                       "puppet kernels would silently lose misaligned coverage";
         } else if (!pfault_sum.crashed) {
             pnc_err = "the planted aligned-load kernel did not produce a recorded "
                       "crash through the fork-isolation (puppet) path -- child "
                       "fault classification is broken";
+        } else if (pdiv_sum.crashed || !pdiv_sum.diverged) {
+            pnc_err = "the planted alignment-sensitive kernel did not produce a "
+                      "recorded DIVERGENCE through the fork-isolation (puppet) "
+                      "path -- the child's diverged-verdict transport is broken";
         }
         if (pnc_err) {
             std::cerr << "NEGATIVE CONTROL LOST (fork path): " << pnc_err
@@ -991,8 +1020,37 @@ int main(int argc, char* argv[])
             return 2;
         }
         std::cerr << "misaligned fork-path negative control OK: ok-kernel clean "
-                     "through fork isolation, child crash recorded and the run "
-                     "continued.\n";
+                     "through fork isolation, child crash recorded, child "
+                     "divergence recorded, and the run continued.\n";
+
+        // #162: mapping-note self-check. The unmapped-impl computation below
+        // (unmapped_master_impls) is advisory output with no failing consumer,
+        // so a broken comparison would be invisible -- prove it can both fire
+        // and stay quiet against two hand-built descs before trusting its
+        // silence over the real catalog.
+        {
+            static const char* mc_master_names[] = { "generic", "u_planted" };
+            static const int mc_master_deps[] = { 0, 0 };
+            static const bool mc_master_align[] = { false, false };
+            volk_func_desc_t mc_master;
+            mc_master.impl_names = mc_master_names;
+            mc_master.impl_deps = mc_master_deps;
+            mc_master.impl_alignment = mc_master_align;
+            mc_master.n_impls = 2;
+            const std::vector<std::string> um_fire =
+                unmapped_master_impls(mc_master, volk_canary_desc());
+            const std::vector<std::string> um_quiet =
+                unmapped_master_impls(volk_canary_desc(), mc_master);
+            if (um_fire.size() != 1 || um_fire[0] != "u_planted" || !um_quiet.empty()) {
+                std::cerr << "NEGATIVE CONTROL LOST (mapping note): the "
+                             "unmapped-master-impl computation misclassified a "
+                             "hand-built desc pair -- its silence over the real "
+                             "catalog cannot be trusted. Aborting.\n";
+                if (report)
+                    std::fclose(report);
+                return 2;
+            }
+        }
 
         // Per-kernel misaligned sweep over the real kernels (unaligned impls only).
         //   FAIL -> an impl crashed on misaligned buffers or diverged from the
@@ -1005,6 +1063,22 @@ int main(int argc, char* argv[])
         for (auto& tc : test_cases) {
             if (!filter.empty() && tc.name() != filter)
                 continue;
+            // #162 mapping-completeness note (stderr, advisory; BEFORE the
+            // conv_k7 exclusion so every puppet -- excluded ones included --
+            // gets a completeness check, as the harness README states).
+            // Self-checked by the mapping-note negative control above.
+            if (tc.is_puppet()) {
+                const std::vector<std::string> unmapped =
+                    unmapped_master_impls(tc.master_desc(), tc.desc());
+                if (!unmapped.empty()) {
+                    std::cerr << "note  [misaligned] " << tc.name() << ": master "
+                              << tc.puppet_master_name()
+                              << " impls with no puppet wrapper:";
+                    for (const std::string& m : unmapped)
+                        std::cerr << " " << m;
+                    std::cerr << "\n";
+                }
+            }
             // #162: puppets now run under FORK isolation (routed by
             // quiet_misaligned_run via fork_isolation), so the longjmp safety
             // argument is untouched: no impl with internal allocation ever runs
@@ -1020,33 +1094,10 @@ int main(int argc, char* argv[])
                 std::cout.flush();
                 continue;
             }
-            // #162 mapping-completeness note (stderr, advisory): a master impl
-            // with no same-named puppet wrapper is invisible to EVERY qa mode --
-            // the puppet's impl list is the coverage ceiling for a puppet-only
-            // kernel class. Name-set check only: a wrapper that exists but calls
-            // the WRONG master impl is out of reach here (source-level property).
-            if (tc.is_puppet()) {
-                const std::vector<std::string> master_impls =
-                    get_arch_list(tc.master_desc());
-                const std::vector<std::string> puppet_impls = get_arch_list(tc.desc());
-                std::vector<std::string> unmapped;
-                for (const std::string& m : master_impls) {
-                    if (std::find(puppet_impls.begin(), puppet_impls.end(), m) ==
-                        puppet_impls.end())
-                        unmapped.push_back(m);
-                }
-                if (!unmapped.empty()) {
-                    std::cerr << "note  [misaligned] " << tc.name() << ": master "
-                              << tc.puppet_master_name()
-                              << " impls with no puppet wrapper:";
-                    for (const std::string& m : unmapped)
-                        std::cerr << " " << m;
-                    std::cerr << "\n";
-                }
-            }
             std::vector<unsigned int> crash_vlens;
             std::vector<unsigned int> diverge_vlens;
             bool any_applied = false;
+            int setup_failed_total = 0; // #162: fork/pipe setup losses
             std::set<std::string> impls_seen;
             std::map<std::string, std::vector<unsigned int>> crash_fails;
             std::map<std::string, std::vector<unsigned int>> diverge_fails;
@@ -1054,6 +1105,7 @@ int main(int argc, char* argv[])
                 const volk_misaligned_summary s = quiet_misaligned_run(tc, v);
                 if (s.applied)
                     any_applied = true;
+                setup_failed_total += s.setup_failed;
                 if (s.crashed)
                     crash_vlens.push_back(v);
                 if (s.diverged)
@@ -1098,6 +1150,11 @@ int main(int argc, char* argv[])
             } else {
                 std::cout << "ok    [misaligned] " << tc.name() << iso_tag;
             }
+            // #162: a partially-exercised kernel must not print a bare ok row
+            // -- fork/pipe setup losses are uncounted (fail-closed) but their
+            // count is surfaced right where the coverage claim is made.
+            if (setup_failed_total > 0)
+                std::cout << "  setup-failed impl-runs: " << setup_failed_total;
             std::cout << "\n";
             if (report) {
                 // Crash and diverge rows are both FAIL; an impl hit by both

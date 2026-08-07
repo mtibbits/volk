@@ -897,18 +897,26 @@ if(ENABLE_TESTING)
     # strict lane (halt_on_error=1) dies pre-sweep. Exempt this one test-only
     # TU (#221; details: harness README, Platform notes). A function-level
     # no_sanitize attribute does NOT work here -- GCC generates the check
-    # inside the always-inlined _mm_load_ps. Unconditional on POSIX (#162,
-    # widening #221's ASAN-build-type gate): UBSan can arrive via injected
-    # -fsanitize flags on ANY build type (e.g. sanitizer sweeps over Debug),
-    # not just CBTU=ASAN, and -fno-sanitize=alignment is an accepted no-op
-    # when no sanitizer is enabled. The qa_strict_misaligned_canary ctest is
-    # the regression detector: it goes red if the exemption is dropped, stops
-    # reaching the compile line, or the canary stops faulting (NC-LOST exit 2).
+    # inside the always-inlined _mm_load_ps. Applied on every POSIX build
+    # whose compiler accepts the flag (#162, widening #221's ASAN-build-type
+    # gate): UBSan can arrive via injected -fsanitize flags on ANY build type
+    # (e.g. sanitizer sweeps over Debug), not just CBTU=ASAN, and
+    # -fno-sanitize=alignment is a no-op when no sanitizer is enabled. The
+    # flag-support probe follows this file's check_cxx_compiler_flag idiom
+    # rather than asserting compiler behavior. The qa_strict_misaligned_canary
+    # ctest is the regression detector: it goes red if the exemption is
+    # dropped, stops reaching the compile line, or the canary stops faulting
+    # (NC-LOST exit 2).
     if(NOT WIN32)
-        set_property(
-            SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/qa_canary_kernel.cc
-            APPEND
-            PROPERTY COMPILE_OPTIONS "-fno-sanitize=alignment")
+        include(CheckCXXCompilerFlag)
+        check_cxx_compiler_flag("-fno-sanitize=alignment"
+                                HAVE_NO_SANITIZE_ALIGNMENT)
+        if(HAVE_NO_SANITIZE_ALIGNMENT)
+            set_property(
+                SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/qa_canary_kernel.cc
+                APPEND
+                PROPERTY COMPILE_OPTIONS "-fno-sanitize=alignment")
+        endif()
     endif()
     if(NOT WIN32 AND CBTU STREQUAL "ASAN")
         add_test(NAME qa_strict_misaligned_canary
@@ -925,11 +933,29 @@ if(ENABLE_TESTING)
     # must produce a real, fork-routed ok row (not the pre-#162 skip, and not
     # a silent loss of the fork routing -- the "(fork-isolated)" tag is printed
     # only on the puppet path). The fail regex reds the lane on any recorded
-    # FAIL row or a lost negative control (either pair; the fork-path pair is
-    # the #101-class regression proof: a planted unaligned fault in a forked
-    # child must be recorded while the run continues). POSIX-only: the mode is
-    # signal/fork-based and compiles to a fail-closed skip on WIN32.
-    if(NOT WIN32)
+    # FAIL row or a lost negative control (any of the three pairs; the
+    # fork-path fault twin is the #101-class regression proof: a planted
+    # unaligned fault in a forked child must be recorded while the run
+    # continues). NOTE: setting PASS_REGULAR_EXPRESSION makes ctest IGNORE the
+    # process exit code -- the NC blocks run before the sweep row is printed,
+    # so an NC loss is still caught by the fail regex; that ordering is
+    # load-bearing. Registration is gated to x86_64 POSIX hosts: this is a
+    # HARD covered-and-clean contract, and x86_64 (plain/ASan/UBSan) is the
+    # validated set. The misaligned mode has never run in CI on the QEMU
+    # arches (armv7/ppc64le/s390x/riscv64) or aarch64 -- enabling it there
+    # blind risks lane-redding on alignment behavior nobody has probed
+    # (degenerate volk_get_alignment(), QEMU fork semantics, arch-specific
+    # divergence). Broadening after a cross-arch probe is a filed follow-up;
+    # other hosts can opt in with -DVOLK_MISALIGNED_PUPPET_CTEST=ON.
+    if(NOT WIN32 AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|amd64|AMD64)$")
+        set(VOLK_MISALIGNED_PUPPET_CTEST_DEFAULT ON)
+    else()
+        set(VOLK_MISALIGNED_PUPPET_CTEST_DEFAULT OFF)
+    endif()
+    option(VOLK_MISALIGNED_PUPPET_CTEST
+           "Register the qa_misaligned_puppet_control ctest (#162)"
+           ${VOLK_MISALIGNED_PUPPET_CTEST_DEFAULT})
+    if(NOT WIN32 AND VOLK_MISALIGNED_PUPPET_CTEST)
         add_test(NAME qa_misaligned_puppet_control
                  COMMAND volk_test_correctness volk_32fc_s32fc_rotator2puppet_32fc)
         set_tests_properties(

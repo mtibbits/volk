@@ -7,13 +7,16 @@
  * SPDX-License-Identifier: LGPL-3.0-or-later
  */
 
-// Under the ASAN build type this TU is compiled with -fno-sanitize=alignment
-// (see lib/CMakeLists.txt, #221): UBSan will NOT report misaligned access from
-// anything added to this file — the planted faults must stay real faults.
+// On every non-Windows build this TU is compiled with -fno-sanitize=alignment
+// (see lib/CMakeLists.txt; #221, gate widened by #162 because UBSan can arrive
+// via injected -fsanitize flags on any build type): UBSan will NOT report
+// misaligned access from anything added to this file — the planted faults must
+// stay real faults.
 
 #include "qa_canary_kernel.h"
 
 #include "volk/volk_complex.h" // lv_32fc_t/lv_cmake (planted power pair, #92)
+#include <volk/volk.h>         // volk_get_alignment (misaligned-diverge control, #162)
 #include <cmath>               // atan2f/powf/cosf/sinf/tanhf (planted defect pairs, #92)
 #include <csignal>             // for raise (misaligned-fault portable fallback, #91)
 #include <cstdint>             // for uint32_t (input-immutability scribble, #90)
@@ -121,6 +124,28 @@ void volk_32f_misalignedfault_32f(void* out,
 #endif
     for (unsigned int n = 0; n < num_points; ++n) {
         o[n] = i[n];
+    }
+}
+
+void volk_32f_misaligneddiverge_32f(void* out,
+                                    void* in,
+                                    unsigned int num_points,
+                                    const char*)
+{
+    float* o = static_cast<float*>(out);
+    const float* i = static_cast<const float*>(in);
+    for (unsigned int n = 0; n < num_points; ++n) {
+        o[n] = i[n];
+    }
+    // The planted defect (#162): the result depends on the INPUT pointer's
+    // alignment. The harness's aligned pool buffers sit ON a
+    // volk_get_alignment() boundary; its misaligned copies sit one element past
+    // one -- so the perturbation fires on exactly the misaligned run, far
+    // beyond any kernel tol, and the aligned-vs-misaligned compare MUST report
+    // divergence (never a crash). This is the failure class the
+    // misalignedfault control cannot exercise: a wrong-answer, not a fault.
+    if (num_points > 0 && reinterpret_cast<uintptr_t>(in) % volk_get_alignment() != 0) {
+        o[0] += 1000.0f;
     }
 }
 

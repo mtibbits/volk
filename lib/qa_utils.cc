@@ -2942,6 +2942,54 @@ run_volk_misaligned_test(volk_func_desc_t desc,
     // write only a fixed-size scalar into out[0..k), and output cardinality
     // cannot be derived from the signature (#89 lesson). With a common prefill,
     // never-written regions are 0 == 0 and only kernel-written elements compare.
+
+    // Buffer-cycle helpers shared by the signal path and the #162 fork path so
+    // the two cannot drift (both run OUTSIDE any sigsetjmp window; only the
+    // run_impl_direct calls sit inside one, so the setjmp-clobber discipline is
+    // untouched by this sharing).
+    // Aligned reference side: this impl's pool buffers, outputs zero-prefilled.
+    auto gather_aligned_buffs = [&](size_t impl_idx) {
+        std::vector<void*> abuffs;
+        for (size_t j = 0; j < d.both_sigs.size(); j++) {
+            abuffs.push_back(d.test_data[impl_idx][j]);
+        }
+        for (size_t j = 0; j < d.outputsig.size(); j++) {
+            const size_t out_bytes = static_cast<size_t>(vlen) * d.outputsig[j].size *
+                                     (d.outputsig[j].is_complex ? 2 : 1);
+            memset(abuffs[j], 0, out_bytes);
+        }
+        return abuffs;
+    };
+    // Misaligned test side: own-malloc misaligned copies, identical inputs.
+    // vlen_twiddle padding: the misaligned copy must span the same seeded
+    // region as the aligned pool buffer so a fixed-element over-read reads
+    // identical bytes on both sides (#98; a mere zero-fill would make the
+    // vlen < 5 comparison vacuous).
+    auto build_misaligned_buffs =
+        [&](std::vector<std::unique_ptr<misaligned_buffer>>& mbufs) {
+            std::vector<void*> buffs;
+            for (size_t j = 0; j < d.both_sigs.size(); j++) {
+                const size_t elem =
+                    d.both_sigs[j].size * (d.both_sigs[j].is_complex ? 2 : 1);
+                const size_t bytes = static_cast<size_t>(vlen + vlen_twiddle) * elem;
+                mbufs.push_back(
+                    std::make_unique<misaligned_buffer>(bytes, alignment, elem));
+                buffs.push_back(mbufs.back()->data());
+            }
+            for (size_t j = 0; j < d.outputsig.size(); j++) {
+                const size_t out_bytes = static_cast<size_t>(vlen) * d.outputsig[j].size *
+                                         (d.outputsig[j].is_complex ? 2 : 1);
+                memset(buffs[j], 0, out_bytes);
+            }
+            for (size_t k = 0; k < d.inputsig.size(); k++) {
+                const size_t elem =
+                    d.inputsig[k].size * (d.inputsig[k].is_complex ? 2 : 1);
+                const size_t in_bytes = static_cast<size_t>(vlen + vlen_twiddle) * elem;
+                memcpy(buffs[d.outputsig.size() + k], d.inbuffs[k], in_bytes);
+            }
+            return buffs;
+        };
+
     scoped_fault_isolation guard_signals;
 
     for (size_t i = 0; i < d.arch_list.size(); i++) {
@@ -2975,6 +3023,7 @@ run_volk_misaligned_test(volk_func_desc_t desc,
             if (pipe(pfd) != 0) {
                 std::cerr << name << ": pipe() failed for arch " << arch
                           << " -- impl not exercised (not counted)\n";
+                summary.setup_failed++; // surfaced on the driver's row (#162)
                 continue; // fail closed: neither applied nor checked
             }
             const pid_t pid = fork();
@@ -2983,50 +3032,18 @@ run_volk_misaligned_test(volk_func_desc_t desc,
                 close(pfd[1]);
                 std::cerr << name << ": fork() failed for arch " << arch
                           << " -- impl not exercised (not counted)\n";
+                summary.setup_failed++; // surfaced on the driver's row (#162)
                 continue; // fail closed
             }
             if (pid == 0) {
                 close(pfd[0]);
-                // Child cycle mirrors the signal path's buffer discipline below
-                // (same #98 vlen_twiddle seeding rationale, same zero-prefill
-                // contract) minus the sigsetjmp windows -- keep both in sync.
                 // ---- child: aligned reference run (no sigsetjmp window) ----
-                std::vector<void*> abuffs;
-                for (size_t j = 0; j < d.both_sigs.size(); j++) {
-                    abuffs.push_back(d.test_data[i][j]);
-                }
-                for (size_t j = 0; j < d.outputsig.size(); j++) {
-                    const size_t out_bytes = static_cast<size_t>(vlen) *
-                                             d.outputsig[j].size *
-                                             (d.outputsig[j].is_complex ? 2 : 1);
-                    memset(abuffs[j], 0, out_bytes);
-                }
+                std::vector<void*> abuffs = gather_aligned_buffs(i);
                 run_impl_direct(abuffs, arch_cstr);
                 send_phase(pfd[1], 'A');
                 // ---- child: misaligned run, identical inputs ----
                 std::vector<std::unique_ptr<misaligned_buffer>> mbufs;
-                std::vector<void*> buffs;
-                for (size_t j = 0; j < d.both_sigs.size(); j++) {
-                    const size_t elem =
-                        d.both_sigs[j].size * (d.both_sigs[j].is_complex ? 2 : 1);
-                    const size_t bytes = static_cast<size_t>(vlen + vlen_twiddle) * elem;
-                    mbufs.push_back(
-                        std::make_unique<misaligned_buffer>(bytes, alignment, elem));
-                    buffs.push_back(mbufs.back()->data());
-                }
-                for (size_t j = 0; j < d.outputsig.size(); j++) {
-                    const size_t out_bytes = static_cast<size_t>(vlen) *
-                                             d.outputsig[j].size *
-                                             (d.outputsig[j].is_complex ? 2 : 1);
-                    memset(buffs[j], 0, out_bytes);
-                }
-                for (size_t k = 0; k < d.inputsig.size(); k++) {
-                    const size_t elem =
-                        d.inputsig[k].size * (d.inputsig[k].is_complex ? 2 : 1);
-                    const size_t in_bytes =
-                        static_cast<size_t>(vlen + vlen_twiddle) * elem;
-                    memcpy(buffs[d.outputsig.size() + k], d.inbuffs[k], in_bytes);
-                }
+                std::vector<void*> buffs = build_misaligned_buffs(mbufs);
                 run_impl_direct(buffs, arch_cstr);
                 send_phase(pfd[1], 'M');
                 // ---- child: compare (same helper as the signal path) ----
@@ -3085,15 +3102,7 @@ run_volk_misaligned_test(volk_func_desc_t desc,
         summary.checked_impls.push_back(arch); // #92 triage detail
 
         // ---- Reference run: this impl on its ALIGNED pool buffers ----
-        std::vector<void*> abuffs;
-        for (size_t j = 0; j < d.both_sigs.size(); j++) {
-            abuffs.push_back(d.test_data[i][j]);
-        }
-        for (size_t j = 0; j < d.outputsig.size(); j++) {
-            const size_t out_bytes = static_cast<size_t>(vlen) * d.outputsig[j].size *
-                                     (d.outputsig[j].is_complex ? 2 : 1);
-            memset(abuffs[j], 0, out_bytes);
-        }
+        std::vector<void*> abuffs = gather_aligned_buffs(i);
         const char* arch_cstr = arch.c_str(); // materialized BEFORE sigsetjmp
         g_misaligned_sig = 0;
         // setjmp-clobber discipline: NOTHING may be modified between a sigsetjmp
@@ -3116,28 +3125,7 @@ run_volk_misaligned_test(volk_func_desc_t desc,
 
         // ---- Test run: the SAME impl on misaligned buffers, identical inputs ----
         std::vector<std::unique_ptr<misaligned_buffer>> mbufs;
-        std::vector<void*> buffs;
-        for (size_t j = 0; j < d.both_sigs.size(); j++) {
-            const size_t elem = d.both_sigs[j].size * (d.both_sigs[j].is_complex ? 2 : 1);
-            // vlen_twiddle padding here too: the misaligned copy must span the same
-            // seeded region as the aligned pool buffer so a fixed-element over-read
-            // reads identical bytes on both sides (#98).
-            const size_t bytes = static_cast<size_t>(vlen + vlen_twiddle) * elem;
-            mbufs.push_back(std::make_unique<misaligned_buffer>(bytes, alignment, elem));
-            buffs.push_back(mbufs.back()->data());
-        }
-        for (size_t j = 0; j < d.outputsig.size(); j++) {
-            const size_t out_bytes = static_cast<size_t>(vlen) * d.outputsig[j].size *
-                                     (d.outputsig[j].is_complex ? 2 : 1);
-            memset(buffs[j], 0, out_bytes);
-        }
-        for (size_t k = 0; k < d.inputsig.size(); k++) {
-            // Copy the full seeded region (vlen + vlen_twiddle), matching the aligned
-            // pool pre-image, so fixed-element over-reads see identical bytes (#98).
-            const size_t elem = d.inputsig[k].size * (d.inputsig[k].is_complex ? 2 : 1);
-            const size_t in_bytes = static_cast<size_t>(vlen + vlen_twiddle) * elem;
-            memcpy(buffs[d.outputsig.size() + k], d.inbuffs[k], in_bytes);
-        }
+        std::vector<void*> buffs = build_misaligned_buffs(mbufs);
 
         g_misaligned_sig = 0;
         if (sigsetjmp(g_misaligned_jmp, 1) == 0) {

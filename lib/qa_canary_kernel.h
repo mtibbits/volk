@@ -98,6 +98,13 @@ void volk_32f_misalignedfault_32f(void* out,
                                   void* in,
                                   unsigned int num_points,
                                   const char* arch);
+// #162 misaligned negative control: output depends on the INPUT pointer's
+// alignment (the alignment-sensitive-result class) -- proves the DIVERGED
+// verdict transport, the failure class the fault control cannot exercise.
+void volk_32f_misaligneddiverge_32f(void* out,
+                                    void* in,
+                                    unsigned int num_points,
+                                    const char* arch);
 
 // #92 combined negative control: test-only copies of the two escaped defects
 // that motivated epic #85, paired with corrected twins. The defect copies are

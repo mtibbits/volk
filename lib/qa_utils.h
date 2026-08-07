@@ -376,6 +376,10 @@ struct volk_misaligned_summary {
     bool crashed = false;
     bool diverged = false;
     bool applied = false;
+    // #162: impls whose fork/pipe setup failed (fork path only). They are NOT
+    // counted in checked_impls/applied (fail-closed), but the count is
+    // surfaced so a partially-exercised kernel cannot print a bare ok row.
+    int setup_failed = 0;
     // #92 triage detail (same convention as volk_canary_summary).
     std::vector<std::string> checked_impls;
     std::vector<std::string> crashed_impls;
