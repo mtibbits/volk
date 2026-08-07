@@ -2573,10 +2573,11 @@ namespace {
 // load on a misaligned address raises a hardware signal, not a C++ exception, so
 // catch(...) cannot trap it. sigsetjmp/siglongjmp is sound HERE because every
 // exercised impl is a pure computational loop over harness-owned buffers (the
-// driver skips puppets): no locks, allocations, or unwind-relevant state can be
-// in flight at the faulting instruction, and the dispatch deliberately uses
-// direct casted calls so no C++ frame with a non-trivial destructor sits between
-// the sigsetjmp and the fault.
+// driver routes puppets to the fork-isolation path -- see fork_isolation, #162 --
+// so no impl with internal allocation runs under the signal guard): no locks,
+// allocations, or unwind-relevant state can be in flight at the faulting
+// instruction, and the dispatch deliberately uses direct casted calls so no C++
+// frame with a non-trivial destructor sits between the sigsetjmp and the fault.
 // Single-threaded qa binary by design: process-wide handlers + globals are safe
 // (the faults are synchronous; there is no second thread to race).
 sigjmp_buf g_misaligned_jmp;

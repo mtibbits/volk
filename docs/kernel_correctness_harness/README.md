@@ -29,7 +29,7 @@ environment variable:
 | `HARNESS_CANARY=1` | output-buffer canary: guarded own-malloc buffers, two-sentinel over/under-write + unwritten-element checks | #89 |
 | `HARNESS_CANARY_ASAN_DEMO=1` | (with `HARNESS_CANARY`, ASan build only) far-past over-run demo proving the guarded buffers are ASan-bracketed | #89 |
 | `HARNESS_IMMUTABLE=1` | input-immutability canary: byte-exact post-run compare of every input against its pristine pre-image | #90 |
-| `HARNESS_MISALIGNED=1` | misaligned `_u_`-variant runs: every unaligned impl on deliberately misaligned buffers, with scoped signal trapping (POSIX only); strict-UBSan regression detector is the ctest `qa_strict_misaligned_canary` (ASAN build type only) | #91 / #221 |
+| `HARNESS_MISALIGNED=1` | misaligned `_u_`-variant runs: every unaligned impl on deliberately misaligned buffers, with scoped signal trapping (POSIX only); puppet kernels run under fork isolation with `(fork-isolated)`-tagged rows (ctest `qa_misaligned_puppet_control`); strict-UBSan regression detector is the ctest `qa_strict_misaligned_canary` (ASAN build type only) | #91 / #221 / #162 |
 | `HARNESS_COMBINED_NC=1` | combined negative control (the ctest `qa_harness_negative_control`) | #92 |
 | `HARNESS_REPORT=path` | write the per-kernel × per-impl CSV (format below) in any mode | #87 / #92 |
 | `HARNESS_VERBOSE=1` | unmute the per-impl stdout of the underlying qa runs | — |
@@ -126,9 +126,34 @@ the kernel's numbers and cite this section.
   element-aligned but vector-misaligned buffers; SIGSEGV/SIGBUS/SIGILL are
   trapped with a scoped handler (one crashing impl = one recorded FAIL, the
   run continues) and output is compared against the same impl's aligned run.
-  POSIX-only (compiled out to an explicit skip on Windows). Puppet kernels are
-  excluded by design (no internal-allocation impls under the signal guard) —
-  defects reachable only through puppets are outside this mode's coverage.
+  POSIX-only (compiled out to an explicit skip on Windows).
+- **Puppet kernels (#162):** covered via **fork isolation**, not the signal
+  guard — puppets may allocate internally (3 of the 15 registered puppets do,
+  incl. encodepolar's 7 `volk_malloc` sites), which would make
+  `longjmp`-under-signal-guard recovery unsound. Each puppet impl's whole
+  aligned/misaligned/compare cycle runs in a forked child; a fault kills only
+  the child and the parent records it from the wait status + a phase pipe
+  (fail-closed: an impl whose fork setup fails is not counted, so an
+  all-failed kernel reports `skip`, never `ok`). Puppet rows carry a
+  `(fork-isolated)` stdout tag so the routing is observable. One policy
+  exclusion remains: `volk_8u_conv_k7_r2puppet_8u` prints
+  `skip … (excluded: #96 conv_k7)` until its decision-buffer overflow (#96)
+  lands — the corruption is child-contained but would hard-red every ASan
+  lane for a known, tracked defect. A second negative-control pair (the same
+  planted ok/fault kernels routed through the fork path) runs in **every**
+  misaligned invocation, including the `qa_strict_misaligned_canary` lane;
+  losing it aborts with exit 2. This pair is the regression proof for the
+  #101 defect class (an unaligned fault in a puppet-only worker), pinned in
+  CI by the ctest `qa_misaligned_puppet_control` (POSIX, plain + sanitizer
+  builds), whose pass/fail regexes require the rotator2 puppet's fork-routed
+  `ok` row and forbid FAIL rows or NC loss ("covered AND clean").
+- **Mapping-completeness note (#162):** for each puppet the sweep compares the
+  master kernel's impl-name list against the puppet's wrappers and prints a
+  stderr `note` for any master impl with no same-named wrapper — a stale
+  puppet silently caps coverage for its whole kernel class (the
+  gnuradio/volk#570 popcnt lesson). Advisory, name-set only: a wrapper that
+  exists but calls the *wrong* master impl is a source-level property this
+  check cannot see.
 - **ASan note:** run with
   `ASAN_OPTIONS=handle_segv=0:handle_sigbus=0:handle_sigill=0:allow_user_segv_handler=1`
   or ASan's handler wins and aborts on the first planted fault.
