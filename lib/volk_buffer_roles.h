@@ -42,7 +42,9 @@
  * registered today, including the two-output volk_32f_stddev_and_mean_32f_x2,
  * whose stddev and mean buffers each hold 1 element). A kernel with multiple
  * outputs of differing cardinalities would need a per-output vector -- a
- * planned extension, not yet needed.
+ * planned extension, not yet needed. Declared contracts are scoped to
+ * num_points >= 1 (the canary's vlen range); behavior at num_points == 0 is
+ * not part of any registered claim.
  */
 
 #ifndef INCLUDED_VOLK_BUFFER_ROLES_H

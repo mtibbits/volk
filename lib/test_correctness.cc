@@ -664,9 +664,12 @@ int main(int argc, char* argv[])
         //              on a kernel NOT in the buffer-role registry — the signature
         //              alone cannot distinguish a fixed-output kernel's unwritten
         //              tail from a real map under-write; surfaced for triage, not
-        //              counted as a failure. The fixed-output class is registered
-        //              as of #191, so a fresh `partial` means an unregistered new
-        //              kernel or a real under-write.
+        //              counted as a failure. Every fixed-output kernel in the QA
+        //              roster is registered as of #191 (kernels absent from
+        //              kernel_tests.h — the deprecated max-star family — are
+        //              outside the sweep's reach and stay unregistered), so a
+        //              fresh `partial` means an unregistered new kernel or a
+        //              real under-write.
         // Puppets are skipped: their output-buffer semantics differ from a plain map.
         std::cout << "# output-canary sweep: vlens 1..40, 131071, 1000003\n";
         std::cout.flush();
@@ -780,8 +783,10 @@ int main(int argc, char* argv[])
         if (report)
             std::fclose(report);
         std::cerr << "\noutput-canary sweep: " << c_failed << " / " << c_tested
-                  << " kernels over-ran the output buffer; " << c_partial
-                  << " left in-bounds elements unwritten (reduction/index kernels — "
+                  << " kernels FAILed (guard over-run, or an under-written "
+                     "contracted region on a registered kernel); "
+                  << c_partial
+                  << " left in-bounds elements unwritten (unregistered kernels — "
                      "triage)\n";
         return c_failed > 0 ? 1 : 0;
     }

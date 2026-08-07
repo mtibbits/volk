@@ -10,12 +10,14 @@
 #include "volk_buffer_roles.h"
 
 // Sparse, opt-in buffer-role registry (#161). See volk_buffer_roles.h for the
-// schema and "how to add a kernel". Covers the fixed-output class (#191): every
-// kernel whose single-element-per-output-buffer contract the canary otherwise
-// reports as `part` (the rest of the num_points-sized buffer is legitimately
-// unwritten). Declaring output_elems=1 lets the canary confirm the contracted
-// element was written and emit a hard ok/FAIL. Contracts are scoped to
-// num_points >= 1, the canary's vlen range.
+// schema and "how to add a kernel". Covers the QA-roster fixed-output class
+// (#191): every kernel_tests.h kernel whose single-element-per-output-buffer
+// contract the canary otherwise reports as `part` (the rest of the
+// num_points-sized buffer is legitimately unwritten). Kernels outside the QA
+// roster (the deprecated max-star family) are outside the sweep's reach and
+// stay unregistered. Declaring output_elems=1 lets the canary confirm the
+// contracted element was written and emit a hard ok/FAIL. Contracts are scoped
+// to num_points >= 1, the canary's vlen range.
 static const std::vector<volk_buffer_roles_entry> g_registry{
     // result = sum_i a[i] * b[i] -- single-element dot-product outputs.
     { "volk_32f_x2_dot_prod_32f", 1 },
