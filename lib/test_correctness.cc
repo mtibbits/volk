@@ -942,6 +942,63 @@ int main(int argc, char* argv[])
         std::cerr << "misaligned negative control OK: ok-kernel clean, aligned-load "
                      "kernel crash recorded and the run continued.\n";
 
+        // #162: same negative-control pair through the FORK-isolation path that
+        // puppet test cases use. Asserts (a) the ok-kernel is clean through a
+        // forked child (no over-report), (b) a planted unaligned fault in a child
+        // is RECORDED as a crash while THIS process continues -- the #101 defect
+        // class in a puppet-only worker now surfaces. Any deviation = broken fork
+        // path, exit 2. Runs in every misaligned invocation (incl. the
+        // qa_strict_misaligned_canary lane).
+        nc.clear();
+        const volk_misaligned_summary pok_sum =
+            run_volk_misaligned_test(volk_canary_desc(),
+                                     (void (*)())(&volk_32f_canaryok_32f),
+                                     "volk_32f_canaryokpuppet_32f",
+                                     scalar,
+                                     tol,
+                                     false /*absolute_mode*/,
+                                     nc_vlen,
+                                     &nc,
+                                     kFloatEdges,
+                                     kComplexEdges,
+                                     /*fork_isolation=*/true);
+        nc.clear();
+        const volk_misaligned_summary pfault_sum =
+            run_volk_misaligned_test(volk_canary_desc(),
+                                     (void (*)())(&volk_32f_misalignedfault_32f),
+                                     "volk_32f_misalignedfaultpuppet_32f",
+                                     scalar,
+                                     tol,
+                                     false /*absolute_mode*/,
+                                     nc_vlen,
+                                     &nc,
+                                     kFloatEdges,
+                                     kComplexEdges,
+                                     /*fork_isolation=*/true);
+        nc.clear();
+        const char* pnc_err = nullptr;
+        if (pok_sum.crashed || pok_sum.diverged) {
+            pnc_err = "the correct planted kernel was flagged through the fork-"
+                      "isolation (puppet) path -- the forked detector over-reports";
+        } else if (!pok_sum.applied || !pfault_sum.applied) {
+            pnc_err = "the fork-isolation (puppet) path could not run at all -- "
+                      "puppet kernels would silently lose misaligned coverage";
+        } else if (!pfault_sum.crashed) {
+            pnc_err = "the planted aligned-load kernel did not produce a recorded "
+                      "crash through the fork-isolation (puppet) path -- child "
+                      "fault classification is broken";
+        }
+        if (pnc_err) {
+            std::cerr << "NEGATIVE CONTROL LOST (fork path): " << pnc_err
+                      << ". Aborting.\n";
+            if (report)
+                std::fclose(report);
+            return 2;
+        }
+        std::cerr << "misaligned fork-path negative control OK: ok-kernel clean "
+                     "through fork isolation, child crash recorded and the run "
+                     "continued.\n";
+
         // Per-kernel misaligned sweep over the real kernels (unaligned impls only).
         //   FAIL -> an impl crashed on misaligned buffers or diverged from the
         //           the SAME impl's aligned run (both always defects).

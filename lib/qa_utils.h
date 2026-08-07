@@ -378,6 +378,11 @@ struct volk_misaligned_summary {
 // volk_test_params_t) -- approximate kernels (log2, expfast, tan, ...) carry
 // looser tolerances than the harness default, and using anything else
 // false-positives them.
+// fork_isolation (#162): run each impl's whole aligned/misaligned/compare
+// cycle in a forked child instead of under the sigsetjmp signal guard --
+// required for impls that may allocate internally (puppets), where the
+// longjmp soundness argument does not hold. Fail-closed: an impl whose
+// fork/pipe setup fails is not counted as checked.
 volk_misaligned_summary run_volk_misaligned_test(
     volk_func_desc_t,
     void (*)(),
@@ -388,7 +393,8 @@ volk_misaligned_summary run_volk_misaligned_test(
     unsigned int,
     std::vector<volk_test_results_t>* results = NULL,
     const std::vector<float>& float_edge_cases = std::vector<float>(),
-    const std::vector<lv_32fc_t>& complex_edge_cases = std::vector<lv_32fc_t>());
+    const std::vector<lv_32fc_t>& complex_edge_cases = std::vector<lv_32fc_t>(),
+    bool fork_isolation = false);
 
 #define VOLK_PROFILE(func, test_params, results) \
     run_volk_tests(func##_get_func_desc(),       \
