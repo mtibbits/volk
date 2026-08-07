@@ -31,7 +31,10 @@
  * volk_buffer_roles.cc, keyed by the exact kernel name. Set output_elems to 0
  * for a map kernel (writes `vlen` elements per output) or to the fixed element
  * count for a reduction (e.g. 1 for a dot product / accumulator / single-index).
- * Unregistered kernels keep today's verdict exactly.
+ * Before registering, verify the cardinality against the kernel header's doc
+ * contract AND every impl's stores (a wrong count turns the canary's hard
+ * verdict against the wrong contract). Unregistered kernels keep today's
+ * verdict exactly.
  *
  * NOTE: output_elems is a single value applied to EVERY output buffer of the
  * kernel; it assumes all outputs share one cardinality (true for the single-output
