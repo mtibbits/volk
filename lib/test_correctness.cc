@@ -81,7 +81,10 @@ namespace {
 // (puppet fork-isolation) while the mute is engaged; the child exits via
 // _exit() only, so this destructor never runs in the child — a future child
 // path that unwound or called exit() would restore/close the PARENT's saved
-// fds from inside the child.
+// fds from inside the child. Longjmp-safety: the #91 fault recovery opens its
+// sigsetjmp windows INSIDE run_volk_misaligned_test and recovers there, so no
+// siglongjmp ever crosses this guard's frame; hoisting a sigsetjmp window
+// above the guard would be UB (longjmp across a non-trivial destructor).
 class FdMuteGuard
 {
 public:
@@ -99,8 +102,10 @@ public:
                 dup2(devnull_, STDOUT_FILENO);
         }
     }
-    // Implicitly noexcept: cout's exception mask is the default goodbit here
-    // (nothing in this TU widens it), so flush() cannot throw during unwind.
+    // Implicitly noexcept: no TU linked into this binary calls
+    // std::cout.exceptions() (grep-verified), so the mask stays goodbit and
+    // flush() cannot throw during unwind. A TU that widens the mask would
+    // turn a throwing flush here into std::terminate.
     ~FdMuteGuard()
     {
         std::fflush(stdout);
