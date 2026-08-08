@@ -71,6 +71,62 @@
 #define VOLK_DEVNULL "/dev/null"
 #endif
 
+namespace {
+// #163: single home for the stdout fd-mute dance the four quiet_* helpers
+// previously open-coded, policy included: the constructor flushes (stdio +
+// iostream) and, unless HARNESS_VERBOSE is set (the operator's unmute knob),
+// redirects STDOUT_FILENO to VOLK_DEVNULL; the destructor flushes and
+// restores. Uses the POSIX names mapped by the macro block above, so it must
+// stay in this TU below that block. Fork-safety: the misaligned mode forks
+// (puppet fork-isolation) while the mute is engaged; the child exits via
+// _exit() only, so this destructor never runs in the child — a future child
+// path that unwound or called exit() would restore/close the PARENT's saved
+// fds from inside the child. Longjmp-safety: the #91 fault recovery opens its
+// sigsetjmp windows INSIDE run_volk_misaligned_test and recovers there, so no
+// siglongjmp ever crosses this guard's frame; hoisting a sigsetjmp window
+// above the guard would be UB (longjmp across a non-trivial destructor).
+class FdMuteGuard
+{
+public:
+    FdMuteGuard()
+    {
+        std::fflush(stdout);
+        std::cout.flush();
+        if (std::getenv("HARNESS_VERBOSE") == nullptr) {
+            saved_ = dup(STDOUT_FILENO);
+            devnull_ = open(VOLK_DEVNULL, O_WRONLY);
+            // Only redirect if BOTH fds are valid; otherwise we could mute
+            // stdout with no way to restore it (a failed dup leaves
+            // saved_ == -1).
+            if (saved_ >= 0 && devnull_ >= 0)
+                dup2(devnull_, STDOUT_FILENO);
+        }
+    }
+    // Implicitly noexcept: no TU linked into this binary calls
+    // std::cout.exceptions() (grep-verified), so the mask stays goodbit and
+    // flush() cannot throw during unwind. A TU that widens the mask would
+    // turn a throwing flush here into std::terminate.
+    ~FdMuteGuard()
+    {
+        std::fflush(stdout);
+        std::cout.flush();
+        // Restore only if we actually have the saved fd; never dup2/close(-1).
+        if (saved_ >= 0) {
+            dup2(saved_, STDOUT_FILENO);
+            close(saved_);
+        }
+        if (devnull_ >= 0)
+            close(devnull_);
+    }
+    FdMuteGuard(const FdMuteGuard&) = delete;
+    FdMuteGuard& operator=(const FdMuteGuard&) = delete;
+
+private:
+    int saved_ = -1;
+    int devnull_ = -1;
+};
+} // namespace
+
 // Compile-time AddressSanitizer detection: the far-past ASan demo deliberately
 // writes past the guarded allocation, which is undefined behaviour unless ASan
 // is bracketing it, so it must only run in an ASan build.
@@ -127,18 +183,9 @@ quiet_run(volk_test_case_t& tc,
           std::map<std::string, double>* impl_max_err = nullptr)
 {
     std::vector<volk_test_results_t> results;
-    const bool verbose = (std::getenv("HARNESS_VERBOSE") != nullptr);
-    std::fflush(stdout);
-    std::cout.flush();
-    int saved = -1, devnull = -1;
-    if (!verbose) {
-        saved = dup(STDOUT_FILENO);
-        devnull = open(VOLK_DEVNULL, O_WRONLY);
-        // Only redirect if BOTH fds are valid; otherwise we could mute stdout
-        // with no way to restore it (a failed dup leaves saved == -1).
-        if (saved >= 0 && devnull >= 0)
-            dup2(devnull, STDOUT_FILENO);
-    }
+    // Function-scoped: stdout stays muted until return; a stdout write added
+    // below would be swallowed where the pre-#163 code would have printed it.
+    FdMuteGuard stdout_mute;
     bool fail = false;
     try {
         if (ref) {
@@ -198,17 +245,6 @@ quiet_run(volk_test_case_t& tc,
         if (ref_skip_reason)
             *ref_skip_reason = results.back().skip_reason;
     }
-    std::fflush(stdout);
-    std::cout.flush();
-    if (!verbose) {
-        // Restore only if we actually have the saved fd; never dup2/close(-1).
-        if (saved >= 0) {
-            dup2(saved, STDOUT_FILENO);
-            close(saved);
-        }
-        if (devnull >= 0)
-            close(devnull);
-    }
     return fail;
 }
 
@@ -256,16 +292,8 @@ static volk_canary_summary
 quiet_canary_run(volk_test_case_t& tc, unsigned int v, unsigned int contracted_elems = 0)
 {
     std::vector<volk_test_results_t> results;
-    const bool verbose = (std::getenv("HARNESS_VERBOSE") != nullptr);
-    std::fflush(stdout);
-    std::cout.flush();
-    int saved = -1, devnull = -1;
-    if (!verbose) {
-        saved = dup(STDOUT_FILENO);
-        devnull = open(VOLK_DEVNULL, O_WRONLY);
-        if (saved >= 0 && devnull >= 0)
-            dup2(devnull, STDOUT_FILENO);
-    }
+    // Function-scoped: stdout stays muted until return (see quiet_run).
+    FdMuteGuard stdout_mute;
     volk_canary_summary summary;
     try {
         summary = run_volk_canary_test(tc.desc(),
@@ -280,16 +308,6 @@ quiet_canary_run(volk_test_case_t& tc, unsigned int v, unsigned int contracted_e
     } catch (...) {
         summary.guard_violation = true;
     }
-    std::fflush(stdout);
-    std::cout.flush();
-    if (!verbose) {
-        if (saved >= 0) {
-            dup2(saved, STDOUT_FILENO);
-            close(saved);
-        }
-        if (devnull >= 0)
-            close(devnull);
-    }
     return summary;
 }
 
@@ -301,40 +319,24 @@ static volk_immutability_summary quiet_immutability_run(volk_test_case_t& tc,
                                                         unsigned int v)
 {
     std::vector<volk_test_results_t> results;
-    const bool verbose = (std::getenv("HARNESS_VERBOSE") != nullptr);
-    std::fflush(stdout);
-    std::cout.flush();
-    int saved = -1, devnull = -1;
-    if (!verbose) {
-        saved = dup(STDOUT_FILENO);
-        devnull = open(VOLK_DEVNULL, O_WRONLY);
-        if (saved >= 0 && devnull >= 0)
-            dup2(devnull, STDOUT_FILENO);
-    }
     volk_immutability_summary summary;
     bool threw = false;
-    try {
-        summary = run_volk_immutability_test(tc.desc(),
-                                             tc.kernel_ptr(),
-                                             tc.name(),
-                                             tc.test_parameters().scalar(),
-                                             v /*vlen*/,
-                                             &results,
-                                             kFloatEdges,
-                                             kComplexEdges);
-    } catch (...) {
-        threw = true;
-        summary = volk_immutability_summary(); // applied=false, mutated=false -> skip
-    }
-    std::fflush(stdout);
-    std::cout.flush();
-    if (!verbose) {
-        if (saved >= 0) {
-            dup2(saved, STDOUT_FILENO);
-            close(saved);
+    // Scoped: the cerr note below must print AFTER stdout is restored.
+    {
+        FdMuteGuard stdout_mute;
+        try {
+            summary = run_volk_immutability_test(tc.desc(),
+                                                 tc.kernel_ptr(),
+                                                 tc.name(),
+                                                 tc.test_parameters().scalar(),
+                                                 v /*vlen*/,
+                                                 &results,
+                                                 kFloatEdges,
+                                                 kComplexEdges);
+        } catch (...) {
+            threw = true;
+            summary = volk_immutability_summary(); // applied=false, mutated=false -> skip
         }
-        if (devnull >= 0)
-            close(devnull);
     }
     if (threw)
         std::cerr << "note  [immutable] " << tc.name() << " threw at vlen " << v
@@ -370,43 +372,27 @@ static std::vector<std::string> unmapped_master_impls(volk_func_desc_t master,
 static volk_misaligned_summary quiet_misaligned_run(volk_test_case_t& tc, unsigned int v)
 {
     std::vector<volk_test_results_t> results;
-    const bool verbose = (std::getenv("HARNESS_VERBOSE") != nullptr);
-    std::fflush(stdout);
-    std::cout.flush();
-    int saved = -1, devnull = -1;
-    if (!verbose) {
-        saved = dup(STDOUT_FILENO);
-        devnull = open(VOLK_DEVNULL, O_WRONLY);
-        if (saved >= 0 && devnull >= 0)
-            dup2(devnull, STDOUT_FILENO);
-    }
     volk_misaligned_summary summary;
     bool threw = false;
-    try {
-        summary = run_volk_misaligned_test(tc.desc(),
-                                           tc.kernel_ptr(),
-                                           tc.name(),
-                                           tc.test_parameters().scalar(),
-                                           tc.test_parameters().tol(),
-                                           tc.test_parameters().absolute_mode(),
-                                           v /*vlen*/,
-                                           &results,
-                                           kFloatEdges,
-                                           kComplexEdges,
-                                           /*fork_isolation=*/tc.is_puppet());
-    } catch (...) {
-        threw = true;
-        summary = volk_misaligned_summary(); // applied=false -> skip
-    }
-    std::fflush(stdout);
-    std::cout.flush();
-    if (!verbose) {
-        if (saved >= 0) {
-            dup2(saved, STDOUT_FILENO);
-            close(saved);
+    // Scoped: the cerr note below must print AFTER stdout is restored.
+    {
+        FdMuteGuard stdout_mute;
+        try {
+            summary = run_volk_misaligned_test(tc.desc(),
+                                               tc.kernel_ptr(),
+                                               tc.name(),
+                                               tc.test_parameters().scalar(),
+                                               tc.test_parameters().tol(),
+                                               tc.test_parameters().absolute_mode(),
+                                               v /*vlen*/,
+                                               &results,
+                                               kFloatEdges,
+                                               kComplexEdges,
+                                               /*fork_isolation=*/tc.is_puppet());
+        } catch (...) {
+            threw = true;
+            summary = volk_misaligned_summary(); // applied=false -> skip
         }
-        if (devnull >= 0)
-            close(devnull);
     }
     if (threw)
         std::cerr << "note  [misaligned] " << tc.name() << " threw at vlen " << v
