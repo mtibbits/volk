@@ -176,17 +176,7 @@ quiet_run(volk_test_case_t& tc,
 {
     std::vector<volk_test_results_t> results;
     const bool verbose = (std::getenv("HARNESS_VERBOSE") != nullptr);
-    std::fflush(stdout);
-    std::cout.flush();
-    int saved = -1, devnull = -1;
-    if (!verbose) {
-        saved = dup(STDOUT_FILENO);
-        devnull = open(VOLK_DEVNULL, O_WRONLY);
-        // Only redirect if BOTH fds are valid; otherwise we could mute stdout
-        // with no way to restore it (a failed dup leaves saved == -1).
-        if (saved >= 0 && devnull >= 0)
-            dup2(devnull, STDOUT_FILENO);
-    }
+    FdMuteGuard stdout_mute(!verbose);
     bool fail = false;
     try {
         if (ref) {
@@ -246,17 +236,6 @@ quiet_run(volk_test_case_t& tc,
         if (ref_skip_reason)
             *ref_skip_reason = results.back().skip_reason;
     }
-    std::fflush(stdout);
-    std::cout.flush();
-    if (!verbose) {
-        // Restore only if we actually have the saved fd; never dup2/close(-1).
-        if (saved >= 0) {
-            dup2(saved, STDOUT_FILENO);
-            close(saved);
-        }
-        if (devnull >= 0)
-            close(devnull);
-    }
     return fail;
 }
 
@@ -305,15 +284,7 @@ quiet_canary_run(volk_test_case_t& tc, unsigned int v, unsigned int contracted_e
 {
     std::vector<volk_test_results_t> results;
     const bool verbose = (std::getenv("HARNESS_VERBOSE") != nullptr);
-    std::fflush(stdout);
-    std::cout.flush();
-    int saved = -1, devnull = -1;
-    if (!verbose) {
-        saved = dup(STDOUT_FILENO);
-        devnull = open(VOLK_DEVNULL, O_WRONLY);
-        if (saved >= 0 && devnull >= 0)
-            dup2(devnull, STDOUT_FILENO);
-    }
+    FdMuteGuard stdout_mute(!verbose);
     volk_canary_summary summary;
     try {
         summary = run_volk_canary_test(tc.desc(),
@@ -327,16 +298,6 @@ quiet_canary_run(volk_test_case_t& tc, unsigned int v, unsigned int contracted_e
                                        contracted_elems);
     } catch (...) {
         summary.guard_violation = true;
-    }
-    std::fflush(stdout);
-    std::cout.flush();
-    if (!verbose) {
-        if (saved >= 0) {
-            dup2(saved, STDOUT_FILENO);
-            close(saved);
-        }
-        if (devnull >= 0)
-            close(devnull);
     }
     return summary;
 }
