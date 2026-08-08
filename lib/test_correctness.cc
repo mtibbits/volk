@@ -73,22 +73,23 @@
 
 namespace {
 // #163: single home for the stdout fd-mute dance the four quiet_* helpers
-// previously open-coded. The constructor flushes (stdio + iostream) and, when
-// `mute` is set, redirects STDOUT_FILENO to VOLK_DEVNULL; the destructor
-// flushes and restores. Uses the POSIX names mapped by the macro block above,
-// so it must stay in this TU below that block. Fork-safety: the misaligned
-// mode forks (puppet fork-isolation) while the mute is engaged; the child
-// exits via _exit() only, so this destructor never runs in the child — a
-// future child path that unwound or called exit() would restore/close the
-// PARENT's saved fds from inside the child.
+// previously open-coded, policy included: the constructor flushes (stdio +
+// iostream) and, unless HARNESS_VERBOSE is set (the operator's unmute knob),
+// redirects STDOUT_FILENO to VOLK_DEVNULL; the destructor flushes and
+// restores. Uses the POSIX names mapped by the macro block above, so it must
+// stay in this TU below that block. Fork-safety: the misaligned mode forks
+// (puppet fork-isolation) while the mute is engaged; the child exits via
+// _exit() only, so this destructor never runs in the child — a future child
+// path that unwound or called exit() would restore/close the PARENT's saved
+// fds from inside the child.
 class FdMuteGuard
 {
 public:
-    explicit FdMuteGuard(bool mute)
+    FdMuteGuard()
     {
         std::fflush(stdout);
         std::cout.flush();
-        if (mute) {
+        if (std::getenv("HARNESS_VERBOSE") == nullptr) {
             saved_ = dup(STDOUT_FILENO);
             devnull_ = open(VOLK_DEVNULL, O_WRONLY);
             // Only redirect if BOTH fds are valid; otherwise we could mute
@@ -175,8 +176,7 @@ quiet_run(volk_test_case_t& tc,
           std::map<std::string, double>* impl_max_err = nullptr)
 {
     std::vector<volk_test_results_t> results;
-    const bool verbose = (std::getenv("HARNESS_VERBOSE") != nullptr);
-    FdMuteGuard stdout_mute(!verbose);
+    FdMuteGuard stdout_mute;
     bool fail = false;
     try {
         if (ref) {
@@ -283,8 +283,7 @@ static volk_canary_summary
 quiet_canary_run(volk_test_case_t& tc, unsigned int v, unsigned int contracted_elems = 0)
 {
     std::vector<volk_test_results_t> results;
-    const bool verbose = (std::getenv("HARNESS_VERBOSE") != nullptr);
-    FdMuteGuard stdout_mute(!verbose);
+    FdMuteGuard stdout_mute;
     volk_canary_summary summary;
     try {
         summary = run_volk_canary_test(tc.desc(),
@@ -310,11 +309,10 @@ static volk_immutability_summary quiet_immutability_run(volk_test_case_t& tc,
                                                         unsigned int v)
 {
     std::vector<volk_test_results_t> results;
-    const bool verbose = (std::getenv("HARNESS_VERBOSE") != nullptr);
     volk_immutability_summary summary;
     bool threw = false;
     {
-        FdMuteGuard stdout_mute(!verbose);
+        FdMuteGuard stdout_mute;
         try {
             summary = run_volk_immutability_test(tc.desc(),
                                                  tc.kernel_ptr(),
@@ -363,11 +361,10 @@ static std::vector<std::string> unmapped_master_impls(volk_func_desc_t master,
 static volk_misaligned_summary quiet_misaligned_run(volk_test_case_t& tc, unsigned int v)
 {
     std::vector<volk_test_results_t> results;
-    const bool verbose = (std::getenv("HARNESS_VERBOSE") != nullptr);
     volk_misaligned_summary summary;
     bool threw = false;
     {
-        FdMuteGuard stdout_mute(!verbose);
+        FdMuteGuard stdout_mute;
         try {
             summary = run_volk_misaligned_test(tc.desc(),
                                                tc.kernel_ptr(),
