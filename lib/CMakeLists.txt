@@ -881,6 +881,10 @@ if(ENABLE_TESTING)
             ${CMAKE_CURRENT_SOURCE_DIR}/qa_canary_kernel.cc
             ${CMAKE_CURRENT_SOURCE_DIR}/volk_buffer_roles.cc
             ${CMAKE_CURRENT_SOURCE_DIR}/qa_utils.cc TARGET_DEPS volk_static)
+        volk_gen_test(
+            volk_test_index_tie_sweep SOURCES
+            ${CMAKE_CURRENT_SOURCE_DIR}/qa_index_tie_sweep.cc TARGET_DEPS
+            volk_static)
     else()
         volk_gen_test(volk_test_all SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/testqa.cc
                       ${CMAKE_CURRENT_SOURCE_DIR}/qa_utils.cc TARGET_DEPS volk)
@@ -891,6 +895,20 @@ if(ENABLE_TESTING)
             ${CMAKE_CURRENT_SOURCE_DIR}/qa_canary_kernel.cc
             ${CMAKE_CURRENT_SOURCE_DIR}/volk_buffer_roles.cc
             ${CMAKE_CURRENT_SOURCE_DIR}/qa_utils.cc TARGET_DEPS volk)
+        volk_gen_test(
+            volk_test_index_tie_sweep SOURCES
+            ${CMAKE_CURRENT_SOURCE_DIR}/qa_index_tie_sweep.cc TARGET_DEPS volk)
+    endif()
+    # Arm the tie sweep's avx2 coverage floor only when this BUILD's machine
+    # table carries an avx2 machine. The floor's other key is the runtime CPU
+    # capability; hardware alone must not red a build whose arch list
+    # legitimately has no avx2 impls (VOLK_STATIC_DISPATCH=generic runs ctest
+    # on avx2 CI runners; an old-compiler dynamic build is the same shape).
+    # available_machines is already collapsed to the pinned machine under
+    # static dispatch, so it is the build's truth in both modes.
+    if(available_machines MATCHES "avx2")
+        target_compile_definitions(volk_test_index_tie_sweep
+                                   PRIVATE VOLK_TIE_SWEEP_EXPECT_AVX2=1)
     endif()
     # The planted misaligned-fault control must keep its raw movaps, but
     # UBSan's alignment check reports it BEFORE the deliberate fault, so a
@@ -1000,5 +1018,11 @@ if(ENABLE_TESTING)
     # breaks here.
     volk_add_test(harness_negative_control volk_test_correctness ENVIRONS
                   "HARNESS_COMBINED_NC=1")
+
+    # Tie-position-sweeping regression test for the complex index kernels
+    # (#195): plants an equal-magnitude extremum pair at every position pair
+    # and requires every available impl to return the FIRST tied index.
+    # Fixed-position tie edges cannot see a scan-order reduce bug.
+    volk_add_test(index_tie_sweep volk_test_index_tie_sweep)
 
 endif(ENABLE_TESTING)

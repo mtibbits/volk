@@ -10,6 +10,15 @@ suite byte-for-byte unchanged, plus a CI-enforced combined negative control
 that proves the assembled harness still catches the defect classes that
 motivated it.
 
+A sixth blind spot is positional: fixed-position tie edges (qa's
+`test_params_index_fc`, this harness's edge-value injection) place the first
+tied element in an early-scanned lane, so an impl whose horizontal reduce
+scans lanes out of memory order can violate the first-index-wins tie-break and
+still pass every fixed edge (#195 — all four avx2 complex index variants did).
+The standalone ctest `qa_index_tie_sweep` closes it by planting an
+equal-magnitude extremum pair at every position pair (i, j) for vlens
+8/32/37 and requiring every available impl to return the first tied index.
+
 ## How to run
 
 Build with testing enabled, then run the harness binary directly:
@@ -31,6 +40,7 @@ environment variable:
 | `HARNESS_IMMUTABLE=1` | input-immutability canary: byte-exact post-run compare of every input against its pristine pre-image | #90 |
 | `HARNESS_MISALIGNED=1` | misaligned `_u_`-variant runs: every unaligned impl on deliberately misaligned buffers, with scoped signal trapping (POSIX only); puppet kernels run under fork isolation with `(fork-isolated)`-tagged rows (ctest `qa_misaligned_puppet_control`); strict-UBSan regression detector is the ctest `qa_strict_misaligned_canary` (ASAN build type only) | #91 / #221 / #162 |
 | `HARNESS_COMBINED_NC=1` | combined negative control (the ctest `qa_harness_negative_control`) | #92 |
+| (none — standalone ctest `qa_index_tie_sweep`, binary `volk_test_index_tie_sweep`) | tie-position sweep for the complex index kernels: equal-magnitude extremum pair at every position pair (vlens 8/32/37), every available impl must return the FIRST tied index; avx2 coverage floor keyed to the hardware capability | #195 |
 | `HARNESS_REPORT=path` | write the per-kernel × per-impl CSV (format below) in any mode | #87 / #92 |
 | `HARNESS_VERBOSE=1` | unmute the per-impl stdout of the underlying qa runs | — |
 
@@ -271,7 +281,9 @@ Retention: latest snapshot only — a new snapshot replaces the old files
   runs the strict misaligned mode and goes red if the exemption is ever lost.
 - **Default qa:** `volk_test_all` and the per-kernel `qa_volk_*` ctests are
   byte-for-byte unaffected by every capability here; all harness behavior is
-  opt-in via the env toggles.
+  opt-in via the env toggles. The `qa_index_tie_sweep` ctest (#195) is
+  standalone and unconditional: plain ctest, every platform, no env toggle,
+  no special build type.
 
 ## Reproducibility (`HARNESS_SEED`)
 

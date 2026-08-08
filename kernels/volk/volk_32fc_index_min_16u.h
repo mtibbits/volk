@@ -110,9 +110,14 @@ static inline void volk_32fc_index_min_16u_a_avx2_variant_0(uint16_t* target,
 
     float min = FLT_MAX;
     uint32_t index = 0;
+    // First-index tie-break: the buffers are in lane-scan order
+    // [0,1,4,5,2,3,6,7], not memory order -- equal magnitude takes the
+    // smaller index (#195; same convention as a_sse3/#127 and avx512f).
     for (unsigned i = 0; i < 8; i++) {
         if (min_values_buffer[i] < min) {
             min = min_values_buffer[i];
+            index = min_indices_buffer[i];
+        } else if (min_values_buffer[i] == min && min_indices_buffer[i] < index) {
             index = min_indices_buffer[i];
         }
     }
@@ -170,9 +175,13 @@ static inline void volk_32fc_index_min_16u_a_avx2_variant_1(uint16_t* target,
 
     float min = FLT_MAX;
     uint32_t index = 0;
+    // First-index tie-break on the lane-scan-order buffers -- see the first
+    // avx2 variant (#195).
     for (unsigned i = 0; i < 8; i++) {
         if (min_values_buffer[i] < min) {
             min = min_values_buffer[i];
+            index = min_indices_buffer[i];
+        } else if (min_values_buffer[i] == min && min_indices_buffer[i] < index) {
             index = min_indices_buffer[i];
         }
     }
@@ -621,9 +630,13 @@ static inline void volk_32fc_index_min_16u_u_avx2_variant_0(uint16_t* target,
 
     float min = FLT_MAX;
     uint32_t index = 0;
+    // First-index tie-break on the lane-scan-order buffers -- see the first
+    // avx2 variant (#195).
     for (unsigned i = 0; i < 8; i++) {
         if (min_values_buffer[i] < min) {
             min = min_values_buffer[i];
+            index = min_indices_buffer[i];
+        } else if (min_values_buffer[i] == min && min_indices_buffer[i] < index) {
             index = min_indices_buffer[i];
         }
     }
@@ -681,9 +694,13 @@ static inline void volk_32fc_index_min_16u_u_avx2_variant_1(uint16_t* target,
 
     float min = FLT_MAX;
     uint32_t index = 0;
+    // First-index tie-break on the lane-scan-order buffers -- see the first
+    // avx2 variant (#195).
     for (unsigned i = 0; i < 8; i++) {
         if (min_values_buffer[i] < min) {
             min = min_values_buffer[i];
+            index = min_indices_buffer[i];
+        } else if (min_values_buffer[i] == min && min_indices_buffer[i] < index) {
             index = min_indices_buffer[i];
         }
     }
