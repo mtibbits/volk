@@ -71,6 +71,54 @@
 #define VOLK_DEVNULL "/dev/null"
 #endif
 
+namespace {
+// #163: single home for the stdout fd-mute dance the four quiet_* helpers
+// previously open-coded. The constructor flushes (stdio + iostream) and, when
+// `mute` is set, redirects STDOUT_FILENO to VOLK_DEVNULL; the destructor
+// flushes and restores. Uses the POSIX names mapped by the macro block above,
+// so it must stay in this TU below that block. Fork-safety: the misaligned
+// mode forks (puppet fork-isolation) while the mute is engaged; the child
+// exits via _exit() only, so this destructor never runs in the child — a
+// future child path that unwound or called exit() would restore/close the
+// PARENT's saved fds from inside the child.
+class FdMuteGuard
+{
+public:
+    explicit FdMuteGuard(bool mute)
+    {
+        std::fflush(stdout);
+        std::cout.flush();
+        if (mute) {
+            saved_ = dup(STDOUT_FILENO);
+            devnull_ = open(VOLK_DEVNULL, O_WRONLY);
+            // Only redirect if BOTH fds are valid; otherwise we could mute
+            // stdout with no way to restore it (a failed dup leaves
+            // saved_ == -1).
+            if (saved_ >= 0 && devnull_ >= 0)
+                dup2(devnull_, STDOUT_FILENO);
+        }
+    }
+    ~FdMuteGuard()
+    {
+        std::fflush(stdout);
+        std::cout.flush();
+        // Restore only if we actually have the saved fd; never dup2/close(-1).
+        if (saved_ >= 0) {
+            dup2(saved_, STDOUT_FILENO);
+            close(saved_);
+        }
+        if (devnull_ >= 0)
+            close(devnull_);
+    }
+    FdMuteGuard(const FdMuteGuard&) = delete;
+    FdMuteGuard& operator=(const FdMuteGuard&) = delete;
+
+private:
+    int saved_ = -1;
+    int devnull_ = -1;
+};
+} // namespace
+
 // Compile-time AddressSanitizer detection: the far-past ASan demo deliberately
 // writes past the guarded allocation, which is undefined behaviour unless ASan
 // is bracketing it, so it must only run in an ASan build.
