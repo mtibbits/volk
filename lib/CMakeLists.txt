@@ -899,6 +899,17 @@ if(ENABLE_TESTING)
             volk_test_index_tie_sweep SOURCES
             ${CMAKE_CURRENT_SOURCE_DIR}/qa_index_tie_sweep.cc TARGET_DEPS volk)
     endif()
+    # Arm the tie sweep's avx2 coverage floor only when this BUILD's machine
+    # table carries an avx2 machine. The floor's other key is the runtime CPU
+    # capability; hardware alone must not red a build whose arch list
+    # legitimately has no avx2 impls (VOLK_STATIC_DISPATCH=generic runs ctest
+    # on avx2 CI runners; an old-compiler dynamic build is the same shape).
+    # available_machines is already collapsed to the pinned machine under
+    # static dispatch, so it is the build's truth in both modes.
+    if(available_machines MATCHES "avx2")
+        target_compile_definitions(volk_test_index_tie_sweep
+                                   PRIVATE VOLK_TIE_SWEEP_EXPECT_AVX2=1)
+    endif()
     # The planted misaligned-fault control must keep its raw movaps, but
     # UBSan's alignment check reports it BEFORE the deliberate fault, so a
     # strict lane (halt_on_error=1) dies pre-sweep. Exempt this one test-only

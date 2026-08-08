@@ -27,19 +27,33 @@
 
 namespace {
 
-// Coverage floor: on avx2-capable hardware the avx2 impls must actually be in
-// the swept list — otherwise a dispatch/machine-table regression could
-// silently drop the 16 reduce sites this test exists to protect while the
-// sweep stays green on the remaining impls. Keyed to the HARDWARE capability
-// (the runtime machine name is not usable: an avx512 box selects e.g.
-// avx512f_64_mmx_orc, which does not contain "avx2" yet carries the avx2
-// impls). Armed only where the probe exists (GCC/Clang x86); elsewhere the
-// per-arch summary lines keep coverage visible.
+// Coverage floor: on avx2-capable hardware, in a build whose machine table
+// carries avx2, the avx2 impls must actually be in the swept list — otherwise
+// a runtime dispatch/machine-selection regression could silently drop the 16
+// reduce sites this test exists to protect while the sweep stays green on the
+// remaining impls. BOTH keys are load-bearing:
+//  - hardware capability, not the runtime machine NAME (an avx512 box selects
+//    e.g. avx512f_64_mmx_orc — no "avx2" substring — yet carries avx2 impls);
+//  - the build's expectation (VOLK_TIE_SWEEP_EXPECT_AVX2, set by CMake from
+//    available_machines), because the arch list is a property of the BUILD:
+//    hardware alone would false-red VOLK_STATIC_DISPATCH=generic on avx2 CI
+//    runners. Build-level LOSS of avx2 machines disarms the floor by design —
+//    that shape is visible in the configure log's "Available machines:" line.
+// The hardware probe is armed only where it exists (GCC/Clang x86).
 bool hw_has_avx2()
 {
 #if (defined(__GNUC__) || defined(__clang__)) && \
     (defined(__x86_64__) || defined(__i386__))
     return __builtin_cpu_supports("avx2");
+#else
+    return false;
+#endif
+}
+
+bool build_expects_avx2()
+{
+#ifdef VOLK_TIE_SWEEP_EXPECT_AVX2
+    return true;
 #else
     return false;
 #endif
@@ -75,7 +89,7 @@ int sweep_kernel(const char* kernel_name,
     bool list_has_avx2 = false;
     for (size_t i = 0; i < desc.n_impls && !list_has_avx2; ++i)
         list_has_avx2 = (std::strstr(desc.impl_names[i], "avx2") != NULL);
-    if (hw_has_avx2() && !list_has_avx2) {
+    if (hw_has_avx2() && build_expects_avx2() && !list_has_avx2) {
         std::printf("%s: FAIL (avx2-capable host but no avx2 impl in the arch "
                     "list — the sites #195 protects are not being swept)\n",
                     kernel_name);
