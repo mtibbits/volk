@@ -99,6 +99,8 @@ public:
                 dup2(devnull_, STDOUT_FILENO);
         }
     }
+    // Implicitly noexcept: cout's exception mask is the default goodbit here
+    // (nothing in this TU widens it), so flush() cannot throw during unwind.
     ~FdMuteGuard()
     {
         std::fflush(stdout);
@@ -176,6 +178,8 @@ quiet_run(volk_test_case_t& tc,
           std::map<std::string, double>* impl_max_err = nullptr)
 {
     std::vector<volk_test_results_t> results;
+    // Function-scoped: stdout stays muted until return; a stdout write added
+    // below would be swallowed where the pre-#163 code would have printed it.
     FdMuteGuard stdout_mute;
     bool fail = false;
     try {
@@ -283,6 +287,7 @@ static volk_canary_summary
 quiet_canary_run(volk_test_case_t& tc, unsigned int v, unsigned int contracted_elems = 0)
 {
     std::vector<volk_test_results_t> results;
+    // Function-scoped: stdout stays muted until return (see quiet_run).
     FdMuteGuard stdout_mute;
     volk_canary_summary summary;
     try {
@@ -311,6 +316,7 @@ static volk_immutability_summary quiet_immutability_run(volk_test_case_t& tc,
     std::vector<volk_test_results_t> results;
     volk_immutability_summary summary;
     bool threw = false;
+    // Scoped: the cerr note below must print AFTER stdout is restored.
     {
         FdMuteGuard stdout_mute;
         try {
@@ -363,6 +369,7 @@ static volk_misaligned_summary quiet_misaligned_run(volk_test_case_t& tc, unsign
     std::vector<volk_test_results_t> results;
     volk_misaligned_summary summary;
     bool threw = false;
+    // Scoped: the cerr note below must print AFTER stdout is restored.
     {
         FdMuteGuard stdout_mute;
         try {
