@@ -311,39 +311,23 @@ static volk_immutability_summary quiet_immutability_run(volk_test_case_t& tc,
 {
     std::vector<volk_test_results_t> results;
     const bool verbose = (std::getenv("HARNESS_VERBOSE") != nullptr);
-    std::fflush(stdout);
-    std::cout.flush();
-    int saved = -1, devnull = -1;
-    if (!verbose) {
-        saved = dup(STDOUT_FILENO);
-        devnull = open(VOLK_DEVNULL, O_WRONLY);
-        if (saved >= 0 && devnull >= 0)
-            dup2(devnull, STDOUT_FILENO);
-    }
     volk_immutability_summary summary;
     bool threw = false;
-    try {
-        summary = run_volk_immutability_test(tc.desc(),
-                                             tc.kernel_ptr(),
-                                             tc.name(),
-                                             tc.test_parameters().scalar(),
-                                             v /*vlen*/,
-                                             &results,
-                                             kFloatEdges,
-                                             kComplexEdges);
-    } catch (...) {
-        threw = true;
-        summary = volk_immutability_summary(); // applied=false, mutated=false -> skip
-    }
-    std::fflush(stdout);
-    std::cout.flush();
-    if (!verbose) {
-        if (saved >= 0) {
-            dup2(saved, STDOUT_FILENO);
-            close(saved);
+    {
+        FdMuteGuard stdout_mute(!verbose);
+        try {
+            summary = run_volk_immutability_test(tc.desc(),
+                                                 tc.kernel_ptr(),
+                                                 tc.name(),
+                                                 tc.test_parameters().scalar(),
+                                                 v /*vlen*/,
+                                                 &results,
+                                                 kFloatEdges,
+                                                 kComplexEdges);
+        } catch (...) {
+            threw = true;
+            summary = volk_immutability_summary(); // applied=false, mutated=false -> skip
         }
-        if (devnull >= 0)
-            close(devnull);
     }
     if (threw)
         std::cerr << "note  [immutable] " << tc.name() << " threw at vlen " << v
@@ -380,42 +364,26 @@ static volk_misaligned_summary quiet_misaligned_run(volk_test_case_t& tc, unsign
 {
     std::vector<volk_test_results_t> results;
     const bool verbose = (std::getenv("HARNESS_VERBOSE") != nullptr);
-    std::fflush(stdout);
-    std::cout.flush();
-    int saved = -1, devnull = -1;
-    if (!verbose) {
-        saved = dup(STDOUT_FILENO);
-        devnull = open(VOLK_DEVNULL, O_WRONLY);
-        if (saved >= 0 && devnull >= 0)
-            dup2(devnull, STDOUT_FILENO);
-    }
     volk_misaligned_summary summary;
     bool threw = false;
-    try {
-        summary = run_volk_misaligned_test(tc.desc(),
-                                           tc.kernel_ptr(),
-                                           tc.name(),
-                                           tc.test_parameters().scalar(),
-                                           tc.test_parameters().tol(),
-                                           tc.test_parameters().absolute_mode(),
-                                           v /*vlen*/,
-                                           &results,
-                                           kFloatEdges,
-                                           kComplexEdges,
-                                           /*fork_isolation=*/tc.is_puppet());
-    } catch (...) {
-        threw = true;
-        summary = volk_misaligned_summary(); // applied=false -> skip
-    }
-    std::fflush(stdout);
-    std::cout.flush();
-    if (!verbose) {
-        if (saved >= 0) {
-            dup2(saved, STDOUT_FILENO);
-            close(saved);
+    {
+        FdMuteGuard stdout_mute(!verbose);
+        try {
+            summary = run_volk_misaligned_test(tc.desc(),
+                                               tc.kernel_ptr(),
+                                               tc.name(),
+                                               tc.test_parameters().scalar(),
+                                               tc.test_parameters().tol(),
+                                               tc.test_parameters().absolute_mode(),
+                                               v /*vlen*/,
+                                               &results,
+                                               kFloatEdges,
+                                               kComplexEdges,
+                                               /*fork_isolation=*/tc.is_puppet());
+        } catch (...) {
+            threw = true;
+            summary = volk_misaligned_summary(); // applied=false -> skip
         }
-        if (devnull >= 0)
-            close(devnull);
     }
     if (threw)
         std::cerr << "note  [misaligned] " << tc.name() << " threw at vlen " << v
