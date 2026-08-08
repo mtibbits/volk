@@ -23,7 +23,6 @@
 #include <volk/volk_alloc.hh>
 
 #include <cstdio>
-#include <cstring>
 
 namespace {
 
@@ -31,14 +30,11 @@ namespace {
 // avx2 blocks, no tail. 37: forces a scalar tail on every SIMD width, so
 // vector-region-vs-tail ties are swept too.
 const unsigned kVlens[] = { 8, 32, 37 };
-
-unsigned pairs_per_arch()
-{
-    unsigned pairs = 0;
-    for (unsigned vlen : kVlens)
-        pairs += vlen * (vlen - 1) / 2;
-    return pairs;
-}
+// Independent expected count: C(8,2) + C(32,2) + C(37,2). Deliberately NOT
+// derived from kVlens — the coverage check below compares the swept total
+// against this constant, so an edit that silently shrinks the sweep (or a
+// pair-enumeration bug) fails loudly instead of re-deriving itself green.
+const unsigned kExpectedPairsPerArch = 1190;
 
 template <typename TargetT, typename ManualF>
 int sweep_kernel(const char* kernel_name,
@@ -48,14 +44,13 @@ int sweep_kernel(const char* kernel_name,
                  lv_32fc_t extremum)
 {
     // impl_names from the runtime-selected machine are runnable by
-    // construction.
-    bool have_generic = false;
-    for (size_t i = 0; i < desc.n_impls && !have_generic; ++i)
-        have_generic = (std::strcmp(desc.impl_names[i], "generic") == 0);
-    if (!have_generic) {
-        std::printf("%s: FAIL (generic missing from arch list, %zu archs)\n",
-                    kernel_name,
-                    desc.n_impls);
+    // construction. The assertion below is analytic (== first tied index), so
+    // no reference impl is required — but an empty list would pass vacuously,
+    // and under VOLK_STATIC_DISPATCH the list legitimately shrinks to the
+    // pinned machine's impls (no "generic" entry), so emptiness is the only
+    // fail-closed condition here.
+    if (desc.n_impls == 0) {
+        std::printf("%s: FAIL (empty arch list)\n", kernel_name);
         return 1;
     }
 
@@ -104,11 +99,11 @@ int sweep_kernel(const char* kernel_name,
         total_failures += arch_failures;
         total_pairs += arch_pairs;
     }
-    if (total_pairs != desc.n_impls * pairs_per_arch()) {
+    if (total_pairs != desc.n_impls * kExpectedPairsPerArch) {
         std::printf("%s: FAIL (coverage: swept %u pairs, expected %zu)\n",
                     kernel_name,
                     total_pairs,
-                    desc.n_impls * pairs_per_arch());
+                    desc.n_impls * kExpectedPairsPerArch);
         return total_failures + 1;
     }
     return total_failures;
