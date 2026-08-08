@@ -23,8 +23,27 @@
 #include <volk/volk_alloc.hh>
 
 #include <cstdio>
+#include <cstring>
 
 namespace {
+
+// Coverage floor: on avx2-capable hardware the avx2 impls must actually be in
+// the swept list — otherwise a dispatch/machine-table regression could
+// silently drop the 16 reduce sites this test exists to protect while the
+// sweep stays green on the remaining impls. Keyed to the HARDWARE capability
+// (the runtime machine name is not usable: an avx512 box selects e.g.
+// avx512f_64_mmx_orc, which does not contain "avx2" yet carries the avx2
+// impls). Armed only where the probe exists (GCC/Clang x86); elsewhere the
+// per-arch summary lines keep coverage visible.
+bool hw_has_avx2()
+{
+#if (defined(__GNUC__) || defined(__clang__)) && \
+    (defined(__x86_64__) || defined(__i386__))
+    return __builtin_cpu_supports("avx2");
+#else
+    return false;
+#endif
+}
 
 // 8: the issue's repro width (one avx2 block). 32: two avx512 blocks, four
 // avx2 blocks, no tail. 37: forces a scalar tail on every SIMD width, so
@@ -51,6 +70,15 @@ int sweep_kernel(const char* kernel_name,
     // fail-closed condition here.
     if (desc.n_impls == 0) {
         std::printf("%s: FAIL (empty arch list)\n", kernel_name);
+        return 1;
+    }
+    bool list_has_avx2 = false;
+    for (size_t i = 0; i < desc.n_impls && !list_has_avx2; ++i)
+        list_has_avx2 = (std::strstr(desc.impl_names[i], "avx2") != NULL);
+    if (hw_has_avx2() && !list_has_avx2) {
+        std::printf("%s: FAIL (avx2-capable host but no avx2 impl in the arch "
+                    "list — the sites #195 protects are not being swept)\n",
+                    kernel_name);
         return 1;
     }
 
