@@ -34,6 +34,20 @@
  * are not covered by these measurements. For accuracy-critical use away from
  * [-pi/2, pi/2], prefer the generic implementation.
  *
+ * Numerical accuracy (measured on x86 SIMD implementations against libm tanf,
+ * relative error): at most ~5e-7 for |x| <= 1, and within the registered QA
+ * tolerance of 1e-2 out to several periods EXCEPT (a) narrow slivers around the
+ * poles (odd multiples of pi/2; at 1e-2 the sliver is within ~7e-6 of the pole,
+ * where tan is astronomically ill-conditioned anyway) and (b) slivers around the
+ * zeros (multiples of pi) that widen as |x| grows. The SIMD paths use a 2-term
+ * single-precision Cody-Waite reduction, so absolute reduction error grows with
+ * |x|: errors beyond 1e-2 away from poles/zeros appear from |x| ~ 3pi upward and
+ * dominate by |x| ~ 1e6; for |x| beyond ~5e8 the vector paths can return NaN
+ * (quadrant accumulator overflow). The scalar tail path calls libm tanf and is
+ * accurate everywhere. The NEON/RVV implementations are separate code paths and
+ * are not covered by these measurements. For accuracy-critical use away from
+ * [-pi/2, pi/2], prefer the generic implementation.
+ *
  * <b>Dispatcher Prototype</b>
  * \code
  * void volk_32f_tan_32f(float* bVector, const float* aVector, unsigned int num_points)
