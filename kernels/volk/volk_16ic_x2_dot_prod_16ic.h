@@ -25,15 +25,20 @@
  *
  * \b Numerical behavior
  *
- * \li Each per-element complex product is formed in 16-bit arithmetic; inputs
- *     whose product parts exceed the int16 range give implementation-dependent
- *     results.
+ * \li Each per-element complex product is formed in 16-bit arithmetic. Inputs
+ *     for which any product term (a.r*b.r, a.i*b.i, a.r*b.i, a.i*b.r) or
+ *     product part exceeds the int16 range give implementation-dependent
+ *     results: implementations differ in whether product formation wraps or
+ *     saturates.
  * \li Accumulation never wraps: every accumulate and tail step saturates, and
  *     lane reductions either saturate stepwise or sum exactly and clamp once.
  * \li While no partial sum reaches the int16 range limit, the result is exact
  *     and identical across implementations. Saturating addition is not
  *     associative, so once a partial sum saturates the result depends on the
- *     implementation's accumulation order (lane count, reduce order).
+ *     implementation's accumulation order (lane count, reduce order). A
+ *     sufficient condition for an exact, implementation-independent result
+ *     is that every product term fits int16 and the sum of |product parts|
+ *     over all elements stays within 32767.
  *
  * <b>Dispatcher Prototype</b>
  * \code

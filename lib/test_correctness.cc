@@ -1530,8 +1530,8 @@ int main(int argc, char* argv[])
             std::cerr << "note  [" << mode << "] " << tc.name()
                       << "  vlens not judged: " << vlens_str(unjudged)
                       << "(max_sweep_vlen " << kcap
-                      << ": saturating reduction is order-dependent past the rail, "
-                         "#220)\n";
+                      << ": comparison ill-posed above it; see this kernel's "
+                         "lib/kernel_tests.h registration)\n";
         }
         if (tc.name() == "volk_32fc_s32f_power_32fc") {
             power_seen = true;

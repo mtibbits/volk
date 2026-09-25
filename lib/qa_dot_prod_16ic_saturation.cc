@@ -63,12 +63,14 @@ bool rvv_floor_armed()
 #endif
 }
 
-// 1..40 covers every tail length for widths 4/8/16 (and the saturation point
+// 0 exercises the no-block path; 1..40 covers every tail length for widths 4/8/16 (and the saturation point
 // lands before, inside, and after the vector region); 64..1000 span several
 // RVV vl chunks at every tested VLEN.
-const unsigned kVlens[] = { 1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12,  13,  14,  15,
-                            16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27,  28,  29,  30,
-                            31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 64, 100, 257, 1000 };
+const unsigned kVlens[] = {
+    0,  1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12,  13,  14,
+    15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27,  28,  29,
+    30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 64, 100, 257, 1000
+};
 // Leg 5 (unsaturated) stops at 455: 72 * 455 = 32760 < 32767.
 const unsigned kFlatVlens[] = { 1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12, 13, 14,
                                 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28,
@@ -76,10 +78,10 @@ const unsigned kFlatVlens[] = { 1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12, 
 // Leg 7 (unsaturated, +-1 data): |sum| <= 2 * 4099 = 8198.
 const unsigned kLongFlatVlens[] = { 1000, 4099 };
 const unsigned kMaxVlen = 4099; // largest vlen in any list
-// Independent expected count: 5 saturating legs x 44 vlens + 41 + 2 flat cases.
+// Independent expected count: 5 saturating legs x 45 vlens + 41 + 2 flat cases.
 // Deliberately NOT derived from kVlens -- an edit that silently shrinks the
 // sweep fails loudly instead of re-deriving itself green.
-const unsigned kExpectedCasesPerImpl = 263;
+const unsigned kExpectedCasesPerImpl = 268;
 
 int16_t clamp16(int64_t v)
 {
