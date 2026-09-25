@@ -16,6 +16,8 @@
  * conjugate of the corresponding element in a second complex 8-bit integer
  * vector. Results are stored as complex 16-bit integers to accommodate the
  * wider product range: c[i] = a[i] * conj(b[i]).
+ * The real part is saturated to SHRT_MAX on overflow; the imaginary part is
+ * truncated (not saturated).
  *
  * Complex conjugate multiplication is a fundamental operation in correlation
  * and cross-spectral analysis. In receiver signal processing it appears in

@@ -107,9 +107,9 @@ endif(MSVC)
 ########################################################################
 set(VOLK_STATIC_DISPATCH "" CACHE STRING
     "Static dispatch to a specific machine (e.g. neonv8). Empty means dynamic dispatch.")
-cmake_dependent_option(ENABLE_UTILITY_APPS "Enable utility apps" ON "NOT CMAKE_CROSSCOMPILING" OFF)
-cmake_dependent_option(ENABLE_TESTING "Enable QA testing" ON "NOT CMAKE_CROSSCOMPILING" OFF)
-cmake_dependent_option(ENABLE_MODTOOL "Enable volk_modtool python utility" ON "NOT CMAKE_CROSSCOMPILING" OFF)
+option(ENABLE_UTILITY_APPS "Enable utility apps" ON)
+option(ENABLE_TESTING "Enable QA testing" ON)
+option(ENABLE_MODTOOL "Enable volk_modtool python utility" ON)
 cmake_dependent_option(ENABLE_PROFILING "Launch system profiler after build" OFF "ENABLE_UTILITY_APPS;NOT CMAKE_CROSSCOMPILING" OFF)
 
 ########################################################################
@@ -160,41 +160,41 @@ if(VOLK_CPU_FEATURES)
         find_package(CpuFeatures QUIET)
     endif()
     if(NOT CpuFeatures_FOUND)
-        message(
-            STATUS
-                "cpu_features package not found (or skipped for cross-compile). Requiring cpu_features submodule ..."
-        )
-        if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/cpu_features/CMakeLists.txt")
-            message(
-                FATAL_ERROR
-                    "cpu_features/CMakeLists.txt not found. Did you forget to git clone recursively?\nFix with: git submodule update --init"
-            )
-        endif()
-        message(STATUS "Building Volk with cpu_features")
+        message(STATUS "cpu_features package not found (or skipped for cross-compile). Fetching cpu_features v0.11.0 ...")
+        include(FetchContent)
+        FetchContent_Declare(
+            cpu_features
+            GIT_REPOSITORY https://github.com/google/cpu_features.git
+            GIT_TAG v0.11.0
+            GIT_SHALLOW TRUE)
         set(BUILD_TESTING
             OFF
             CACHE BOOL "Build cpu_features without tests." FORCE)
-        set(BUILD_PIC
-            ON
-            CACHE BOOL "Build cpu_features with Position Independent Code (PIC)." FORCE)
+        set(BUILD_EXECUTABLE
+            OFF
+            CACHE BOOL "Build cpu_features executable." FORCE)
+        set(ENABLE_INSTALL
+            OFF
+            CACHE BOOL "Enable cpu_features install targets." FORCE)
         set(CMAKE_POSITION_INDEPENDENT_CODE
             ON
             CACHE BOOL "Build cpu_features with Position Independent Code (PIC)." FORCE)
-        include(CheckCCompilerFlag)
-        set(CMAKE_C_FLAGS_SAVED "${CMAKE_C_FLAGS}")
-        check_c_compiler_flag(-Wno-unused-function HAVE_WNO_UNUSED_FUNCTION_CMD_LINE_ARG)
-        if(HAVE_WNO_UNUSED_FUNCTION_CMD_LINE_ARG)
-            set(CMAKE_C_FLAGS
-                "${CMAKE_C_FLAGS} -Wno-unused-function -Wno-unused-variable")
-        endif(HAVE_WNO_UNUSED_FUNCTION_CMD_LINE_ARG)
-
-        set(BUILD_SHARED_LIBS OFF)
         set(BUILD_SHARED_LIBS_SAVED "${BUILD_SHARED_LIBS}")
         set(BUILD_SHARED_LIBS OFF)
-        set(ENABLE_INSTALL OFF)
-        add_subdirectory(cpu_features)
+        FetchContent_MakeAvailable(cpu_features)
         set(BUILD_SHARED_LIBS "${BUILD_SHARED_LIBS_SAVED}")
-        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS_SAVED}")
+
+        if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
+            foreach(cpu_features_target IN ITEMS
+                    cpu_features
+                    utils
+                    unix_based_hardware_detection)
+                if(TARGET ${cpu_features_target})
+                    target_compile_options(${cpu_features_target}
+                                           PRIVATE -Wno-unused-variable)
+                endif()
+            endforeach()
+        endif()
     endif()
 else()
     message(STATUS "Building Volk without cpu_features")
@@ -239,6 +239,22 @@ endif(ENABLE_ORC)
 # Setup doxygen
 ########################################################################
 add_subdirectory(docs)
+
+########################################################################
+# Setup Coverage
+########################################################################
+if(${CMAKE_BUILD_TYPE} STREQUAL "Coverage")
+    # Use CodeCoverage based on Lars Bilke's
+    # https://github.com/bilke/cmake-modules , with extensive
+    # modifications as done in the past for GNU Radio.
+    include(CodeCoverage)
+    append_coverage_compiler_flags()
+    setup_target_for_coverage_gcovr_html(
+        NAME coverage
+        EXECUTABLE "ctest"  
+        DEPENDENCIES volk_profile
+        )
+endif()
 
 ########################################################################
 # Detect /lib versus /lib64
