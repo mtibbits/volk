@@ -100,6 +100,12 @@ sometimes generic-vs-`block`, not generic-vs-SIMD). A 10-seed max undersamples
 this single-random-scalar tail ~3× — measured across the #119–#123 family, where
 a 10-seed first cut left two bounds below their observed 200/60-seed tails.
 
+Both ABSOLUTE: zero-mean reductions cross zero, so relative bounds are ill-posed
+near |result| → 0 (the #174 doctrine), and no single relative number is honest
+across vlens anyway (relative error itself grows ~√vlen). Measurement recipe and
+derivation: devDoc Issue-Fork-118/adjudication.md; per-kernel comments carry only
+the kernel's numbers and cite this section.
+
 #### Saturating integer reductions (#220)
 
 `volk_16ic_x2_dot_prod_16ic` accumulates with saturation, and saturating addition
@@ -120,13 +126,10 @@ generic is the *least* accurate impl (the #118 wrong-side lesson again). So:
   judging above 131071 for *every* defect class, not only saturation.
 - **Saturation correctness is owned by the ctest `qa_dot_prod_16ic_saturation`**:
   on same-sign product streams saturating addition *is* associative, so every
-  conforming impl must return exactly `clamp(sum)`, whatever its order.
-
-Both ABSOLUTE: zero-mean reductions cross zero, so relative bounds are ill-posed
-near |result| → 0 (the #174 doctrine), and no single relative number is honest
-across vlens anyway (relative error itself grows ~√vlen). Measurement recipe and
-derivation: devDoc Issue-Fork-118/adjudication.md; per-kernel comments carry only
-the kernel's numbers and cite this section.
+  conforming impl must return exactly `clamp(sum)`, whatever its order. Its
+  coverage floor is armed at compile time (arch macro + the build's machine
+  table); in practice only NEON arms it today — RVV needs `__riscv_vector` in
+  the test TU, which the fork's RVV CI lanes (testing OFF) do not build.
 
 ### 3. Output canary + AddressSanitizer (#89)
 

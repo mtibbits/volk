@@ -21,8 +21,10 @@
  * accumulate/reduce/tail step, and accumulators that saturate product
  * SUB-terms before the complex product is formed, in both conventions
  * (subtracted term accumulated negated, legs 3/4; or accumulated positively
- * and subtracted at the end, leg 6). A final unsaturated leg (|parts| <= 72,
- * n <= 455 => |sum| <= 32760) pins exact agreement below the rail.
+ * and subtracted at the end, leg 6). Unsaturated legs pin exact agreement
+ * below the rail: +-6 data up to n = 455 (|parts| <= 72 => |sum| <= 32760),
+ * and +-1 data at n = 1000 and 4099 (|parts| <= 2), which spans several RVV
+ * vl chunks at every VLEN and so exercises the tail-undisturbed accumulate.
  */
 
 #include <volk/volk.h>
@@ -36,7 +38,8 @@
 namespace {
 
 // Coverage floor: in a build whose machine table carries NEON (resp. RVV)
-// machines, on a host that runs them, at least one neon* (rvv*) impl must be
+// machines, compiled for a target with that ISA (compile-time only: the arch
+// macro plus the CMake define; no runtime host probe), at least one neon* (rvv*) impl must be
 // in the swept list -- otherwise a dispatch/machine-selection regression could
 // silently drop the sites this test exists to protect while the sweep stays
 // green on generic alone. The build expectation comes from CMake
@@ -70,11 +73,13 @@ const unsigned kVlens[] = { 1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12,  13,
 const unsigned kFlatVlens[] = { 1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12, 13, 14,
                                 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28,
                                 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 455 };
-const unsigned kMaxVlen = 1000; // largest vlen in either list
-// Independent expected count: 5 saturating legs x 44 vlens + 41 flat cases.
+// Leg 7 (unsaturated, +-1 data): |sum| <= 2 * 4099 = 8198.
+const unsigned kLongFlatVlens[] = { 1000, 4099 };
+const unsigned kMaxVlen = 4099; // largest vlen in any list
+// Independent expected count: 5 saturating legs x 44 vlens + 41 + 2 flat cases.
 // Deliberately NOT derived from kVlens -- an edit that silently shrinks the
 // sweep fails loudly instead of re-deriving itself green.
-const unsigned kExpectedCasesPerImpl = 261;
+const unsigned kExpectedCasesPerImpl = 263;
 
 int16_t clamp16(int64_t v)
 {
@@ -125,6 +130,14 @@ void fill_leg(
             ai = bi = k - 1;
             break;
         }
+        case 7: // flat +-1 data, never saturates for n <= 16383
+        {
+            ar = g.next() % 3 - 1;
+            ai = g.next() % 3 - 1;
+            br = g.next() % 3 - 1;
+            bi = g.next() % 3 - 1;
+            break;
+        }
         default: // 5: flat +-6 data, never saturates for n <= 455
         {
             ar = g.next() % 13 - 6;
@@ -164,18 +177,18 @@ int main(int, char**)
     }
     if (neon_floor_armed() && !has_neon) {
         std::printf("%s: FAIL (NEON build/host but no neon impl in the arch list "
-                    "— the sites #220 protects are not being swept)\n",
+                    "-- the sites #220 protects are not being swept)\n",
                     name);
         return 1;
     }
     if (rvv_floor_armed() && !has_rvv) {
         std::printf("%s: FAIL (RVV build/host but no rvv impl in the arch list "
-                    "— the sites #220 protects are not being swept)\n",
+                    "-- the sites #220 protects are not being swept)\n",
                     name);
         return 1;
     }
 
-    const int kLegs[] = { 1, 2, 3, 4, 6, 5 };
+    const int kLegs[] = { 1, 2, 3, 4, 6, 5, 7 };
     int total_failures = 0;
     bool coverage_ok = true;
     volk::vector<lv_16sc_t> a(kMaxVlen);
@@ -185,12 +198,17 @@ int main(int, char**)
         const char* impl = desc.impl_names[ii];
         int fails = 0;
         unsigned cases = 0;
-        int leg_fails[7] = { 0 };
+        int leg_fails[8] = { 0 };
         for (int leg : kLegs) {
-            const bool flat = (leg == 5);
-            const unsigned* vlens = flat ? kFlatVlens : kVlens;
-            const size_t n_vlens = flat ? sizeof(kFlatVlens) / sizeof(kFlatVlens[0])
-                                        : sizeof(kVlens) / sizeof(kVlens[0]);
+            const unsigned* vlens = kVlens;
+            size_t n_vlens = sizeof(kVlens) / sizeof(kVlens[0]);
+            if (leg == 5) {
+                vlens = kFlatVlens;
+                n_vlens = sizeof(kFlatVlens) / sizeof(kFlatVlens[0]);
+            } else if (leg == 7) {
+                vlens = kLongFlatVlens;
+                n_vlens = sizeof(kLongFlatVlens) / sizeof(kLongFlatVlens[0]);
+            }
             for (size_t vi = 0; vi < n_vlens; ++vi) {
                 const unsigned n = vlens[vi];
                 int64_t sr, si;
@@ -219,7 +237,7 @@ int main(int, char**)
                 }
             }
         }
-        std::printf("%s %s: %s (%d failing of %u cases) per-leg %d %d %d %d %d %d\n",
+        std::printf("%s %s: %s (%d failing of %u cases) per-leg %d %d %d %d %d %d %d\n",
                     name,
                     impl,
                     fails ? "FAIL" : "ok",
@@ -230,7 +248,8 @@ int main(int, char**)
                     leg_fails[3],
                     leg_fails[4],
                     leg_fails[5],
-                    leg_fails[6]);
+                    leg_fails[6],
+                    leg_fails[7]);
         if (cases != kExpectedCasesPerImpl) {
             std::printf("%s %s: FAIL (coverage: ran %u cases, expected %u)\n",
                         name,
