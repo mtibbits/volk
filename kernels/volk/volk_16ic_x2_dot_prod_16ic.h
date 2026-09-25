@@ -14,14 +14,26 @@
  *
  * Computes the complex inner product (dot product) of two 16-bit complex integer
  * vectors with saturated accumulation: result = sum(in_a[i] * in_b[i]). The real
- * and imaginary components are accumulated using saturation arithmetic so they
- * never overflow the 16-bit range.
+ * and imaginary components are accumulated with saturating (never wrapping)
+ * arithmetic.
  *
  * This kernel is commonly used in matched filtering, correlation, and beamforming
  * operations where one vector represents input signal samples and the other
  * represents filter taps or reference coefficients. The saturated accumulation
  * makes it suitable for fixed-point DSP pipelines where overflow protection is
  * required without scaling.
+ *
+ * \b Numerical behavior
+ *
+ * \li Each per-element complex product is formed in 16-bit arithmetic; inputs
+ *     whose product parts exceed the int16 range give implementation-dependent
+ *     results.
+ * \li Accumulation never wraps: every accumulate and tail step saturates, and
+ *     lane reductions either saturate stepwise or sum exactly and clamp once.
+ * \li While no partial sum reaches the int16 range limit, the result is exact
+ *     and identical across implementations. Saturating addition is not
+ *     associative, so once a partial sum saturates the result depends on the
+ *     implementation's accumulation order (lane count, reduce order).
  *
  * <b>Dispatcher Prototype</b>
  * \code
@@ -75,6 +87,24 @@
 #include <volk/saturation_arithmetic.h>
 #include <volk/volk_common.h>
 #include <volk/volk_complex.h>
+
+/* Saturate an exact wide lane sum to int16 once (the NEONV8/RVV reduce order;
+ * see "Numerical behavior" above, #220). */
+static inline int16_t volk_16ic_x2_dot_prod_16ic_sat32(int32_t v)
+{
+    return (int16_t)(v > SHRT_MAX ? SHRT_MAX : (v < SHRT_MIN ? SHRT_MIN : v));
+}
+
+/* Saturating sum of the 4 complex lanes a NEON accumulator pair stores (#220). */
+static inline lv_16sc_t volk_16ic_x2_dot_prod_16ic_sat_sum4(const lv_16sc_t* v)
+{
+    int16_t re = 0, im = 0;
+    for (unsigned int k = 0; k < 4; ++k) {
+        re = sat_adds16i(re, lv_creal(v[k]));
+        im = sat_adds16i(im, lv_cimag(v[k]));
+    }
+    return lv_cmake(re, im);
+}
 
 
 #ifdef LV_HAVE_GENERIC
@@ -612,9 +642,11 @@ static inline void volk_16ic_x2_dot_prod_16ic_neon(lv_16sc_t* out,
         *out = dotProduct;
     }
 
-    // tail case
+    // tail case (saturating, like the vector accumulation: #220)
     for (number = quarter_points * 4; number < num_points; ++number) {
-        *out += (*a_ptr++) * (*b_ptr++);
+        const lv_16sc_t tmp = (*a_ptr++) * (*b_ptr++);
+        *out = lv_cmake(sat_adds16i(lv_creal(*out), lv_creal(tmp)),
+                        sat_adds16i(lv_cimag(*out), lv_cimag(tmp)));
     }
 }
 
@@ -663,11 +695,13 @@ static inline void volk_16ic_x2_dot_prod_16ic_neon_vma(lv_16sc_t* out,
     }
 
     vst2_s16((int16_t*)accum_result, accumulator);
-    *out = accum_result[0] + accum_result[1] + accum_result[2] + accum_result[3];
+    *out = volk_16ic_x2_dot_prod_16ic_sat_sum4(accum_result);
 
-    // tail case
+    // tail case (saturating, like the vector accumulation: #220)
     for (number = quarter_points * 4; number < num_points; ++number) {
-        *out += (*a_ptr++) * (*b_ptr++);
+        const lv_16sc_t tmp = (*a_ptr++) * (*b_ptr++);
+        *out = lv_cmake(sat_adds16i(lv_creal(*out), lv_creal(tmp)),
+                        sat_adds16i(lv_cimag(*out), lv_cimag(tmp)));
     }
 }
 
@@ -689,7 +723,7 @@ static inline void volk_16ic_x2_dot_prod_16ic_neon_optvma(lv_16sc_t* out,
     lv_16sc_t* b_ptr = (lv_16sc_t*)in_b;
     // for 2-lane vectors, 1st lane holds the real part,
     // 2nd lane holds the imaginary part
-    int16x4x2_t a_val, b_val, accumulator1, accumulator2;
+    int16x4x2_t a_val, b_val, tmp, accumulator1, accumulator2;
 
     __VOLK_ATTR_ALIGNED(16) lv_16sc_t accum_result[4];
     accumulator1.val[0] = vdup_n_s16(0);
@@ -697,18 +731,42 @@ static inline void volk_16ic_x2_dot_prod_16ic_neon_optvma(lv_16sc_t* out,
     accumulator2.val[0] = vdup_n_s16(0);
     accumulator2.val[1] = vdup_n_s16(0);
 
-    for (number = 0; number < quarter_points; ++number) {
+    // Each complex product is formed first (multiply-accumulate/subtract),
+    // then accumulated with saturation (#220). Two accumulators, fed
+    // alternate 4-point blocks, break the loop-carried vqadd dependency.
+    for (number = 0; number + 1 < quarter_points; number += 2) {
         a_val = vld2_s16((int16_t*)a_ptr); // a0r|a1r|a2r|a3r || a0i|a1i|a2i|a3i
         b_val = vld2_s16((int16_t*)b_ptr); // b0r|b1r|b2r|b3r || b0i|b1i|b2i|b3i
         __VOLK_PREFETCH(a_ptr + 8);
         __VOLK_PREFETCH(b_ptr + 8);
+        tmp.val[0] =
+            vmls_s16(vmul_s16(a_val.val[0], b_val.val[0]), a_val.val[1], b_val.val[1]);
+        tmp.val[1] =
+            vmla_s16(vmul_s16(a_val.val[0], b_val.val[1]), a_val.val[1], b_val.val[0]);
+        accumulator1.val[0] = vqadd_s16(accumulator1.val[0], tmp.val[0]);
+        accumulator1.val[1] = vqadd_s16(accumulator1.val[1], tmp.val[1]);
 
-        // use 2 accumulators to remove inter-instruction data dependencies
-        accumulator1.val[0] = vmla_s16(accumulator1.val[0], a_val.val[0], b_val.val[0]);
-        accumulator2.val[0] = vmls_s16(accumulator2.val[0], a_val.val[1], b_val.val[1]);
-        accumulator1.val[1] = vmla_s16(accumulator1.val[1], a_val.val[0], b_val.val[1]);
-        accumulator2.val[1] = vmla_s16(accumulator2.val[1], a_val.val[1], b_val.val[0]);
+        a_val = vld2_s16((int16_t*)(a_ptr + 4));
+        b_val = vld2_s16((int16_t*)(b_ptr + 4));
+        tmp.val[0] =
+            vmls_s16(vmul_s16(a_val.val[0], b_val.val[0]), a_val.val[1], b_val.val[1]);
+        tmp.val[1] =
+            vmla_s16(vmul_s16(a_val.val[0], b_val.val[1]), a_val.val[1], b_val.val[0]);
+        accumulator2.val[0] = vqadd_s16(accumulator2.val[0], tmp.val[0]);
+        accumulator2.val[1] = vqadd_s16(accumulator2.val[1], tmp.val[1]);
 
+        a_ptr += 8;
+        b_ptr += 8;
+    }
+    if (number < quarter_points) { // odd block count: one more block
+        a_val = vld2_s16((int16_t*)a_ptr);
+        b_val = vld2_s16((int16_t*)b_ptr);
+        tmp.val[0] =
+            vmls_s16(vmul_s16(a_val.val[0], b_val.val[0]), a_val.val[1], b_val.val[1]);
+        tmp.val[1] =
+            vmla_s16(vmul_s16(a_val.val[0], b_val.val[1]), a_val.val[1], b_val.val[0]);
+        accumulator1.val[0] = vqadd_s16(accumulator1.val[0], tmp.val[0]);
+        accumulator1.val[1] = vqadd_s16(accumulator1.val[1], tmp.val[1]);
         a_ptr += 4;
         b_ptr += 4;
     }
@@ -717,11 +775,13 @@ static inline void volk_16ic_x2_dot_prod_16ic_neon_optvma(lv_16sc_t* out,
     accumulator1.val[1] = vqadd_s16(accumulator1.val[1], accumulator2.val[1]);
 
     vst2_s16((int16_t*)accum_result, accumulator1);
-    *out = accum_result[0] + accum_result[1] + accum_result[2] + accum_result[3];
+    *out = volk_16ic_x2_dot_prod_16ic_sat_sum4(accum_result);
 
-    // tail case
+    // tail case (saturating, like the vector accumulation: #220)
     for (number = quarter_points * 4; number < num_points; ++number) {
-        *out += (*a_ptr++) * (*b_ptr++);
+        const lv_16sc_t tmp = (*a_ptr++) * (*b_ptr++);
+        *out = lv_cmake(sat_adds16i(lv_creal(*out), lv_creal(tmp)),
+                        sat_adds16i(lv_cimag(*out), lv_cimag(tmp)));
     }
 }
 
@@ -744,38 +804,58 @@ static inline void volk_16ic_x2_dot_prod_16ic_neonv8(lv_16sc_t* out,
 
     /* Use 128-bit registers with deinterleaved loads for better throughput */
     int16x8x2_t a_val, b_val;
+    int16x8_t prod_real, prod_imag;
     int16x8_t acc_real1 = vdupq_n_s16(0);
     int16x8_t acc_real2 = vdupq_n_s16(0);
     int16x8_t acc_imag1 = vdupq_n_s16(0);
     int16x8_t acc_imag2 = vdupq_n_s16(0);
 
-    for (number = 0; number < eighth_points; ++number) {
-        a_val = vld2q_s16((int16_t*)a_ptr);
-        b_val = vld2q_s16((int16_t*)b_ptr);
+    /* Each complex product is formed first (real = ar*br - ai*bi,
+     * imag = ar*bi + ai*br), then accumulated with saturation (#220). Two
+     * accumulator pairs, fed alternate 8-point blocks, break the loop-carried
+     * vqaddq dependency. */
+    for (number = 0; number + 1 < eighth_points; number += 2) {
+        a_val = vld2q_s16((const int16_t*)a_ptr);
+        b_val = vld2q_s16((const int16_t*)b_ptr);
         __VOLK_PREFETCH(a_ptr + 16);
         __VOLK_PREFETCH(b_ptr + 16);
+        prod_real =
+            vmlsq_s16(vmulq_s16(a_val.val[0], b_val.val[0]), a_val.val[1], b_val.val[1]);
+        prod_imag =
+            vmlaq_s16(vmulq_s16(a_val.val[0], b_val.val[1]), a_val.val[1], b_val.val[0]);
+        acc_real1 = vqaddq_s16(acc_real1, prod_real);
+        acc_imag1 = vqaddq_s16(acc_imag1, prod_imag);
 
-        /* real = ar*br - ai*bi, use two accumulators to avoid dependency */
-        acc_real1 = vmlaq_s16(acc_real1, a_val.val[0], b_val.val[0]);
-        acc_real2 = vmlsq_s16(acc_real2, a_val.val[1], b_val.val[1]);
+        a_val = vld2q_s16((const int16_t*)(a_ptr + 8));
+        b_val = vld2q_s16((const int16_t*)(b_ptr + 8));
+        prod_real =
+            vmlsq_s16(vmulq_s16(a_val.val[0], b_val.val[0]), a_val.val[1], b_val.val[1]);
+        prod_imag =
+            vmlaq_s16(vmulq_s16(a_val.val[0], b_val.val[1]), a_val.val[1], b_val.val[0]);
+        acc_real2 = vqaddq_s16(acc_real2, prod_real);
+        acc_imag2 = vqaddq_s16(acc_imag2, prod_imag);
 
-        /* imag = ar*bi + ai*br, use two accumulators */
-        acc_imag1 = vmlaq_s16(acc_imag1, a_val.val[0], b_val.val[1]);
-        acc_imag2 = vmlaq_s16(acc_imag2, a_val.val[1], b_val.val[0]);
-
-        a_ptr += 8;
-        b_ptr += 8;
+        a_ptr += 16;
+        b_ptr += 16;
+    }
+    if (number < eighth_points) { /* odd block count: one more block */
+        a_val = vld2q_s16((const int16_t*)a_ptr);
+        b_val = vld2q_s16((const int16_t*)b_ptr);
+        prod_real =
+            vmlsq_s16(vmulq_s16(a_val.val[0], b_val.val[0]), a_val.val[1], b_val.val[1]);
+        prod_imag =
+            vmlaq_s16(vmulq_s16(a_val.val[0], b_val.val[1]), a_val.val[1], b_val.val[0]);
+        acc_real1 = vqaddq_s16(acc_real1, prod_real);
+        acc_imag1 = vqaddq_s16(acc_imag1, prod_imag);
     }
 
     /* Combine accumulators with saturation */
     int16x8_t acc_real = vqaddq_s16(acc_real1, acc_real2);
     int16x8_t acc_imag = vqaddq_s16(acc_imag1, acc_imag2);
 
-    /* Horizontal sum using ARMv8 vaddvq */
-    int16_t sum_real = vaddvq_s16(acc_real);
-    int16_t sum_imag = vaddvq_s16(acc_imag);
-
-    *out = lv_cmake(sum_real, sum_imag);
+    /* Horizontal sum: widen to int32 (exact), then saturate once */
+    *out = lv_cmake(volk_16ic_x2_dot_prod_16ic_sat32(vaddlvq_s16(acc_real)),
+                    volk_16ic_x2_dot_prod_16ic_sat32(vaddlvq_s16(acc_imag)));
 
     /* Tail case */
     for (number = eighth_points * 8; number < num_points; ++number) {
@@ -789,7 +869,7 @@ static inline void volk_16ic_x2_dot_prod_16ic_neonv8(lv_16sc_t* out,
 
 
 #ifdef LV_HAVE_RVV
-#include "volk_32fc_x2_dot_prod_32fc.h"
+#include <riscv_vector.h>
 
 static inline void volk_16ic_x2_dot_prod_16ic_rvv(lv_16sc_t* result,
                                                   const lv_16sc_t* in_a,
@@ -807,20 +887,23 @@ static inline void volk_16ic_x2_dot_prod_16ic_rvv(lv_16sc_t* result,
         vint16m4_t vbr = __riscv_vnsra(vb, 0, vl), vbi = __riscv_vnsra(vb, 16, vl);
         vint16m4_t vr = __riscv_vnmsac(__riscv_vmul(var, vbr, vl), vai, vbi, vl);
         vint16m4_t vi = __riscv_vmacc(__riscv_vmul(var, vbi, vl), vai, vbr, vl);
-        vsumr = __riscv_vadd_tu(vsumr, vsumr, vr, vl);
-        vsumi = __riscv_vadd_tu(vsumi, vsumi, vi, vl);
+        // saturating accumulate (#220); _tu keeps lanes >= vl of the last,
+        // short chunk undisturbed for the full-width reduce below
+        vsumr = __riscv_vsadd_tu(vsumr, vsumr, vr, vl);
+        vsumi = __riscv_vsadd_tu(vsumi, vsumi, vi, vl);
     }
-    size_t vl = __riscv_vsetvlmax_e16m1();
-    vint16m1_t vr = RISCV_SHRINK4(vadd, i, 16, vsumr);
-    vint16m1_t vi = RISCV_SHRINK4(vadd, i, 16, vsumi);
-    vint16m1_t z = __riscv_vmv_s_x_i16m1(0, vl);
-    *result = lv_cmake(__riscv_vmv_x(__riscv_vredsum(vr, z, vl)),
-                       __riscv_vmv_x(__riscv_vredsum(vi, z, vl)));
+    // widening reduce: exact int32 sum of the lanes, then saturate once
+    size_t vlmax = __riscv_vsetvlmax_e16m4();
+    vint32m1_t z = __riscv_vmv_s_x_i32m1(0, 1);
+    *result = lv_cmake(volk_16ic_x2_dot_prod_16ic_sat32(
+                           __riscv_vmv_x(__riscv_vwredsum(vsumr, z, vlmax))),
+                       volk_16ic_x2_dot_prod_16ic_sat32(
+                           __riscv_vmv_x(__riscv_vwredsum(vsumi, z, vlmax))));
 }
 #endif /*LV_HAVE_RVV*/
 
 #ifdef LV_HAVE_RVVSEG
-#include "volk_32fc_x2_dot_prod_32fc.h"
+#include <riscv_vector.h>
 
 
 static inline void volk_16ic_x2_dot_prod_16ic_rvvseg(lv_16sc_t* result,
@@ -839,15 +922,18 @@ static inline void volk_16ic_x2_dot_prod_16ic_rvvseg(lv_16sc_t* result,
         vint16m4_t vbr = __riscv_vget_i16m4(vb, 0), vbi = __riscv_vget_i16m4(vb, 1);
         vint16m4_t vr = __riscv_vnmsac(__riscv_vmul(var, vbr, vl), vai, vbi, vl);
         vint16m4_t vi = __riscv_vmacc(__riscv_vmul(var, vbi, vl), vai, vbr, vl);
-        vsumr = __riscv_vadd_tu(vsumr, vsumr, vr, vl);
-        vsumi = __riscv_vadd_tu(vsumi, vsumi, vi, vl);
+        // saturating accumulate (#220); _tu keeps lanes >= vl of the last,
+        // short chunk undisturbed for the full-width reduce below
+        vsumr = __riscv_vsadd_tu(vsumr, vsumr, vr, vl);
+        vsumi = __riscv_vsadd_tu(vsumi, vsumi, vi, vl);
     }
-    size_t vl = __riscv_vsetvlmax_e16m1();
-    vint16m1_t vr = RISCV_SHRINK4(vadd, i, 16, vsumr);
-    vint16m1_t vi = RISCV_SHRINK4(vadd, i, 16, vsumi);
-    vint16m1_t z = __riscv_vmv_s_x_i16m1(0, vl);
-    *result = lv_cmake(__riscv_vmv_x(__riscv_vredsum(vr, z, vl)),
-                       __riscv_vmv_x(__riscv_vredsum(vi, z, vl)));
+    // widening reduce: exact int32 sum of the lanes, then saturate once
+    size_t vlmax = __riscv_vsetvlmax_e16m4();
+    vint32m1_t z = __riscv_vmv_s_x_i32m1(0, 1);
+    *result = lv_cmake(volk_16ic_x2_dot_prod_16ic_sat32(
+                           __riscv_vmv_x(__riscv_vwredsum(vsumr, z, vlmax))),
+                       volk_16ic_x2_dot_prod_16ic_sat32(
+                           __riscv_vmv_x(__riscv_vwredsum(vsumi, z, vlmax))));
 }
 #endif /*LV_HAVE_RVVSEG*/
 

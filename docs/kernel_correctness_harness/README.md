@@ -34,13 +34,14 @@ environment variable:
 
 | env toggle | mode | child |
 |---|---|---|
-| (none) | tail-remainder sweep (vlens 1–40, 131071, 1000003) + adversarial edge values; kernels in the reference registry run against the independent double-precision oracle (`ref`), the rest impl-vs-impl (`impl`) | #87 / #88 |
+| (none) | tail-remainder sweep (vlens 1–40, 131071, 1000003; a kernel registering `max_sweep_vlen` is run but not judged above it — see *Saturating integer reductions*) + adversarial edge values; kernels in the reference registry run against the independent double-precision oracle (`ref`), the rest impl-vs-impl (`impl`) | #87 / #88 |
 | `HARNESS_CANARY=1` | output-buffer canary: guarded own-malloc buffers, two-sentinel over/under-write + unwritten-element checks | #89 |
 | `HARNESS_CANARY_ASAN_DEMO=1` | (with `HARNESS_CANARY`, ASan build only) far-past over-run demo proving the guarded buffers are ASan-bracketed | #89 |
 | `HARNESS_IMMUTABLE=1` | input-immutability canary: byte-exact post-run compare of every input against its pristine pre-image | #90 |
 | `HARNESS_MISALIGNED=1` | misaligned `_u_`-variant runs: every unaligned impl on deliberately misaligned buffers, with scoped signal trapping (POSIX only); puppet kernels run under fork isolation with `(fork-isolated)`-tagged rows (ctest `qa_misaligned_puppet_control`); strict-UBSan regression detector is the ctest `qa_strict_misaligned_canary` (ASAN build type only) | #91 / #221 / #162 |
 | `HARNESS_COMBINED_NC=1` | combined negative control (the ctest `qa_harness_negative_control`) | #92 |
 | (none — standalone ctest `qa_index_tie_sweep`, binary `volk_test_index_tie_sweep`) | tie-position sweep for the complex index kernels: equal-magnitude extremum pair at every position pair (vlens 8/32/37), every available impl must return the FIRST tied index; avx2 coverage floor keyed to the hardware capability | #195 |
+| (none — standalone ctest `qa_dot_prod_16ic_saturation`, binary `volk_test_dot_prod_16ic_saturation`) | saturation contract for `volk_16ic_x2_dot_prod_16ic`: same-sign product streams (where saturating addition is associative) must give exactly `clamp(sum)` on every available impl — catches wrapping accumulate/reduce/tail steps and sub-term-saturating accumulators; plus an unsaturated exact leg; NEON/RVV coverage floor keyed to the build's machine table | #220 |
 | `HARNESS_REPORT=path` | write the per-kernel × per-impl CSV (format below) in any mode | #87 / #92 |
 | `HARNESS_VERBOSE=1` | unmute the per-impl stdout of the underlying qa runs | — |
 
@@ -98,6 +99,28 @@ sides and ALL impls (generic included; the widest accumulation-order spread is
 sometimes generic-vs-`block`, not generic-vs-SIMD). A 10-seed max undersamples
 this single-random-scalar tail ~3× — measured across the #119–#123 family, where
 a 10-seed first cut left two bounds below their observed 200/60-seed tails.
+
+#### Saturating integer reductions (#220)
+
+`volk_16ic_x2_dot_prod_16ic` accumulates with saturation, and saturating addition
+is not associative: once any partial sum reaches the int16 rail, impls with
+different accumulation orders (lane count, reduce order) legitimately disagree,
+by up to full scale. No tolerance can bridge that, and the float reference
+oracle rejects integer outputs — and scored against `clamp(exact sum)` the serial
+generic is the *least* accurate impl (the #118 wrong-side lesson again). So:
+
+- **The sweep stops judging it above 131071**
+  (`test_params.make_max_sweep_vlen(131071)` in `lib/kernel_tests.h`). With the
+  sweep's ±6 data each component is a random walk with σ = 19.8·√n; at 131071
+  the rail sits at 4.57σ, P(rail) ≈ 2e-5 per run. The 1000003 run still
+  *executes* with its verdict discarded — skipping it would shift the
+  `HARNESS_SEED` stream under every later kernel — and the sweep prints
+  `note  [impl] <kernel>  vlens not judged: 1000003 (max_sweep_vlen 131071: …)`
+  on stderr (the stream the other `note` lines use). The cap stops sweep
+  judging above 131071 for *every* defect class, not only saturation.
+- **Saturation correctness is owned by the ctest `qa_dot_prod_16ic_saturation`**:
+  on same-sign product streams saturating addition *is* associative, so every
+  conforming impl must return exactly `clamp(sum)`, whatever its order.
 
 Both ABSOLUTE: zero-mean reductions cross zero, so relative bounds are ill-posed
 near |result| → 0 (the #174 doctrine), and no single relative number is honest
@@ -216,7 +239,7 @@ rows with impl `-` are kernel-level (skips, or failures not attributable to one
 impl, e.g. an exception mid-run). `failed_vlens` is space-separated.
 
 `max_err` (`#135`) is the per-impl worst-case divergence magnitude across all
-swept vlens — formatted `%.3g` (e.g. `4e+04`, `1.2e-06`, `inf`) — so a triager
+judged vlens (a kernel's vlens above its `max_sweep_vlen` are run but not judged, #220) — formatted `%.3g` (e.g. `4e+04`, `1.2e-06`, `inf`) — so a triager
 can rank `FAIL`s by severity instead of treating a `4e+04` and a `1.2e-06` error
 as the same bare `FAIL`. It is populated for the `ref`/`impl` sweep and **empty**
 for `canary`/`immutable`/`misaligned` (no numeric divergence) and for every
