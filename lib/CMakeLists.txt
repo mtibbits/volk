@@ -885,6 +885,10 @@ if(ENABLE_TESTING)
             volk_test_index_tie_sweep SOURCES
             ${CMAKE_CURRENT_SOURCE_DIR}/qa_index_tie_sweep.cc TARGET_DEPS
             volk_static)
+        volk_gen_test(
+            volk_test_dot_prod_16ic_saturation SOURCES
+            ${CMAKE_CURRENT_SOURCE_DIR}/qa_dot_prod_16ic_saturation.cc TARGET_DEPS
+            volk_static)
     else()
         volk_gen_test(volk_test_all SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/testqa.cc
                       ${CMAKE_CURRENT_SOURCE_DIR}/qa_utils.cc TARGET_DEPS volk)
@@ -898,6 +902,10 @@ if(ENABLE_TESTING)
         volk_gen_test(
             volk_test_index_tie_sweep SOURCES
             ${CMAKE_CURRENT_SOURCE_DIR}/qa_index_tie_sweep.cc TARGET_DEPS volk)
+        volk_gen_test(
+            volk_test_dot_prod_16ic_saturation SOURCES
+            ${CMAKE_CURRENT_SOURCE_DIR}/qa_dot_prod_16ic_saturation.cc TARGET_DEPS
+            volk)
     endif()
     # Arm the tie sweep's avx2 coverage floor only when this BUILD's machine
     # table carries an avx2 machine. The floor's other key is the runtime CPU
@@ -909,6 +917,16 @@ if(ENABLE_TESTING)
     if(available_machines MATCHES "avx2")
         target_compile_definitions(volk_test_index_tie_sweep
                                    PRIVATE VOLK_TIE_SWEEP_EXPECT_AVX2=1)
+    endif()
+    # Same shape for the #220 saturation test's coverage floor: arm it only
+    # when this BUILD's machine table carries NEON / RVV machines.
+    if(available_machines MATCHES "neon")
+        target_compile_definitions(volk_test_dot_prod_16ic_saturation
+                                   PRIVATE VOLK_SAT16IC_EXPECT_NEON=1)
+    endif()
+    if(available_machines MATCHES "rvv|rv64gcv")
+        target_compile_definitions(volk_test_dot_prod_16ic_saturation
+                                   PRIVATE VOLK_SAT16IC_EXPECT_RVV=1)
     endif()
     # The planted misaligned-fault control must keep its raw movaps, but
     # UBSan's alignment check reports it BEFORE the deliberate fault, so a
@@ -1024,5 +1042,13 @@ if(ENABLE_TESTING)
     # and requires every available impl to return the FIRST tied index.
     # Fixed-position tie edges cannot see a scan-order reduce bug.
     volk_add_test(index_tie_sweep volk_test_index_tie_sweep)
+
+    # Saturation-contract regression test for volk_16ic_x2_dot_prod_16ic
+    # (#220): same-sign product streams make saturating addition associative,
+    # so every conforming impl must return exactly clamp(sum). Catches
+    # wrapping accumulate/reduce/tail steps and sub-term-saturating
+    # accumulators; the random correctness sweep cannot (it stops judging
+    # this kernel above its max_sweep_vlen).
+    volk_add_test(dot_prod_16ic_saturation volk_test_dot_prod_16ic_saturation)
 
 endif(ENABLE_TESTING)

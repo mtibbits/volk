@@ -82,7 +82,16 @@ std::vector<volk_test_case_t> init_test_list(volk_test_params_t test_params)
     QA(VOLK_INIT_TEST(volk_16ic_s32f_magnitude_32f, test_params))
     QA(VOLK_INIT_TEST(volk_16ic_convert_32fc, test_params))
     QA(VOLK_INIT_TEST(volk_16ic_x2_multiply_16ic, test_params))
-    QA(VOLK_INIT_TEST(volk_16ic_x2_dot_prod_16ic, test_params))
+    // #220: the correctness remainder sweep runs but does not judge this kernel
+    // above 131071 (P(rail) ~ 2e-5 per run there; derivation and the coverage
+    // trade in the harness README, "Saturating integer reductions"). Saturating
+    // addition is not associative, so impls with different accumulation orders
+    // legitimately disagree past the int16 rail, by up to full scale: no
+    // tolerance can bridge it, and the float reference oracle rejects int
+    // outputs -- do not re-propose either. Saturation correctness is owned by
+    // the directed ctest qa_dot_prod_16ic_saturation.
+    QA(VOLK_INIT_TEST(volk_16ic_x2_dot_prod_16ic,
+                      test_params.make_max_sweep_vlen(131071)))
     QA(VOLK_INIT_TEST(volk_16i_s32f_convert_32f, test_params))
     QA(VOLK_INIT_TEST(volk_16i_convert_8i, test_params))
     // 3e-2 = ceil_1sf(2.5 x max measured impl-vs-generic complex-magnitude delta at

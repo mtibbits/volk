@@ -1413,7 +1413,8 @@ int main(int argc, char* argv[])
         return 0;
     }
 
-    std::cout << "# kernel-correctness remainder sweep: vlens 1..40, 131071, 1000003\n";
+    std::cout << "# kernel-correctness remainder sweep: vlens 1..40, 131071, 1000003 "
+                 "(above a kernel's max_sweep_vlen: run, not judged)\n";
     std::cout.flush();
 
     int tested = 0, failed = 0, skipped = 0; // #133: skipped = ref oracle couldn't run
@@ -1459,7 +1460,34 @@ int main(int argc, char* argv[])
         std::map<std::string, double> impl_max_err; // #135: worst divergence per impl
         bool ref_applied = true; // #133: did the oracle evaluate this kernel?
         std::string ref_skip_reason;
+        const unsigned int kcap = kp.max_sweep_vlen(); // #220; 0 = uncapped
+        std::vector<unsigned int> unjudged;
         for (unsigned int v : vlens) {
+            // #220: above the kernel's registered max_sweep_vlen the
+            // impl-vs-impl comparison is ill-posed (saturating reduction is
+            // order-dependent past the rail). The run still EXECUTES, with its
+            // verdict discarded, so it consumes the same RNG draws: skipping it
+            // would shift the HARNESS_SEED stream under every later kernel
+            // (measured: 244 report rows move). Verified once at ship by the
+            // seeded before/after report diff; not guarded by a standing test.
+            if (kcap && v > kcap) {
+                (void)quiet_run(tc,
+                                ref,
+                                ktol,
+                                kscalar,
+                                kabs,
+                                iter,
+                                v,
+                                kfedges,
+                                kcedges,
+                                nullptr,
+                                nullptr,
+                                &ref_applied,
+                                &ref_skip_reason,
+                                nullptr);
+                unjudged.push_back(v);
+                continue;
+            }
             // Per-impl collection is only consumed by the CSV report; skip the
             // per-(kernel,vlen) map building when no report was requested.
             if (quiet_run(tc,
@@ -1498,6 +1526,13 @@ int main(int argc, char* argv[])
             continue;
         }
         ++tested;
+        if (!unjudged.empty()) {
+            std::cerr << "note  [" << mode << "] " << tc.name()
+                      << "  vlens not judged: " << vlens_str(unjudged)
+                      << "(max_sweep_vlen " << kcap
+                      << ": comparison ill-posed above it; see this kernel's "
+                         "lib/kernel_tests.h registration)\n";
+        }
         if (tc.name() == "volk_32fc_s32f_power_32fc") {
             power_seen = true;
             power_ref_tested = (ref != nullptr);
