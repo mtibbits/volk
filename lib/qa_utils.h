@@ -89,6 +89,7 @@ private:
     std::string _kernel_regex;
     std::vector<float> _float_edge_cases;
     std::vector<lv_32fc_t> _complex_edge_cases;
+    unsigned int _max_sweep_vlen = 0; // 0 = uncapped (#220)
 
 public:
     // ctor
@@ -137,6 +138,7 @@ public:
     {
         return _complex_edge_cases;
     };
+    unsigned int max_sweep_vlen() { return _max_sweep_vlen; };
     volk_test_params_t make_absolute(float tol)
     {
         volk_test_params_t t(*this);
@@ -148,6 +150,14 @@ public:
     {
         volk_test_params_t t(*this);
         t._tol = tol;
+        return t;
+    }
+    // #220: the correctness remainder sweep runs, but does not judge, this
+    // kernel at vlens above v (see test_correctness.cc).
+    volk_test_params_t make_max_sweep_vlen(unsigned int v)
+    {
+        volk_test_params_t t(*this);
+        t._max_sweep_vlen = v;
         return t;
     }
 };
