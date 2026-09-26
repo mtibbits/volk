@@ -79,8 +79,8 @@ registered edge cases, so with sin/cos now in absolute mode no path checks their
 relative accuracy for small `|x|` (tracked with #106). An exported `HARNESS_SEED`
 still pins the data, but rows differ from pre-#150 snapshots: under the triage
 runner's per-(kernel, mode) seed only the sin/cos/tan rows move (range and
-edge-case count changed); under a single exported seed in one process the 35 new
-edge slots also shift the stream of every kernel registered after sin.
+edge-case count changed); under a single exported seed in one process the 50 new
+edge slots (15 each for sin and cos, 20 for tan) also shift the stream of every kernel registered after sin.
 
 ### 2. Independent double-precision reference (#88)
 
