@@ -30,9 +30,22 @@
  * |x|: errors beyond 1e-2 away from poles/zeros appear from |x| ~ 3pi upward and
  * dominate by |x| ~ 1e6; for |x| beyond ~5e8 the vector paths can return NaN
  * (quadrant accumulator overflow). The scalar tail path calls libm tanf and is
- * accurate everywhere. The NEON/RVV implementations are separate code paths and
- * are not covered by these measurements. For accuracy-critical use away from
- * [-pi/2, pi/2], prefer the generic implementation.
+ * accurate everywhere. The NEON implementations are separate code paths and
+ * are not covered by these measurements; the RVV path is measured below. For
+ * accuracy-critical use away from [-pi/2, pi/2], prefer the generic
+ * implementation.
+ *
+ * Numerical accuracy of the RVV implementation (measured under qemu RVV 1.0 at
+ * VLEN=256 against libm tanf): at most 4.77e-7 absolute (3.46e-7 relative) for
+ * |x| <= 1; on |x| <= 4*pi, 3 of 131071 uniform random samples exceed 1e-2
+ * relative and 402 exceed 1e-2 absolute, all in the pole/zero slivers. The
+ * three-term single-precision Cody-Waite reduction loses accuracy as the
+ * quadrant count grows; the result is meaningless from |x| ~ 1e5 and NaN from
+ * |x| >= 2^31 * pi/4 ~ 1.7e9, where the int32 quadrant conversion saturates.
+ * There is no scalar tail on this path. tan additionally inherits the
+ * pole/zero slivers described above for x86. (Before mtibbits/volk#150 the
+ * quadrant was rounded to nearest and results were sign-flipped wherever sin
+ * or cos was.)
  *
  * <b>Dispatcher Prototype</b>
  * \code
@@ -846,7 +859,14 @@ volk_32f_tan_32f_rvv(float* bVector, const float* aVector, unsigned int num_poin
         vl = __riscv_vsetvl_e32m2(n);
         vfloat32m2_t v = __riscv_vle32_v_f32m2(aVector, vl);
         vfloat32m2_t s = __riscv_vfabs(v, vl);
-        vint32m2_t q = __riscv_vfcvt_x(__riscv_vfmul(s, c4oPi, vl), vl);
+        // Quadrant of |x| in units of pi/4, TRUNCATED (== floor, s >= 0). The
+        // sine below is recovered from a sqrt and carries no sign; the masks
+        // that pick sine/cosine and negate assume q = floor(|x| * 4/pi), i.e. a
+        // reduced argument in [-pi/4, pi/4) whose sign is fixed by q's parity.
+        // Round-to-nearest (the previous vfcvt_x) broke that for even q with a
+        // negative reduced argument: sign flips on (7pi/8, pi) mod pi for sin
+        // and (3pi/8, pi/2) mod pi for cos (mtibbits/volk#150).
+        vint32m2_t q = __riscv_vfcvt_rtz_x(__riscv_vfmul(s, c4oPi, vl), vl);
         vfloat32m2_t r = __riscv_vfcvt_f(__riscv_vadd(q, __riscv_vand(q, 1, vl), vl), vl);
 
         s = __riscv_vfnmsac(s, cPio4a, r, vl);

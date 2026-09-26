@@ -90,6 +90,7 @@ private:
     std::vector<float> _float_edge_cases;
     std::vector<lv_32fc_t> _complex_edge_cases;
     unsigned int _max_sweep_vlen = 0; // 0 = uncapped (#220)
+    float _float_range = 1.0f;        // #150: random float inputs are uniform[-r, r]
 
 public:
     // ctor
@@ -139,6 +140,7 @@ public:
         return _complex_edge_cases;
     };
     unsigned int max_sweep_vlen() { return _max_sweep_vlen; };
+    float float_range() const { return _float_range; };
     volk_test_params_t make_absolute(float tol)
     {
         volk_test_params_t t(*this);
@@ -150,6 +152,15 @@ public:
     {
         volk_test_params_t t(*this);
         t._tol = tol;
+        return t;
+    }
+    // #150: draw the random float inputs from uniform[-r, r] instead of the
+    // default [-1, 1], so kernels with an argument reduction (trig) are tested
+    // through it. Edge cases are injected first and are unaffected.
+    volk_test_params_t make_float_range(float r)
+    {
+        volk_test_params_t t(*this);
+        t._float_range = r;
         return t;
     }
     // #220: the correctness remainder sweep runs, but does not judge, this
@@ -253,7 +264,8 @@ void load_random_data(
     volk_type_t type,
     unsigned int n,
     const std::vector<float>& float_edge_cases = std::vector<float>(),
-    const std::vector<lv_32fc_t>& complex_edge_cases = std::vector<lv_32fc_t>());
+    const std::vector<lv_32fc_t>& complex_edge_cases = std::vector<lv_32fc_t>(),
+    float float_range = 1.0f);
 
 bool run_volk_tests(volk_func_desc_t,
                     void (*)(),
@@ -279,7 +291,8 @@ bool run_volk_tests(
     const std::vector<lv_32fc_t>& complex_edge_cases = std::vector<lv_32fc_t>(),
     unsigned int trials = 1,
     bool with_minmax = false,
-    std::ofstream* csv_out = nullptr);
+    std::ofstream* csv_out = nullptr,
+    float float_range = 1.0f);
 
 // #88: compare every impl against an independent double-precision reference oracle
 // (catches defects all impls share). Defined in qa_utils.cc; oracle from the

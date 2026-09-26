@@ -131,6 +131,19 @@ generic is the *least* accurate impl (the #118 wrong-side lesson again). So:
   table); in practice only NEON arms it today — RVV needs `__riscv_vector` in
   the test TU, which the fork's RVV CI lanes (testing OFF) do not build.
 
+#### Random-input range (`float_range`, #150)
+
+Random float inputs are drawn from `uniform[-r, r]` with `r` per kernel
+(`volk_test_params_t::make_float_range(r)`, default `1.0f` — unchanged for every
+kernel that does not set it). `volk_32f_sin_32f` and `volk_32f_cos_32f` register
+`r = 4π` in absolute mode so their argument reduction is exercised (the rvv
+quadrant bug of #150 was invisible on `[-1, 1]`). The knob is honoured by the
+default qa path and `volk_profile`; the `test_correctness` driver sweep does not
+read it yet (#106) — it still fills `[-1, 1]`, while it does take a kernel's
+absolute mode and registered edge cases. An exported `HARNESS_SEED` still pins
+the data, but the sin/cos/tan rows differ from pre-#150 snapshots because the
+range and the edge-case count changed.
+
 ### 3. Output canary + AddressSanitizer (#89)
 
 - **Blind spot:** qa checks only `[0, num_points)`; a one-past (or far-past)
