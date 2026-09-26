@@ -81,10 +81,13 @@ static double compute_mad(const std::vector<double>& v, double median)
 }
 
 template <typename T>
-void random_floats(void* buf, unsigned int n, std::default_random_engine& rnd_engine)
+void random_floats(void* buf,
+                   unsigned int n,
+                   std::default_random_engine& rnd_engine,
+                   T range)
 {
     T* array = static_cast<T*>(buf);
-    std::uniform_real_distribution<T> uniform_dist(T(-1), T(1));
+    std::uniform_real_distribution<T> uniform_dist(-range, range);
     for (unsigned int i = 0; i < n; i++) {
         array[i] = uniform_dist(rnd_engine);
     }
@@ -94,7 +97,8 @@ void load_random_data(void* data,
                       volk_type_t type,
                       unsigned int n,
                       const std::vector<float>& float_edge_cases,
-                      const std::vector<lv_32fc_t>& complex_edge_cases)
+                      const std::vector<lv_32fc_t>& complex_edge_cases,
+                      float float_range)
 {
     // #134: HARNESS_SEED pins the data for reproducible triage snapshots.
     // The triage runner exports a distinct per-(kernel,mode) value derived
@@ -158,12 +162,14 @@ void load_random_data(void* data,
             double* array = static_cast<double*>(data);
             random_floats<double>(array + edge_case_count * (type.is_complex ? 2 : 1),
                                   remaining_n,
-                                  rnd_engine);
+                                  rnd_engine,
+                                  static_cast<double>(float_range));
         } else {
             float* array = static_cast<float*>(data);
             random_floats<float>(array + edge_case_count * (type.is_complex ? 2 : 1),
                                  remaining_n,
-                                 rnd_engine);
+                                 rnd_engine,
+                                 float_range);
         }
     } else {
         if (type.is_complex) {
@@ -902,7 +908,8 @@ bool run_volk_tests(volk_func_desc_t desc,
                           test_params.complex_edge_cases(),
                           test_params.trials(),
                           test_params.with_minmax(),
-                          csv_out);
+                          csv_out,
+                          test_params.float_range());
 }
 
 // Shared setup for run_volk_tests and run_volk_reference_test (#88): build the
@@ -930,7 +937,8 @@ static qa_test_data setup_test_data(volk_func_desc_t desc,
                                     bool benchmark_mode,
                                     const std::vector<float>& float_edge_cases,
                                     const std::vector<lv_32fc_t>& complex_edge_cases,
-                                    volk_qa_aligned_mem_pool& mem_pool)
+                                    volk_qa_aligned_mem_pool& mem_pool,
+                                    float float_range = 1.0f)
 {
     qa_test_data d;
 
@@ -996,8 +1004,12 @@ static qa_test_data setup_test_data(volk_func_desc_t desc,
         }
     }
     for (size_t i = 0; i < d.inbuffs.size(); i++) {
-        load_random_data(
-            d.inbuffs[i], d.inputsig[i], vlen, float_edge_cases, complex_edge_cases);
+        load_random_data(d.inbuffs[i],
+                         d.inputsig[i],
+                         vlen,
+                         float_edge_cases,
+                         complex_edge_cases,
+                         float_range);
     }
 
     // ok let's make a vector of vector of void buffers, which holds the input/output
@@ -1040,7 +1052,8 @@ bool run_volk_tests(volk_func_desc_t desc,
                     const std::vector<lv_32fc_t>& complex_edge_cases,
                     unsigned int trials,
                     bool with_minmax,
-                    std::ofstream* csv_out)
+                    std::ofstream* csv_out,
+                    float float_range)
 {
     // Initialize this entry in results vector
     results->push_back(volk_test_results_t());
@@ -1064,8 +1077,14 @@ bool run_volk_tests(volk_func_desc_t desc,
 
     // Build arch list, parse the signature, generate inputs, and per-arch buffer
     // copies (shared with run_volk_reference_test; #88). `vlen` is twiddled here.
-    qa_test_data test_setup = setup_test_data(
-        desc, name, vlen, benchmark_mode, float_edge_cases, complex_edge_cases, mem_pool);
+    qa_test_data test_setup = setup_test_data(desc,
+                                              name,
+                                              vlen,
+                                              benchmark_mode,
+                                              float_edge_cases,
+                                              complex_edge_cases,
+                                              mem_pool,
+                                              float_range);
     if (!test_setup.ok) {
         return false;
     }

@@ -20,6 +20,19 @@
  * oscillator. It is also useful in spectral analysis and any operation that
  * requires mapping phase samples to their real-valued cosine representation.
  *
+ * Numerical accuracy of the RVV implementation (measured under qemu RVV 1.0 at
+ * VLEN=256 against libm cosf, absolute error): at most 1.2e-7 for |x| <= 1
+ * and 4.8e-7 for |x| <= 4*pi (the latter also the exhaustive maximum of a
+ * bit-exact scalar model of this path over every float in range), growing
+ * roughly linearly with |x| (3.8e-6 at |x| <= 100) because the three-term
+ * single-precision Cody-Waite reduction loses accuracy as the quadrant count
+ * grows; the absolute error reaches ~4e-3 by |x| ~ 1e5, the result is
+ * unrelated to the true value beyond |x| ~ 1e8, and it is +inf from
+ * |x| >= 2^31 * pi/4 ~ 1.7e9, where the int32 quadrant conversion saturates. There is no scalar tail on
+ * this path. For accuracy-critical use with large arguments prefer the generic
+ * implementation. (Before mtibbits/volk#150 the quadrant was rounded to
+ * nearest and results were sign-flipped on (3pi/8, pi/2) mod pi.)
+ *
  * <b>Dispatcher Prototype</b>
  * \code
  * void volk_32f_cos_32f(float* bVector, const float* aVector, unsigned int num_points)
@@ -920,7 +933,14 @@ volk_32f_cos_32f_rvv(float* bVector, const float* aVector, unsigned int num_poin
         vl = __riscv_vsetvl_e32m2(n);
         vfloat32m2_t v = __riscv_vle32_v_f32m2(aVector, vl);
         vfloat32m2_t s = __riscv_vfabs(v, vl);
-        vint32m2_t q = __riscv_vfcvt_x(__riscv_vfmul(s, c4oPi, vl), vl);
+        // Quadrant of |x| in units of pi/4, TRUNCATED (== floor, s >= 0). The
+        // sine below is recovered from a sqrt and carries no sign; the masks
+        // that pick sine/cosine and negate assume q = floor(|x| * 4/pi), i.e. a
+        // reduced argument in [-pi/4, pi/4) whose sign is fixed by q's parity.
+        // Round-to-nearest (the previous vfcvt_x) broke that for even q with a
+        // negative reduced argument: sign flips on (7pi/8, pi) mod pi for sin
+        // and (3pi/8, pi/2) mod pi for cos (mtibbits/volk#150).
+        vint32m2_t q = __riscv_vfcvt_rtz_x(__riscv_vfmul(s, c4oPi, vl), vl);
         vfloat32m2_t r = __riscv_vfcvt_f(__riscv_vadd(q, __riscv_vand(q, 1, vl), vl), vl);
 
         s = __riscv_vfnmsac(s, cPio4a, r, vl);
