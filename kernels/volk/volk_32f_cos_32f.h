@@ -21,12 +21,14 @@
  * requires mapping phase samples to their real-valued cosine representation.
  *
  * Numerical accuracy of the RVV implementation (measured under qemu RVV 1.0 at
- * VLEN=256 against libm cosf, absolute error): at most 1.19e-7 for |x| <= 1
- * and 4.47e-7 for |x| <= 4*pi, growing roughly linearly with |x|
- * (3.76e-6 at |x| <= 100) because the three-term single-precision
- * Cody-Waite reduction loses accuracy as the quadrant count grows; the result
- * is meaningless from |x| ~ 1e5 and +inf from |x| >= 2^31 * pi/4 ~ 1.7e9,
- * where the int32 quadrant conversion saturates. There is no scalar tail on
+ * VLEN=256 against libm cosf, absolute error): at most 1.2e-7 for |x| <= 1
+ * and 4.8e-7 for |x| <= 4*pi (the latter also the exhaustive maximum of a
+ * bit-exact scalar model of this path over every float in range), growing
+ * roughly linearly with |x| (3.8e-6 at |x| <= 100) because the three-term
+ * single-precision Cody-Waite reduction loses accuracy as the quadrant count
+ * grows; the absolute error reaches ~4e-3 by |x| ~ 1e5, the result is
+ * unrelated to the true value beyond |x| ~ 1e8, and it is +inf from
+ * |x| >= 2^31 * pi/4 ~ 1.7e9, where the int32 quadrant conversion saturates. There is no scalar tail on
  * this path. For accuracy-critical use with large arguments prefer the generic
  * implementation. (Before mtibbits/volk#150 the quadrant was rounded to
  * nearest and results were sign-flipped on (3pi/8, pi/2) mod pi.)

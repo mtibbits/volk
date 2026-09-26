@@ -64,6 +64,24 @@ real sweep and exits 2 ("NEGATIVE CONTROL LOST") if its own detector is broken.
   primes, with edge values (0, ±1, ±4.97, ±5, ±6, ±8 / complex equivalents)
   injected at the head of the test data.
 
+#### Random-input range (`float_range`, #150)
+
+Random float inputs are drawn from `uniform[-r, r]` with `r` per kernel
+(`volk_test_params_t::make_float_range(r)`, default `1.0f` — unchanged for every
+kernel that does not set it). `volk_32f_sin_32f` and `volk_32f_cos_32f` register
+`r = 4π` in absolute mode so their argument reduction is exercised (the rvv
+quadrant bug of #150 was invisible on `[-1, 1]`). Only the default qa path
+(`testqa`, and `volk_profile` through the same `run_volk_tests` short form)
+honours the knob today. The `test_correctness` driver sweep, the #88 reference
+oracle, the #89 canary, the #90 immutability and the #91 misaligned runs all
+still fill `[-1, 1]` (#106) — the driver does take a kernel's absolute mode and
+registered edge cases, so with sin/cos now in absolute mode no path checks their
+relative accuracy for small `|x|` (tracked with #106). An exported `HARNESS_SEED`
+still pins the data, but rows differ from pre-#150 snapshots: under the triage
+runner's per-(kernel, mode) seed only the sin/cos/tan rows move (range and
+edge-case count changed); under a single exported seed in one process the 35 new
+edge slots also shift the stream of every kernel registered after sin.
+
 ### 2. Independent double-precision reference (#88)
 
 - **Blind spot:** qa compares impls against a reference that can share their
@@ -130,19 +148,6 @@ generic is the *least* accurate impl (the #118 wrong-side lesson again). So:
   coverage floor is armed at compile time (arch macro + the build's machine
   table); in practice only NEON arms it today — RVV needs `__riscv_vector` in
   the test TU, which the fork's RVV CI lanes (testing OFF) do not build.
-
-#### Random-input range (`float_range`, #150)
-
-Random float inputs are drawn from `uniform[-r, r]` with `r` per kernel
-(`volk_test_params_t::make_float_range(r)`, default `1.0f` — unchanged for every
-kernel that does not set it). `volk_32f_sin_32f` and `volk_32f_cos_32f` register
-`r = 4π` in absolute mode so their argument reduction is exercised (the rvv
-quadrant bug of #150 was invisible on `[-1, 1]`). The knob is honoured by the
-default qa path and `volk_profile`; the `test_correctness` driver sweep does not
-read it yet (#106) — it still fills `[-1, 1]`, while it does take a kernel's
-absolute mode and registered edge cases. An exported `HARNESS_SEED` still pins
-the data, but the sin/cos/tan rows differ from pre-#150 snapshots because the
-range and the edge-case count changed.
 
 ### 3. Output canary + AddressSanitizer (#89)
 

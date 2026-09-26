@@ -40,8 +40,10 @@
  * |x| <= 1; on |x| <= 4*pi, 3 of 131071 uniform random samples exceed 1e-2
  * relative and 402 exceed 1e-2 absolute, all in the pole/zero slivers. The
  * three-term single-precision Cody-Waite reduction loses accuracy as the
- * quadrant count grows; the result is meaningless from |x| ~ 1e5 and NaN from
- * |x| >= 2^31 * pi/4 ~ 1.7e9, where the int32 quadrant conversion saturates.
+ * quadrant count grows; the underlying sin/cos absolute error reaches ~4e-3 by
+ * |x| ~ 1e5, the result is unrelated to the true value beyond |x| ~ 1e8, and
+ * it is NaN from |x| >= 2^31 * pi/4 ~ 1.7e9, where the int32 quadrant
+ * conversion saturates.
  * There is no scalar tail on this path. tan additionally inherits the
  * pole/zero slivers described above for x86. (Before mtibbits/volk#150 the
  * quadrant was rounded to nearest and results were sign-flipped wherever sin

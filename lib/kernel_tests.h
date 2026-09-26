@@ -146,12 +146,16 @@ std::vector<volk_test_case_t> init_test_list(volk_test_params_t test_params)
 
     QA(VOLK_INIT_TEST(volk_32f_expfast_32f, test_params_inacc_tenth))
     // #150: test sin/cos THROUGH their argument reduction. The rvv impls share a
-    // quadrant computation that is only reached for |x| > pi/8 and was wrong on
+    // quadrant computation whose first sign-flip band started at 3pi/8: wrong on
     // (7pi/8, pi) mod pi for sin and (3pi/8, pi/2) mod pi for cos; uniform[-1, 1]
     // never gets there. Absolute mode: near the zeros of sin/cos the relative
-    // metric amplifies the ~4e-7 single-precision reduction error of EVERY SIMD
+    // metric amplifies the ~5e-7 single-precision reduction error of EVERY SIMD
     // path (x86 non-FMA measured 1.23 relative at 7pi/2 on this range), so
-    // relative 1e-6 is unsatisfiable while absolute 1e-6 is met with >2x headroom.
+    // relative 1e-6 is unsatisfiable while absolute 1e-6 is met with ~2x headroom
+    // (worst case 5.1e-7). Known cost: no path now checks sin/cos RELATIVE
+    // accuracy for small |x| (an impl flushing sin(x) to 0 below 1e-6 would
+    // pass); a hybrid abs+rel bound or a second [-1, 1] relative registration
+    // is tracked under #106.
     // Edges: both signs of the flip bands (1.3, 3, 4.5, 6) pin the bug; the
     // floats just below pi/2 and pi (where round-to-nearest and truncation
     // disagree), signed zero and a denormal are smoke edges — under absolute
