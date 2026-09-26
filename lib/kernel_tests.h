@@ -145,10 +145,51 @@ std::vector<volk_test_case_t> init_test_list(volk_test_params_t test_params)
     QA(VOLK_INIT_TEST(volk_32f_log2_32f, test_params_log2))
 
     QA(VOLK_INIT_TEST(volk_32f_expfast_32f, test_params_inacc_tenth))
-    QA(VOLK_INIT_TEST(volk_32f_sin_32f, test_params))
-    QA(VOLK_INIT_TEST(volk_32f_cos_32f, test_params))
+    // #150: test sin/cos THROUGH their argument reduction. The rvv impls share a
+    // quadrant computation whose first sign-flip band started at 3pi/8: wrong on
+    // (7pi/8, pi) mod pi for sin and (3pi/8, pi/2) mod pi for cos; uniform[-1, 1]
+    // never gets there. Absolute mode: near the zeros of sin/cos the relative
+    // metric amplifies the ~5e-7 single-precision reduction error of EVERY SIMD
+    // path (x86 non-FMA measured 1.23 relative at 7pi/2 on this range), so
+    // relative 1e-6 is unsatisfiable while absolute 1e-6 is met with ~2x headroom
+    // (worst case 5.1e-7). Known cost: no path now checks sin/cos RELATIVE
+    // accuracy for small |x| (an impl flushing sin(x) to 0 below 1e-6 would
+    // pass); a hybrid abs+rel bound or a second [-1, 1] relative registration
+    // is tracked under #106.
+    // Edges: both signs of the flip bands (1.3, 3, 4.5, 6) pin the bug; the
+    // floats just below pi/2 and pi (where round-to-nearest and truncation
+    // disagree), signed zero and a denormal are smoke edges — under absolute
+    // 1e-6 they can only catch a NaN/inf, not a sign flip.
+    volk_test_params_t test_params_trig(
+        test_params.make_float_range(12.566371f).make_absolute(1e-6));
+    test_params_trig.add_float_edge_cases({ 0.f,
+                                            -0.f,
+                                            1e-40f,
+                                            1.3f,
+                                            -1.3f,
+                                            1.5707963f,
+                                            -1.5707963f,
+                                            3.f,
+                                            -3.f,
+                                            3.1415925f,
+                                            -3.1415925f,
+                                            4.5f,
+                                            -4.5f,
+                                            6.f,
+                                            -6.f });
+    QA(VOLK_INIT_TEST(volk_32f_sin_32f, test_params_trig))
+    QA(VOLK_INIT_TEST(volk_32f_cos_32f, test_params_trig))
     QA(VOLK_INIT_TEST(volk_32f_sincos_32f_x2, test_params))
-    QA(VOLK_INIT_TEST(volk_32f_tan_32f, test_params_inacc))
+    // #150: tan stays on [-1, 1] at 1e-2 (its pole/zero slivers fail any bound on
+    // a wide random range; see the kernel's accuracy note) but gets deterministic
+    // quadrant edges, both signs. Every value measured <= 6e-6 relative on this
+    // branch's x86 tan (the #110 fix); 9.5 and 12 are coverage past 3pi, not
+    // band pins.
+    volk_test_params_t test_params_tan(test_params_inacc);
+    test_params_tan.add_float_edge_cases({ 1.3f, -1.3f, 2.5f,  -2.5f, 3.f,  -3.f, 4.f,
+                                           -4.f, 4.5f,  -4.5f, 5.f,   -5.f, 6.f,  -6.f,
+                                           7.f,  -7.f,  9.5f,  -9.5f, 12.f, -12.f });
+    QA(VOLK_INIT_TEST(volk_32f_tan_32f, test_params_tan))
 
     volk_test_params_t test_params_atan(test_params);
     test_params_atan.add_float_edge_cases({ std::nanf(""),
