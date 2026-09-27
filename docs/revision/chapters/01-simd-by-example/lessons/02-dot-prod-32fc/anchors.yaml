@@ -1,0 +1,108 @@
+# The file shown: kernels/volk/volk_32fc_x2_dot_prod_32fc.h on dev/all-prs.
+# SIMD bodies repeat between u_ and a_ variants, so inner anchors carry `within`.
+generic:
+  from: "void volk_32fc_x2_dot_prod_32fc_generic("
+  to: "^}"
+  variant: true
+  label: generic
+generic-loop:
+  from: "for (i = 0; i < n_2_ccomplex_blocks; ++i) {"
+  to: "^    }"
+  within: generic
+
+u-sse3:
+  from: "void volk_32fc_x2_dot_prod_32fc_u_sse3("
+  to: "^}"
+  variant: true
+  label: SSE3
+sse3-dup:
+  from: "yl = _mm_moveldup_ps(y);"
+  to: "yh = _mm_movehdup_ps\\(y\\);"
+  within: u-sse3
+sse3-swizzle:
+  match: "x = _mm_shuffle_ps(x, x, 0xB1);"
+  within: u-sse3
+sse3-addsub:
+  from: "z = _mm_addsub_ps(tmp1,"
+  to: "\\);"
+  within: u-sse3
+
+u-avx:
+  from: "void volk_32fc_x2_dot_prod_32fc_u_avx("
+  to: "^}"
+  variant: true
+  label: AVX
+avx-odd-tail:
+  from: "for (i = num_points - isodd; i < num_points; i++) {"
+  to: "^    }"
+  within: u-avx
+
+u-avx-fma:
+  from: "void volk_32fc_x2_dot_prod_32fc_u_avx_fma("
+  to: "^}"
+  variant: true
+  label: AVX+FMA
+avx-fmaddsub:
+  from: "z = _mm256_fmaddsub_ps("
+  to: "\\);"
+  within: u-avx-fma
+
+neon:
+  from: "void volk_32fc_x2_dot_prod_32fc_neon("
+  to: "^}"
+  variant: true
+  label: NEON
+neon-ld2:
+  from: "a_val = vld2q_f32((float*)a_ptr);"
+  to: "b_val = vld2q_f32\\(\\(float\\*\\)b_ptr\\);"
+  within: neon
+
+neonv8:
+  from: "void volk_32fc_x2_dot_prod_32fc_neonv8("
+  to: "^}"
+  variant: true
+  label: NEONv8
+neonv8-fms:
+  match: "acc0_r = vfmsq_f32(acc0_r, a0.val[1], b0.val[1]); /* - ai*bi */"
+  within: neonv8
+
+a-sse3:
+  from: "void volk_32fc_x2_dot_prod_32fc_a_sse3("
+  to: "^}"
+  variant: true
+  label: SSE3 (aligned)
+a-avx:
+  from: "void volk_32fc_x2_dot_prod_32fc_a_avx("
+  to: "^}"
+  variant: true
+  label: AVX (aligned)
+a-avx-fma:
+  from: "void volk_32fc_x2_dot_prod_32fc_a_avx_fma("
+  to: "^}"
+  variant: true
+  label: AVX+FMA (aligned)
+neon-opttests:
+  from: "void volk_32fc_x2_dot_prod_32fc_neon_opttests("
+  to: "^}"
+  variant: true
+  label: NEON (opttests)
+neon-optfma:
+  from: "void volk_32fc_x2_dot_prod_32fc_neon_optfma("
+  to: "^}"
+  variant: true
+  label: NEON (optfma)
+neon-optfmaunroll:
+  from: "void volk_32fc_x2_dot_prod_32fc_neon_optfmaunroll("
+  to: "^}"
+  variant: true
+  label: NEON (unrolled)
+rvv:
+  from: "void volk_32fc_x2_dot_prod_32fc_rvv("
+  to: "^}"
+  variant: true
+  label: RVV
+rvvseg:
+  from: "void volk_32fc_x2_dot_prod_32fc_rvvseg("
+  to: "^}"
+  variant: true
+  label: RVV (segmented)

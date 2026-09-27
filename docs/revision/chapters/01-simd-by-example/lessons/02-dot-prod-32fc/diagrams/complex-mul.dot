@@ -1,0 +1,10 @@
+digraph cmul {
+  rankdir=LR;
+  node [shape=box, fontname="Helvetica", fontsize=11];
+  edge [fontname="Helvetica", fontsize=10];
+  arbr [label="ar × br"]; aibi [label="ai × bi"]; arbi [label="ar × bi"]; aibr [label="ai × br"];
+  re [label="real = ar·br − ai·bi", id="sse3-addsub"];
+  im [label="imag = ar·bi + ai·br"];
+  arbr -> re; aibi -> re [label="−"];
+  arbi -> im; aibr -> im [label="+"];
+}

@@ -1,0 +1,72 @@
+{
+  "media": "media/narration.wav",
+  "segments": [
+    {
+      "end": 8.748,
+      "show": [
+        "generic"
+      ],
+      "start": 0.4,
+      "text": "The complex dot product is lesson one's kernel for radio samples, where every element is a real part and an imaginary part stored side by side."
+    },
+    {
+      "diagram": "complex-mul",
+      "end": 17.843,
+      "start": 9.148,
+      "text": "Multiplying two complex numbers takes four products and one subtraction. Lane-wise SIMD multiplies only produce half of them, in the wrong places."
+    },
+    {
+      "end": 27.311,
+      "show": [
+        "sse3-dup"
+      ],
+      "start": 18.243,
+      "text": "SSE3 fixes that in three moves. First, duplicate the taps two ways, real parts into both lanes, then imaginary parts into both lanes."
+    },
+    {
+      "end": 34.212,
+      "show": [
+        "sse3-swizzle"
+      ],
+      "start": 27.711,
+      "text": "Second, swap the sample pairs with a shuffle. Now every one of the four products exists, two per register."
+    },
+    {
+      "diagram": "complex-mul",
+      "end": 43.273,
+      "node": "sse3-addsub",
+      "show": [
+        "sse3-addsub"
+      ],
+      "start": 34.612,
+      "text": "Third, add sub. Subtract in the even lanes, add in the odd lanes, and the real and imaginary parts of the product come out already interleaved."
+    },
+    {
+      "end": 48.701,
+      "show": [
+        "avx-odd-tail"
+      ],
+      "start": 43.673,
+      "text": "AVX is the same three moves at twice the width, with a one item tail for an odd count."
+    },
+    {
+      "end": 52.885,
+      "show": [
+        "avx-fmaddsub"
+      ],
+      "start": 49.101,
+      "text": "AVX with FMA fuses the last multiply into the add sub."
+    },
+    {
+      "end": 62.492,
+      "show": [
+        "neon-ld2",
+        "neonv8-fms"
+      ],
+      "start": 53.285,
+      "text": "NEON avoids the shuffle. A de interleaving load puts real parts in one register and imaginary parts in another, and the sign flip becomes a multiply subtract."
+    }
+  ],
+  "text_hash": "sha256:c04358227d0b34cad8436464cfd4c6478a7bd5a90d6df3590d2c6a668b9b4672",
+  "voice": "en_US-lessac-medium"
+}
