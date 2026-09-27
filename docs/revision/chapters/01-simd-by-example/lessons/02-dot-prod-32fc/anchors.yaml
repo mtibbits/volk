@@ -26,6 +26,10 @@ sse3-addsub:
   from: "z = _mm_addsub_ps(tmp1,"
   to: "\\);"
   within: u-sse3
+sse3-odd-tail:
+  from: "if (isodd) {"
+  to: "^    }"
+  within: u-sse3
 
 u-avx:
   from: "void volk_32fc_x2_dot_prod_32fc_u_avx("

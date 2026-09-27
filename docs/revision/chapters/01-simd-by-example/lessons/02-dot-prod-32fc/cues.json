@@ -2,7 +2,7 @@
   "media": "media/narration.wav",
   "segments": [
     {
-      "end": 8.748,
+      "end": 9.038,
       "show": [
         "generic"
       ],
@@ -11,62 +11,62 @@
     },
     {
       "diagram": "complex-mul",
-      "end": 17.843,
-      "start": 9.148,
-      "text": "Multiplying two complex numbers takes four products and one subtraction. Lane-wise SIMD multiplies only produce half of them, in the wrong places."
+      "end": 19.573,
+      "start": 9.438,
+      "text": "Multiplying two complex numbers takes four products, one subtraction and one addition. Lane-wise SIMD multiplies only produce half of the products, in the wrong places."
     },
     {
-      "end": 27.311,
+      "end": 29.157,
       "show": [
         "sse3-dup"
       ],
-      "start": 18.243,
+      "start": 19.973,
       "text": "SSE3 fixes that in three moves. First, duplicate the taps two ways, real parts into both lanes, then imaginary parts into both lanes."
     },
     {
-      "end": 34.212,
+      "end": 35.815,
       "show": [
         "sse3-swizzle"
       ],
-      "start": 27.711,
+      "start": 29.557,
       "text": "Second, swap the sample pairs with a shuffle. Now every one of the four products exists, two per register."
     },
     {
       "diagram": "complex-mul",
-      "end": 43.273,
+      "end": 44.643,
       "node": "sse3-addsub",
       "show": [
         "sse3-addsub"
       ],
-      "start": 34.612,
+      "start": 36.215,
       "text": "Third, add sub. Subtract in the even lanes, add in the odd lanes, and the real and imaginary parts of the product come out already interleaved."
     },
     {
-      "end": 48.701,
+      "end": 53.112,
       "show": [
         "avx-odd-tail"
       ],
-      "start": 43.673,
-      "text": "AVX is the same three moves at twice the width, with a one item tail for an odd count."
+      "start": 45.043,
+      "text": "AVX is the same three moves at twice the width, four complex numbers per trip, with a scalar tail for the last zero to three elements."
     },
     {
-      "end": 52.885,
+      "end": 57.274,
       "show": [
         "avx-fmaddsub"
       ],
-      "start": 49.101,
-      "text": "AVX with FMA fuses the last multiply into the add sub."
+      "start": 53.512,
+      "text": "AVX with FMA fuses the first multiply into the add sub."
     },
     {
-      "end": 62.492,
+      "end": 71.629,
       "show": [
         "neon-ld2",
         "neonv8-fms"
       ],
-      "start": 53.285,
-      "text": "NEON avoids the shuffle. A de interleaving load puts real parts in one register and imaginary parts in another, and the sign flip becomes a multiply subtract."
+      "start": 57.674,
+      "text": "NEON avoids the shuffle. A de interleaving load puts real parts in one register and imaginary parts in another, so the four products are plain lane-wise multiplies. NEON version 8 folds the subtraction into a fused multiply subtract."
     }
   ],
-  "text_hash": "sha256:c04358227d0b34cad8436464cfd4c6478a7bd5a90d6df3590d2c6a668b9b4672",
+  "text_hash": "sha256:bd8d16a3046ccc504ec7bcc3656e37cadfa3c0d2a28a15e45dd8f9e72742fa2e",
   "voice": "en_US-lessac-medium"
 }

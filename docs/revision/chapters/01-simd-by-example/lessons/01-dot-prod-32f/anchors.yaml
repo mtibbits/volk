@@ -62,6 +62,10 @@ u-avx:
   to: "^}"
   variant: true
   label: AVX
+avx-lanes:
+  from: "__m256 dotProdVal0 = _mm256_setzero_ps();"
+  to: "dotProdVal1 = _mm256_setzero_ps"
+  within: u-avx
 
 u-avx2-fma:
   from: "void volk_32f_x2_dot_prod_32f_u_avx2_fma("

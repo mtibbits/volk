@@ -1,7 +1,7 @@
 segments:
   - text: This kernel is the dot product. Multiply two vectors element by element, add the products, return one number. In a FIR filter that number is one output sample.
     show: generic
-  - text: The generic version is the definition. One multiply and one add per element, and every other version in this file has to match it.
+  - text: The generic version is the definition. One multiply and one add per element, and every other version in this file has to match it to within rounding.
     show: generic-loop
   - text: SSE processes sixteen floats per trip. Four registers of four lanes each, multiplied pairwise, and added into four separate accumulators so the adds do not wait on each other.
     show: sse-lanes
@@ -11,11 +11,11 @@ segments:
     show: sse-tail
   - text: The SSE3 version is the SSE version with two operands swapped. It is a rung with nothing on it, kept so the dispatcher has an SSE3 entry.
     show: sse3-add
-  - text: SSE4 point 1 adds a dot product instruction. Four calls, each writing its sum into a different lane, then combined with a bitwise or instead of an add. Elegant, and usually slower.
+  - text: SSE4 point 1 adds a dot product instruction. Four calls, each writing its sum into a different lane and zeros elsewhere, then combined with a bitwise or instead of an add. Elegant, and usually slower.
     show: sse4-dp
-  - text: AVX is SSE with registers twice as wide. Eight floats per register, same accumulators, same reduction, same tail.
-    show: u-avx
-  - text: AVX2 with FMA is the version most modern x86 machines run. One fused multiply add does both operations with a single rounding, and the loop body is one line.
+  - text: AVX is SSE with registers twice as wide. Eight floats per register, still sixteen per trip, so two accumulators do the work of four. Same reduction, same tail.
+    show: avx-lanes
+  - text: AVX2 with FMA is the version most modern x86 machines run. One fused multiply add does both operations with a single rounding, and the arithmetic is one line.
     show: fma-step
   - text: Eight lanes are stored and summed, then the tail loop mops up.
     show: [fma-reduce, fma-tail]
@@ -23,6 +23,6 @@ segments:
     show: avx512-step
   - text: On Arm, NEON keeps four accumulators and uses a multiply accumulate, then folds the lanes down in two steps. NEON version 8 swaps in a fused multiply add and a single across-vector sum.
     show: [neon-mla, neon-reduce]
-  - text: At run time VOLK walks this tree from the widest instruction set down, unless a profile run has already measured a faster choice on this machine.
+  - text: At run time VOLK takes the highest-ranked variant this CPU supports, walking the tree from the top, unless a profile run has recorded a measured winner for this machine.
     diagram: dispatch
     node: u-avx2-fma
