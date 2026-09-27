@@ -17,11 +17,20 @@ jobs:
         with:
           submodules: "recursive"
       - name: Install dependencies
-        run: sudo apt install python3-mako liborc-dev doxygen
+        run: sudo apt install python3-mako liborc-dev doxygen graphviz
       - name: Configure
         run: mkdir build && cd build && cmake -DCMAKE_CXX_FLAGS="-Werror" -DBUILD_EXECUTABLE=ON ..
       - name: Build
         run: cmake --build build --target volk_doc
+      # reVision lessons (docs/revision) are checked on every push and, on the
+      # integration branch, built into the docs site under learn/.
+      - name: Install reVision engine
+        run: python3 -m pip install "revision-engine @ git+https://github.com/mtibbits/reVision@v0.1.1"
+      - name: Check reVision lessons
+        run: rv2 check --root .
+      - name: Build reVision lessons into the docs site
+        if: github.repository == 'mtibbits/volk' && github.ref == 'refs/heads/dev/all-prs'
+        run: rv2 build --root . --output build/html/learn
       # The SSH deploy targets gnuradio's libvolk.org server; its secrets only
       # exist in the upstream repo, so forks must skip it or the job fails.
       - name: Setup SSH Keys

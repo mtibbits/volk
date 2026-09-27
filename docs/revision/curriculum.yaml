@@ -1,0 +1,10 @@
+chapters:
+  - slug: simd-by-example
+    title: SIMD by example
+    lessons:
+      - slug: dot-prod-32f
+        title: The real dot product
+        path: chapters/01-simd-by-example/lessons/01-dot-prod-32f
+      - slug: dot-prod-32fc
+        title: The complex dot product
+        path: chapters/01-simd-by-example/lessons/02-dot-prod-32fc
