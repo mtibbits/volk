@@ -1,0 +1,112 @@
+{
+  "media": "media/narration.wav",
+  "segments": [
+    {
+      "end": 10.292,
+      "show": [
+        "generic"
+      ],
+      "start": 0.4,
+      "text": "This kernel is the dot product. Multiply two vectors element by element, add the products, return one number. In a FIR filter that number is one output sample."
+    },
+    {
+      "end": 17.669,
+      "show": [
+        "generic-loop"
+      ],
+      "start": 10.692,
+      "text": "The generic version is the definition. One multiply and one add per element, and every other version in this file has to match it."
+    },
+    {
+      "end": 28.948,
+      "show": [
+        "sse-lanes"
+      ],
+      "start": 18.069,
+      "text": "SSE processes sixteen floats per trip. Four registers of four lanes each, multiplied pairwise, and added into four separate accumulators so the adds do not wait on each other."
+    },
+    {
+      "end": 37.823,
+      "show": [
+        "sse-combine"
+      ],
+      "start": 29.348,
+      "text": "After the loop, the accumulators are combined and their four lanes are added one by one. That is the horizontal reduction, and every SIMD version ends with one."
+    },
+    {
+      "end": 45.572,
+      "show": [
+        "sse-tail"
+      ],
+      "start": 38.223,
+      "text": "Sixteen does not divide every length, so a scalar tail loop finishes the last few elements exactly as the generic version would."
+    },
+    {
+      "end": 54.482,
+      "show": [
+        "sse3-add"
+      ],
+      "start": 45.972,
+      "text": "The SSE3 version is the SSE version with two operands swapped. It is a rung with nothing on it, kept so the dispatcher has an SSE3 entry."
+    },
+    {
+      "end": 65.529,
+      "show": [
+        "sse4-dp"
+      ],
+      "start": 54.882,
+      "text": "SSE4 point 1 adds a dot product instruction. Four calls, each writing its sum into a different lane, then combined with a bitwise or instead of an add. Elegant, and usually slower."
+    },
+    {
+      "end": 73.498,
+      "show": [
+        "u-avx"
+      ],
+      "start": 65.929,
+      "text": "AVX is SSE with registers twice as wide. Eight floats per register, same accumulators, same reduction, same tail."
+    },
+    {
+      "end": 83.767,
+      "show": [
+        "fma-step"
+      ],
+      "start": 73.898,
+      "text": "AVX2 with FMA is the version most modern x86 machines run. One fused multiply add does both operations with a single rounding, and the loop body is one line."
+    },
+    {
+      "end": 87.453,
+      "show": [
+        "fma-reduce",
+        "fma-tail"
+      ],
+      "start": 84.167,
+      "text": "Eight lanes are stored and summed, then the tail loop mops up."
+    },
+    {
+      "end": 91.695,
+      "show": [
+        "avx512-step"
+      ],
+      "start": 87.853,
+      "text": "AVX five twelve is the same code at sixteen lanes per instruction."
+    },
+    {
+      "end": 103.531,
+      "show": [
+        "neon-mla",
+        "neon-reduce"
+      ],
+      "start": 92.095,
+      "text": "On Arm, NEON keeps four accumulators and uses a multiply accumulate, then folds the lanes down in two steps. NEON version 8 swaps in a fused multiply add and a single across-vector sum."
+    },
+    {
+      "diagram": "dispatch",
+      "end": 112.348,
+      "node": "u-avx2-fma",
+      "start": 103.931,
+      "text": "At run time VOLK walks this tree from the widest instruction set down, unless a profile run has already measured a faster choice on this machine."
+    }
+  ],
+  "text_hash": "sha256:eb3cb4d5b6ba82dec4bbab344c2bd48e9cb5aedf90e5c4cb58ade7f24a6dda14",
+  "voice": "en_US-lessac-medium"
+}
