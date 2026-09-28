@@ -1,0 +1,10 @@
+site:
+  title: VOLK by example
+  base_url: ""
+repo:
+  url: https://github.com/mtibbits/volk
+  host: github
+content: docs/revision
+output: public
+narration:
+  voice: en_US-lessac-medium

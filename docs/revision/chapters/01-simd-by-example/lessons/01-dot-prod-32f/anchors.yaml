@@ -1,0 +1,165 @@
+# The file shown: kernels/volk/volk_32f_x2_dot_prod_32f.h on dev/all-prs.
+# Every SIMD variant appears twice (u_ unaligned, a_ aligned) with the same body,
+# so anchors inside a body carry `within` to pin them to one variant.
+generic:
+  from: "void volk_32f_x2_dot_prod_32f_generic("
+  to: "^}"
+  variant: true
+  label: generic
+generic-loop:
+  from: "for (number = 0; number < num_points; number++) {"
+  to: "^    }"
+  within: generic
+
+u-sse:
+  from: "void volk_32f_x2_dot_prod_32f_u_sse("
+  to: "^}"
+  variant: true
+  label: SSE
+sse-lanes:
+  from: "__m128 dotProdVal0 = _mm_setzero_ps();"
+  to: "dotProdVal3 = _mm_setzero_ps"
+  within: u-sse
+sse-loop:
+  from: "for (; number < sixteenthPoints; number++) {"
+  to: "^    }"
+  within: u-sse
+sse-combine:
+  from: "dotProdVal0 = _mm_add_ps(dotProdVal0, dotProdVal1);"
+  to: "dotProduct \\+= dotProductVector\\[3\\];"
+  within: u-sse
+sse-tail:
+  from: "number = sixteenthPoints * 16;"
+  to: "^    }"
+  within: u-sse
+
+u-sse3:
+  from: "void volk_32f_x2_dot_prod_32f_u_sse3("
+  to: "^}"
+  variant: true
+  label: SSE3
+sse3-add:
+  from: "dotProdVal0 = _mm_add_ps(dotProdVal0, c0Val);"
+  to: "dotProdVal3 = _mm_add_ps\\(dotProdVal3, c3Val\\);"
+  within: u-sse3
+
+u-sse4-1:
+  from: "void volk_32f_x2_dot_prod_32f_u_sse4_1("
+  to: "^}"
+  variant: true
+  label: SSE4.1
+sse4-dp:
+  from: "cVal1 = _mm_dp_ps(aVal1, bVal1, 0xF1);"
+  to: "cVal4 = _mm_dp_ps\\(aVal4, bVal4, 0xF8\\);"
+  within: u-sse4-1
+sse4-or:
+  from: "cVal1 = _mm_or_ps(cVal1, cVal2);"
+  to: "cVal1 = _mm_or_ps\\(cVal1, cVal3\\);"
+  within: u-sse4-1
+
+u-avx:
+  from: "void volk_32f_x2_dot_prod_32f_u_avx("
+  to: "^}"
+  variant: true
+  label: AVX
+avx-lanes:
+  from: "__m256 dotProdVal0 = _mm256_setzero_ps();"
+  to: "dotProdVal1 = _mm256_setzero_ps"
+  within: u-avx
+
+u-avx2-fma:
+  from: "void volk_32f_x2_dot_prod_32f_u_avx2_fma("
+  to: "^}"
+  variant: true
+  label: AVX2+FMA
+fma-loop:
+  from: "for (number = 0; number < eighthPoints; number++) {"
+  to: "^    }"
+  within: u-avx2-fma
+fma-step:
+  match: "dotProdVal = _mm256_fmadd_ps(aVal1, bVal1, dotProdVal);"
+  within: u-avx2-fma
+fma-reduce:
+  from: "_mm256_storeu_ps(dotProductVector,"
+  to: "dotProductVector\\[6\\] \\+ dotProductVector\\[7\\];"
+  within: u-avx2-fma
+fma-tail:
+  from: "for (number = eighthPoints * 8; number < num_points; number++) {"
+  to: "^    }"
+  within: u-avx2-fma
+
+u-avx512f:
+  from: "void volk_32f_x2_dot_prod_32f_u_avx512f("
+  to: "^}"
+  variant: true
+  label: AVX-512F
+avx512-step:
+  match: "dotProdVal = _mm512_fmadd_ps(aVal1, bVal1, dotProdVal);"
+  within: u-avx512f
+
+neon:
+  from: "void volk_32f_x2_dot_prod_32f_neon("
+  to: "^}"
+  variant: true
+  label: NEON
+neon-acc:
+  from: "float32x4_t acc0 = vdupq_n_f32(0);"
+  to: "acc3 = vdupq_n_f32\\(0\\);"
+  within: neon
+neon-mla:
+  from: "acc0 = vmlaq_f32(acc0, a0, b0);"
+  to: "acc3 = vmlaq_f32\\(acc3, a3, b3\\);"
+  within: neon
+neon-reduce:
+  from: "float32x2_t sum = vadd_f32("
+  to: "vget_lane_f32\\(sum, 0\\);"
+  within: neon
+
+neonv8:
+  from: "void volk_32f_x2_dot_prod_32f_neonv8("
+  to: "^}"
+  variant: true
+  label: NEONv8
+neonv8-fma:
+  from: "acc0 = vfmaq_f32(acc0, a0, b0);"
+  to: "acc3 = vfmaq_f32\\(acc3, a3, b3\\);"
+  within: neonv8
+neonv8-reduce:
+  match: "float dotProduct = vaddvq_f32(acc0);"
+  within: neonv8
+
+a-sse:
+  from: "void volk_32f_x2_dot_prod_32f_a_sse("
+  to: "^}"
+  variant: true
+  label: SSE (aligned)
+a-sse3:
+  from: "void volk_32f_x2_dot_prod_32f_a_sse3("
+  to: "^}"
+  variant: true
+  label: SSE3 (aligned)
+a-sse4-1:
+  from: "void volk_32f_x2_dot_prod_32f_a_sse4_1("
+  to: "^}"
+  variant: true
+  label: SSE4.1 (aligned)
+a-avx:
+  from: "void volk_32f_x2_dot_prod_32f_a_avx("
+  to: "^}"
+  variant: true
+  label: AVX (aligned)
+a-avx2-fma:
+  from: "void volk_32f_x2_dot_prod_32f_a_avx2_fma("
+  to: "^}"
+  variant: true
+  label: AVX2+FMA (aligned)
+a-avx512f:
+  from: "void volk_32f_x2_dot_prod_32f_a_avx512f("
+  to: "^}"
+  variant: true
+  label: AVX-512F (aligned)
+rvv:
+  from: "void volk_32f_x2_dot_prod_32f_rvv("
+  to: "^}"
+  variant: true
+  label: RVV

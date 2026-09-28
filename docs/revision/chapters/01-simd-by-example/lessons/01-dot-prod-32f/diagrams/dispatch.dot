@@ -1,0 +1,32 @@
+digraph dispatch {
+  rankdir=TB;
+  node [shape=box, fontname="Helvetica", fontsize=11];
+  edge [fontname="Helvetica", fontsize=10];
+  cpu      [label="CPU feature flags", shape=ellipse];
+  q512     [label="AVX-512F?", shape=diamond];
+  qfma     [label="AVX2 and FMA?", shape=diamond];
+  qavx     [label="AVX?", shape=diamond];
+  qsse41   [label="SSE4.1?", shape=diamond];
+  qsse3    [label="SSE3?", shape=diamond];
+  qsse     [label="SSE?", shape=diamond];
+  qneonv8  [label="NEONv8?", shape=diamond];
+  qneon    [label="NEON?", shape=diamond];
+  avx512   [label="u_avx512f", id="u-avx512f"];
+  avx2fma  [label="u_avx2_fma", id="u-avx2-fma"];
+  avx      [label="u_avx", id="u-avx"];
+  sse41    [label="u_sse4_1", id="u-sse4-1"];
+  sse3     [label="u_sse3", id="u-sse3"];
+  sse      [label="u_sse", id="u-sse"];
+  neonv8   [label="neonv8", id="neonv8"];
+  neon     [label="neon", id="neon"];
+  generic  [label="generic", id="generic"];
+  cpu -> q512;
+  q512 -> avx512 [label="yes"]; q512 -> qfma [label="no"];
+  qfma -> avx2fma [label="yes"]; qfma -> qavx [label="no"];
+  qavx -> avx [label="yes"]; qavx -> qsse41 [label="no"];
+  qsse41 -> sse41 [label="yes"]; qsse41 -> qsse3 [label="no"];
+  qsse3 -> sse3 [label="yes"]; qsse3 -> qsse [label="no"];
+  qsse -> sse [label="yes"]; qsse -> qneonv8 [label="no"];
+  qneonv8 -> neonv8 [label="yes"]; qneonv8 -> qneon [label="no"];
+  qneon -> neon [label="yes"]; qneon -> generic [label="no"];
+}

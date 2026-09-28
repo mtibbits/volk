@@ -3,3 +3,6 @@
 *.pyo
 *build*/
 archives/
+
+# reVision lesson build output (rv2 build)
+/public/

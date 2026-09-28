@@ -1,0 +1,19 @@
+segments:
+  - text: The complex dot product is lesson one's kernel for radio samples, where every element is a real part and an imaginary part stored side by side.
+    show: generic
+  - text: Multiplying two complex numbers takes four products, one subtraction and one addition. Lane-wise SIMD multiplies only produce half of the products, in the wrong places.
+    diagram: complex-mul
+  - text: SSE3 fixes that in three moves. First, duplicate the taps two ways, real parts into both lanes, then imaginary parts into both lanes.
+    show: sse3-dup
+  - text: Second, swap the sample pairs with a shuffle. Now every one of the four products exists, two per register.
+    show: sse3-swizzle
+  - text: Third, add sub. Subtract in the even lanes, add in the odd lanes, and the real and imaginary parts of the product come out already interleaved.
+    show: sse3-addsub
+    diagram: complex-mul
+    node: sse3-addsub
+  - text: AVX is the same three moves at twice the width, four complex numbers per trip, with a scalar tail for the last zero to three elements.
+    show: avx-odd-tail
+  - text: AVX with FMA fuses the first multiply into the add sub.
+    show: avx-fmaddsub
+  - text: NEON avoids the shuffle. A de interleaving load puts real parts in one register and imaginary parts in another, so the four products are plain lane-wise multiplies. NEON version 8 folds the subtraction into a fused multiply subtract.
+    show: [neon-ld2, neonv8-fms]
