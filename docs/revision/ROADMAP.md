@@ -234,8 +234,10 @@ code often needs an extra step to cross between the two halves of a register.
 - `volk_16u_byteswap.h`: swaps the two bytes of every 16-bit value. `u_sse2` shifts and
   combines with `_mm_slli_epi16`, `_mm_srli_epi16` and `_mm_or_si128`; `u_avx2` uses the
   byte shuffle `_mm256_shuffle_epi8`; `neon_table` uses a table lookup (`vtbl4_u8`);
-  `neonv8` uses `vrev16q_u8`; `rvv` uses `__riscv_vrgather` with indices from
-  `RISCV_PERM8`; `rva23` uses `__riscv_vrev8`.
+  `neonv8` uses `vrev16q_u8`; `rvv` builds the byte-swap indices from `__riscv_vid_v_u8m1`
+  and applies `__riscv_vrgather` to each register of the group with `RISCV_PERM8`,
+  switching to `__riscv_vrgatherei16` when a register holds more than 256 bytes; `rva23`
+  uses `__riscv_vrev8`.
 
 **Assumes**
 
@@ -265,8 +267,8 @@ gives and how VOLK's tests judge it.
 - `volk_32f_exp_32f.h`: `u_sse2` and `u_avx2` scale the input by log2(e), reduce it with
   the split constants `exp_C1` and `exp_C2`, evaluate the polynomial `exp_p0` to `exp_p5`
   written out in the same file, and build the power of two with `_mm_cvttps_epi32`, an
-  added bias, `_mm_slli_epi32` by 23 bits and `_mm_castsi128_ps`. Everything is in one
-  file, which suits a lesson that shows one file.
+  added bias, `_mm_slli_epi32` by 23 bits and `_mm_castsi128_ps` (`u_avx2` uses the
+  256-bit forms). Everything is in one file, which suits a lesson that shows one file.
 - `volk_32f_log2_32f.h`: `u_sse4_1` takes the exponent out of the float's bits with
   `_mm_castps_si128`, a mask, `_mm_srli_epi32` by 23 bits and a subtraction of the bias,
   then approximates the rest with `_mm_log2_poly_sse` from
@@ -276,8 +278,10 @@ gives and how VOLK's tests judge it.
 - `volk_32f_sin_32f.h` (optional: teach the x86 path; RVV range-reduction bug
   [#150](https://github.com/mtibbits/volk/issues/150)): `u_avx2_fma` finds the nearest
   multiple of π/2 with `_mm256_round_ps`, then subtracts it in two `_mm256_fnmadd_ps`
-  steps, one for the high part of π/2 and one for the low part. Its polynomial,
-  `_mm256_sin_poly_avx2_fma`, is in `include/volk/volk_avx2_fma_intrinsics.h`.
+  steps, one for the high part of π/2 and one for the low part. It evaluates both
+  `_mm256_sin_poly_avx2_fma` and `_mm256_cos_poly_avx2_fma`, from
+  `include/volk/volk_avx2_fma_intrinsics.h`, picks one per lane by quadrant with
+  `_mm256_blendv_ps`, and fixes the sign with `_mm256_xor_ps`.
 
 **Assumes**
 
