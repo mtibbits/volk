@@ -957,6 +957,7 @@ EXCLUDE                = @CMAKE_BINARY_DIR@ \
                          @CMAKE_SOURCE_DIR@/include/volk/sse2neon \
                          @CMAKE_SOURCE_DIR@/README.md \
                          @CMAKE_SOURCE_DIR@/docs/AUTHORS_RESUBMITTING_UNDER_LGPL_LICENSE.md \
+                         @CMAKE_SOURCE_DIR@/docs/revision \
                          @CMAKE_SOURCE_DIR@/cmake \
                          @CMAKE_SOURCE_DIR@/apps \
                          @CMAKE_SOURCE_DIR@/lib/qa_utils.cc \
