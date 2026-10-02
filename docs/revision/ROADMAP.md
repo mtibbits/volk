@@ -81,7 +81,7 @@ into real and imaginary parts, and compare them with the Arm load from chapter 1
 
 **Assumes**
 
-Chapter 1, both lessons.
+Chapter 1 (both lessons).
 
 ## Chapter 3: Memory: aligned and unaligned
 
