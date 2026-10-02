@@ -102,7 +102,9 @@ lane.
 - Dispatch on alignment: the dispatcher combines every pointer argument with a bitwise OR,
   asks `volk_is_aligned` once, and calls the aligned or the unaligned version. This code
   is generated from `tmpl/volk_dynamic_dispatch.tmpl.c`, not written in the kernel.
-- Why NEON and RVV need only one version: their loads do not care about alignment.
+- Why NEON and RVV code usually needs only one version: their ordinary loads accept
+  addresses that are not aligned to the register width. A few NEON impls still carry an
+  a_ or u_ prefix, such as `u_neon` in the second kernel below.
 - Broadcasting: copying one number into every lane.
 
 **Kernels**
