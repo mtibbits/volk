@@ -35,7 +35,7 @@ jobs:
           python-version: '3.x'
       - name: Install reVision engine
         if: github.repository == 'mtibbits/volk'
-        run: python -m pip install "revision-engine @ git+https://github.com/mtibbits/reVision@v0.1.2"
+        run: python -m pip install "revision-engine @ git+https://github.com/mtibbits/reVision@v0.1.3"
       - name: Check reVision lessons
         if: github.repository == 'mtibbits/volk'
         run: rv2 check --root .
