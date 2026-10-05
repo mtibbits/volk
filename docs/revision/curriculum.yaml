@@ -8,3 +8,9 @@ chapters:
       - slug: dot-prod-32fc
         title: The complex dot product
         path: chapters/01-simd-by-example/lessons/02-dot-prod-32fc
+  - slug: risc-v-vector
+    title: One loop for every vector length (RISC-V Vector)
+    lessons:
+      - slug: dot-prod-32f-rvv
+        title: The real dot product on RISC-V Vector
+        path: chapters/02-risc-v-vector/lessons/01-dot-prod-32f-rvv

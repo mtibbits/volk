@@ -1,0 +1,47 @@
+# The file shown: kernels/volk/volk_32f_x2_dot_prod_32f.h on dev/all-prs.
+# generic, u-avx2-fma and fma-tail are copied from lesson 1.1's anchors.yaml.
+generic:
+  from: "void volk_32f_x2_dot_prod_32f_generic("
+  to: "^}"
+  variant: true
+  label: generic
+u-avx2-fma:
+  from: "void volk_32f_x2_dot_prod_32f_u_avx2_fma("
+  to: "^}"
+  variant: true
+  label: AVX2+FMA
+fma-tail:
+  from: "for (number = eighthPoints * 8; number < num_points; number++) {"
+  to: "^    }"
+  within: u-avx2-fma
+rvv-include:
+  match: "#include <volk/volk_rvv_intrinsics.h>"
+rvv:
+  from: "void volk_32f_x2_dot_prod_32f_rvv("
+  to: "^}"
+  variant: true
+  label: RVV
+rvv-zero:
+  match: "vfloat32m8_t vsum = __riscv_vfmv_v_f_f32m8(0, __riscv_vsetvlmax_e32m8());"
+  within: rvv
+rvv-loop:
+  from: "for (size_t vl; n > 0; n -= vl, input += vl, taps += vl) {"
+  to: "^    }"
+  within: rvv
+rvv-vsetvl:
+  match: "vl = __riscv_vsetvl_e32m8(n);"
+  within: rvv
+rvv-load:
+  from: "vfloat32m8_t v0 = __riscv_vle32_v_f32m8(input, vl);"
+  to: "__riscv_vle32_v_f32m8\\(taps, vl\\);"
+  within: rvv
+rvv-fmacc:
+  match: "vsum = __riscv_vfmacc_tu(vsum, v0, v1, vl);"
+  within: rvv
+rvv-reduce:
+  from: "size_t vl = __riscv_vsetvlmax_e32m1();"
+  to: "\\*result = __riscv_vfmv_f\\(v\\);"
+  within: rvv
+rvv-shrink:
+  match: "RISCV_SHRINK8(vfadd, f, 32, vsum)"
+  within: rvv-reduce

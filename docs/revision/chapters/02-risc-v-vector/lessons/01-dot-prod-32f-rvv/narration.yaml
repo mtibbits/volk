@@ -1,0 +1,25 @@
+segments:
+  - text: Every SIMD version in lesson one had a register width fixed by its instruction set. The risk five Vector extension leaves the width to the chip, so the program has to ask for it.
+    show: rvv
+  - text: This is the R V V version of the same dot product. It uses the compiler's vector intrinsics, plus one helper macro from Volk's own header.
+    show: rvv-include
+  - text: Recall, Eh V X 2 with FMA version. Eight floats per instruction, then a scalar tail loop for the last zero to seven elements.
+    show: [u-avx2-fma, fma-tail]
+  - text: The R V V loop asks the hardware on every trip how many elements it may process. Never more than the elements left, and never more than the register group holds. Then it moves both pointers on by that count.
+    show: rvv-loop
+  - text: Near the end, a trip is simply shorter, the last one or the last two. When the length divides evenly, no trip is short at all. Either way, there is no tail loop.
+    show: rvv-vsetvl
+  - text: The M eight in the names means L M U L is eight. Eight vector registers act as one register group. The running total is zeroed across the whole group, because the fold at the end adds every lane.
+    show: rvv-zero
+  - text: Each trip then loads that many floats from each input.
+    show: rvv-load
+  - text: A fused multiply add accumulates into one running total, so each one waits for the one before. On a short trip, the tail undisturbed form leaves the lanes past the trip's length holding their earlier partial sums. Here, tail means those lanes, not a tail loop.
+    show: rvv-fmacc
+  - text: A helper macro folds the group. It splits the eight registers apart and adds neighbouring pairs, then pairs of those sums, then the last pair. Seven adds leave one register.
+    show: rvv-shrink
+    diagram: shrink8
+    node: rvv-shrink
+  - text: Finally, one reduction adds every lane of that register into lane zero, and lane zero is copied out as the result. These adds happen in a different order from the generic version, so the last bits can differ too.
+    show: rvv-reduce
+    diagram: shrink8
+    node: rvv-reduce
