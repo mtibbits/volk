@@ -14,8 +14,8 @@ designer decides how wide they are, so the same compiled program may run on a ch
 registers or one with large registers. A program cannot hard-code a width it does not know, so
 it has to ask.
 
-The [RVV version](@rvv) of this kernel sits at the bottom of the same file as lesson 1.1. It is short,
-and it uses intrinsics from the C compiler plus one macro from VOLK's own
+The [RVV version](@rvv) of this kernel sits at the bottom of the same file as lesson 1.1. It is
+short, and it uses intrinsics from the C compiler plus one macro from VOLK's own
 [RVV helper header](@rvv-include). This lesson reads it in four ideas: asking for the vector
 length, eight registers acting as one, a running total that a short trip cannot spoil, and
 folding the eight registers into one before adding that register's lanes into one number.
@@ -32,9 +32,10 @@ the price of a width chosen in advance.
 
 The RVV version replaces "how many elements fit in a register" with a question. At the top of
 every trip through the [loop](@rvv-loop), the [length request](@rvv-vsetvl),
-`__riscv_vsetvl_e32m8`, takes `n`, the number of elements still to do, and returns `vl`, how many this trip will handle. The answer is
-never more than the elements left, and never more than the register group holds. The loop then
-subtracts `vl` from `n` and moves both pointers on by `vl`.
+`__riscv_vsetvl_e32m8`, takes `n`, the number of elements still to do, and returns `vl`, how
+many this trip will handle. The answer is never more than the elements left, and never more than
+the register group holds. The loop then subtracts `vl` from `n` and moves both pointers on by
+`vl`.
 
 When the elements do not divide into full trips, a trip near the end is simply shorter. It may
 be the last trip alone, or the last two, because the hardware is allowed to spread the remaining
@@ -59,17 +60,19 @@ writes when there are fewer elements than the group holds. Each trip then
 
 ## The running total and `_tu`
 
-The [multiply-accumulate](@rvv-fmacc), `__riscv_vfmacc_tu`, multiplies the two loads lane by lane and adds the products
-into `vsum`. It is a fused multiply-add, with one rounding, like `_mm256_fmadd_ps` in lesson 1.1.
-Like the AVX2 with FMA version in the recap, this loop sends every multiply-add through one
-accumulator, so each one waits for the one before it; whether the register group hides that wait
-depends on the hardware.
+The [multiply-accumulate](@rvv-fmacc), `__riscv_vfmacc_tu`, multiplies the two loads lane by
+lane and adds the products into `vsum`. It is a fused multiply-add, with one rounding, like
+`_mm256_fmadd_ps` in lesson 1.1. Like the AVX2 with FMA version in the recap, this loop sends
+every multiply-add through one accumulator, so each one waits for the one before it; whether the
+register group hides that wait depends on the hardware.
 
-On a short trip only the first `vl` lanes are updated. The lanes past `vl` still hold partial
-sums from earlier, full trips, and the reduction at the end needs them. The `_tu` suffix means
-"tail undisturbed": those lanes keep their old values. In RVV, "tail" means the lanes of a
-register past `vl`. It is not lesson 1.1's tail loop, the scalar loop for leftover elements,
-which this version does not have.
+On a short trip only the first `vl` lanes are updated. The lanes past `vl` still hold what
+earlier trips left there: partial sums, or the starting zero in lanes no trip has reached, as
+when one short trip is the whole loop. The fold at the end adds every one of those lanes. The
+`_tu` suffix means "tail undisturbed": those lanes keep their old values. Without it the
+hardware would be free to overwrite them, and the result could be wrong. In RVV, "tail" means
+the lanes of a register past `vl`. It is not lesson 1.1's tail loop, the scalar loop for
+leftover elements, which this version does not have.
 
 ## Folding the group
 
