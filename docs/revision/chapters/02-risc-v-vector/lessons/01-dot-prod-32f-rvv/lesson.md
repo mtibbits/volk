@@ -6,7 +6,7 @@ start: rvv
 ---
 # The real dot product on RISC-V Vector
 
-Every SIMD version in the first lesson had a register width fixed by its instruction set:
+Every SIMD version lesson 1.1 taught had a register width fixed by its instruction set:
 four floats for SSE and NEON, eight for AVX, sixteen for AVX-512F. The code was written for
 that width, and a scalar tail loop finished whatever did not fit. The RISC-V Vector extension,
 RVV, does not fix the width. The instruction set describes vector registers, and the chip
