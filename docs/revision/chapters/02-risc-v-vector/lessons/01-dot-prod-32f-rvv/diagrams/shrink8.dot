@@ -1,0 +1,17 @@
+digraph shrink8 {
+  rankdir=TB;
+  node [shape=box, fontname="Helvetica", fontsize=11];
+  edge [fontname="Helvetica", fontsize=10];
+  s0 [label="slice 0"]; s1 [label="slice 1"]; s2 [label="slice 2"]; s3 [label="slice 3"];
+  s4 [label="slice 4"]; s5 [label="slice 5"]; s6 [label="slice 6"]; s7 [label="slice 7"];
+  p01 [label="0+1"]; p23 [label="2+3"]; p45 [label="4+5"]; p67 [label="6+7"];
+  q0123 [label="0+1+2+3"]; q4567 [label="4+5+6+7"];
+  one [label="one register: all eight added", id="rvv-shrink"];
+  red [label="vfredusum: add every lane into lane 0", id="rvv-reduce"];
+  res [label="vfmv_f: lane 0 as a float"];
+  s0 -> p01; s1 -> p01; s2 -> p23; s3 -> p23;
+  s4 -> p45; s5 -> p45; s6 -> p67; s7 -> p67;
+  p01 -> q0123; p23 -> q0123; p45 -> q4567; p67 -> q4567;
+  q0123 -> one; q4567 -> one;
+  one -> red -> res;
+}
