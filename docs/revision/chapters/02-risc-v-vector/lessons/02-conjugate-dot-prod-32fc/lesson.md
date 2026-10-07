@@ -58,7 +58,7 @@ directly.
 
 ## Split one: shift and narrow
 
-The [RVV version](@rvv) has no de-interleaving load to call on. Its loop asks for the vector
+The [RVV version](@rvv) does not use a de-interleaving load. Its loop asks for the vector
 length every trip, as in the previous lesson: `__riscv_vsetvl_e32m2` returns a count no larger
 than the elements left and no larger than the register group holds. Near the end a trip may be
 shorter, the last one or the last two, and when `num_points` is a whole multiple of what the
