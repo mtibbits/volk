@@ -14,3 +14,6 @@ chapters:
       - slug: dot-prod-32f-rvv
         title: The real dot product on RISC-V Vector
         path: chapters/02-risc-v-vector/lessons/01-dot-prod-32f-rvv
+      - slug: conjugate-dot-prod-32fc
+        title: The conjugate dot product on RISC-V Vector
+        path: chapters/02-risc-v-vector/lessons/02-conjugate-dot-prod-32fc

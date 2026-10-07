@@ -1,0 +1,28 @@
+digraph deinterleave {
+  rankdir=TB;
+  graph [fontname="Helvetica", fontsize=12];
+  node [shape=box, fontname="Helvetica", fontsize=11];
+  edge [fontname="Helvetica", fontsize=10];
+  subgraph cluster_shift {
+    label="split by shifting (rvv)";
+    elem [shape=plaintext, label=<<table border="0" cellborder="1" cellspacing="0" cellpadding="4"><tr><td border="0">one 64-bit element</td></tr><tr><td>imaginary half (high 32 bits)</td></tr><tr><td>real half (low 32 bits)</td></tr></table>>];
+    shifts [label="two narrowing shifts\nby 0: keeps the low half\nby 32: keeps the high half", id="rvv-split"];
+    preal [label="real part"];
+    pimag [label="imaginary part"];
+    elem -> shifts;
+    shifts -> preal;
+    shifts -> pimag;
+  }
+  subgraph cluster_seg {
+    label="split while loading (rvvseg)";
+    mem [label="memory\nreal, imaginary, real, imaginary, ..."];
+    segload [label="segment load\nfills one two-part register group", id="rvvseg-load"];
+    segsplit [label="two vget calls\ntake each part out", id="rvvseg-split"];
+    greal [label="register group of reals"];
+    gimag [label="register group of imaginaries"];
+    mem -> segload;
+    segload -> segsplit;
+    segsplit -> greal;
+    segsplit -> gimag;
+  }
+}
