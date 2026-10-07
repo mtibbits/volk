@@ -1,0 +1,23 @@
+segments:
+  - text: This kernel adds up input times the con-juh-get of taps. It is the inner product behind correlation and matched filtering, where a signal is compared with a known pattern. The generic version does it in one line, one multiply by the con-juh-get for each element.
+    show: [generic, generic-loop]
+  - text: Call the input A and the taps B. The con-juh-get flips the sign of B's imaginary part. Compared with the plain complex product from lesson one point two, the two terms that involve B's imaginary part change sign, and nothing else changes.
+    show: generic-loop
+  - text: Recall Arm's de-interleaving load, which puts the real parts in one register and the imaginary parts in another. The NEON version here points its loads the other way round, taps first, then input.
+    show: [neon-ptrs, neon-ld2]
+  - text: Each trip of its main loop forms taps times the con-juh-get of input, with the signs set by a multiply subtract and a multiply add. There is no negation in that loop. A scalar loop handles the leftover elements, and then the version takes the con-juh-get of the total, once, at the end.
+    show: [neon-mla, neon-conj]
+  - text: The R V V version has no de-interleaving load. It loads each complex value as one sixty-four bit number, and two narrowing shifts split it. Shifting by zero keeps the low half, the real part. Shifting by thirty-two keeps the high half, the imaginary part. That works on a little en-dee-an system.
+    show: [rvv-load, rvv-split]
+    diagram: deinterleave
+    node: rvv-split
+  - text: Then the con-juh-get is a single negation of the taps' imaginary part, followed by an ordinary complex multiply. Apart from its name and that one negation, this function is line for line the R V V version from lesson one point two.
+    show: [rvv-conj, rvv-mul]
+  - text: Two running totals, one for the real parts and one for the imaginary parts, use the tail undisturbed add. On a short trip, the lanes past the trip's length keep their earlier partial sums.
+    show: rvv-acc
+  - text: After the loop, a helper macro folds each two-register group with a single add. One reduction per total adds every lane into lane zero, and the two results are joined into one complex number. These adds happen in a different order from the generic version, so the last bits can differ.
+    show: rvv-reduce
+  - text: The segmented version splits while loading. A segment load reads the interleaved pairs into one two-part register group, real parts in one part and imaginary parts in the other, and two calls take each part out. From there, the body is the same. Which version is faster depends on the hardware, and has to be measured.
+    show: [rvvseg-load, rvvseg-split]
+    diagram: deinterleave
+    node: rvvseg-load

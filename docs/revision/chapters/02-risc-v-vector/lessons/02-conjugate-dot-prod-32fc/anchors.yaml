@@ -1,0 +1,72 @@
+# The file shown: kernels/volk/volk_32fc_x2_conjugate_dot_prod_32fc.h on dev/all-prs.
+# The RVV bodies appear once each; anchors inside them carry `within` because
+# rvv and rvvseg share most of their lines.
+generic:
+  from: "void volk_32fc_x2_conjugate_dot_prod_32fc_generic("
+  to: "^}"
+  variant: true
+  label: generic
+generic-loop:
+  match: "res += (*input++) * lv_conj((*taps++));"
+  within: generic
+neon:
+  from: "void volk_32fc_x2_conjugate_dot_prod_32fc_neon("
+  to: "^}"
+  variant: true
+  label: NEON
+neon-ptrs:
+  from: "lv_32fc_t* a_ptr = (lv_32fc_t*)taps;"
+  to: "b_ptr = "
+  within: neon
+neon-ld2:
+  from: "a_val = vld2q_f32((float*)a_ptr);"
+  to: "b_val = vld2q_f32"
+  within: neon
+neon-mla:
+  from: "tmp_imag.val[1] = vmlsq_f32("
+  to: "vmlaq_f32"
+  within: neon
+neon-conj:
+  match: "*result = lv_conj(*result);"
+  within: neon
+rvv:
+  from: "void volk_32fc_x2_conjugate_dot_prod_32fc_rvv("
+  to: "^}"
+  variant: true
+  label: RVV
+rvv-load:
+  from: "vuint64m4_t va = __riscv_vle64_v_u64m4((const uint64_t*)input, vl);"
+  to: "vuint64m4_t vb = "
+  within: rvv
+rvv-split:
+  from: "vfloat32m2_t var = __riscv_vreinterpret_f32m2(__riscv_vnsrl(va, 0, vl));"
+  to: "__riscv_vnsrl\\(vb, 32, vl\\)"
+  within: rvv
+rvv-conj:
+  match: "vbi = __riscv_vfneg(vbi, vl);"
+  within: rvv
+rvv-mul:
+  from: "vfloat32m2_t vr = __riscv_vfnmsac("
+  to: "vfloat32m2_t vi = __riscv_vfmacc\\("
+  within: rvv
+rvv-acc:
+  from: "vsumr = __riscv_vfadd_tu(vsumr, vsumr, vr, vl);"
+  to: "vsumi = __riscv_vfadd_tu"
+  within: rvv
+rvv-reduce:
+  from: "size_t vl = __riscv_vsetvlmax_e32m1();"
+  to: "__riscv_vfredusum\\(vi, z, vl\\)"
+  within: rvv
+rvvseg:
+  from: "void volk_32fc_x2_conjugate_dot_prod_32fc_rvvseg("
+  to: "^}"
+  variant: true
+  label: RVV (segmented)
+rvvseg-load:
+  from: "vfloat32m2x2_t va = __riscv_vlseg2e32_v_f32m2x2((const float*)input, vl);"
+  to: "vfloat32m2x2_t vb = "
+  within: rvvseg
+rvvseg-split:
+  from: "vfloat32m2_t var = __riscv_vget_f32m2(va, 0), vai = __riscv_vget_f32m2(va, 1);"
+  to: "vfloat32m2_t vbr = __riscv_vget_f32m2"
+  within: rvvseg
