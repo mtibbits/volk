@@ -56,7 +56,7 @@ static inline int chainback_viterbi(unsigned char* data,
      */
 
     d += tailsize * d_decision_t_size; /* Look past tail */
-    int retval;
+    int retval = endstate;
     int dif = tailsize - (d_k - 1);
     // printf("break, %d, %d\n", dif, (nbits+dif)%d_framebits);
     p_decision_t dec;
