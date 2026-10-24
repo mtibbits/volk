@@ -23,6 +23,9 @@
  * Tie-break: when several points share the maximum magnitude, the kernel returns
  * the FIRST (lowest) such index.
  *
+ * Tie-break: when several points share the maximum magnitude, the kernel returns
+ * the FIRST (lowest) such index.
+ *
  * <b>Dispatcher Prototype</b>
  * \code
  * void volk_32fc_index_max_32u(uint32_t* target, const lv_32fc_t* src0, uint32_t
