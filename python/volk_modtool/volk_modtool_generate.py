@@ -10,6 +10,7 @@
 
 import os
 import re
+import sys
 import glob
 
 
@@ -87,13 +88,22 @@ class volk_modtool(object):
         need_ifdef_updates = ["constant.h", "volk_complex.h", "volk_malloc.h", "volk_prefs.h",
                               "volk_common.h", "volk_cpu.tmpl.h", "volk_config_fixed.tmpl.h",
                               "volk_typedefs.h", "volk.tmpl.h"]
+        # skip VCS metadata and Python bytecode caches so we don't try
+        # to read .git/index, *.pyc, etc. as UTF-8 text
+        skip_dirs = {'.git', '.hg', '.svn', '__pycache__'}
         for root, dirnames, filenames in os.walk(self.my_dict['base']):
+            dirnames[:] = [d for d in dirnames if d not in skip_dirs]
             for name in filenames:
                 t_table = [re.search(a, name) for a in current_kernel_names]
                 t_table = set(t_table)
                 if (t_table == set([None])) or (name == "volk_32f_null_32f.h"):
                     infile = os.path.join(root, name)
-                    instring = open(infile, 'r').read()
+                    try:
+                        instring = open(infile, 'r').read()
+                    except UnicodeDecodeError:
+                        print("volk_modtool: skipping non-UTF-8 file %s" % infile,
+                              file=sys.stderr)
+                        continue
                     outstring = re.sub(self.volk, 'volk_' + self.my_dict['name'], instring)
                     # Update the header ifdef guards only where needed
                     if name in need_ifdef_updates:
