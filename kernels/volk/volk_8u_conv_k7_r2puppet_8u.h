@@ -126,8 +126,6 @@ static inline void volk_8u_conv_k7_r2puppet_8u_spiral(unsigned char* dec,
         Y = X + d_numstates;
         Branchtab =
             (unsigned char*)volk_malloc(d_numstates / 2 * rate, volk_get_alignment());
-        D = (unsigned char*)volk_malloc((d_numstates / 8) * (framebits + 6),
-                                        volk_get_alignment());
         int state, i;
 
         /*  Initialize the branch table */
@@ -144,8 +142,17 @@ static inline void volk_8u_conv_k7_r2puppet_8u_spiral(unsigned char* dec,
     // unbias the old_metrics
     memset(X, 31, d_numstates);
 
+    // (re)size the decision buffer to the current framebits; grows monotonically
+    static size_t D_size = 0;
+    size_t d_decisions_size = (size_t)(d_numstates / 8) * ((size_t)framebits + 6);
+    if (d_decisions_size > D_size) {
+        volk_free(D); /* volk_free(NULL) is safe on the first call */
+        D = (unsigned char*)volk_malloc(d_decisions_size, volk_get_alignment());
+        D_size = D ? d_decisions_size : 0; /* don't record size if alloc failed */
+    }
+
     // initialize decisions
-    memset(D, 0, (d_numstates / 8) * (framebits + 6));
+    memset(D, 0, d_decisions_size);
 
     volk_8u_x4_conv_k7_r2_8u_spiral(
         Y, X, syms, D, framebits / 2 - excess, excess, Branchtab);
@@ -195,8 +202,6 @@ static inline void volk_8u_conv_k7_r2puppet_8u_neonspiral(unsigned char* dec,
         Y = X + d_numstates;
         Branchtab =
             (unsigned char*)volk_malloc(d_numstates / 2 * rate, volk_get_alignment());
-        D = (unsigned char*)volk_malloc((d_numstates / 8) * (framebits + 6),
-                                        volk_get_alignment());
         int state, i;
 
         /*  Initialize the branch table */
@@ -213,8 +218,17 @@ static inline void volk_8u_conv_k7_r2puppet_8u_neonspiral(unsigned char* dec,
     // unbias the old_metrics
     memset(X, 31, d_numstates);
 
+    // (re)size the decision buffer to the current framebits; grows monotonically
+    static size_t D_size = 0;
+    size_t d_decisions_size = (size_t)(d_numstates / 8) * ((size_t)framebits + 6);
+    if (d_decisions_size > D_size) {
+        volk_free(D); /* volk_free(NULL) is safe on the first call */
+        D = (unsigned char*)volk_malloc(d_decisions_size, volk_get_alignment());
+        D_size = D ? d_decisions_size : 0; /* don't record size if alloc failed */
+    }
+
     // initialize decisions
-    memset(D, 0, (d_numstates / 8) * (framebits + 6));
+    memset(D, 0, d_decisions_size);
 
     volk_8u_x4_conv_k7_r2_8u_neonspiral(
         Y, X, syms, D, framebits / 2 - excess, excess, Branchtab);
@@ -267,8 +281,6 @@ static inline void volk_8u_conv_k7_r2puppet_8u_avx2(unsigned char* dec,
         Y = X + d_numstates;
         Branchtab =
             (unsigned char*)volk_malloc(d_numstates / 2 * rate, volk_get_alignment());
-        D = (unsigned char*)volk_malloc((d_numstates / 8) * (framebits + 6),
-                                        volk_get_alignment());
         int state, i;
 
         /*  Initialize the branch table */
@@ -285,8 +297,17 @@ static inline void volk_8u_conv_k7_r2puppet_8u_avx2(unsigned char* dec,
     // unbias the old_metrics
     memset(X, 31, d_numstates);
 
+    // (re)size the decision buffer to the current framebits; grows monotonically
+    static size_t D_size = 0;
+    size_t d_decisions_size = (size_t)(d_numstates / 8) * ((size_t)framebits + 6);
+    if (d_decisions_size > D_size) {
+        volk_free(D); /* volk_free(NULL) is safe on the first call */
+        D = (unsigned char*)volk_malloc(d_decisions_size, volk_get_alignment());
+        D_size = D ? d_decisions_size : 0; /* don't record size if alloc failed */
+    }
+
     // initialize decisions
-    memset(D, 0, (d_numstates / 8) * (framebits + 6));
+    memset(D, 0, d_decisions_size);
 
     volk_8u_x4_conv_k7_r2_8u_avx2(
         Y, X, syms, D, framebits / 2 - excess, excess, Branchtab);
@@ -337,8 +358,6 @@ static inline void volk_8u_conv_k7_r2puppet_8u_generic(unsigned char* dec,
         Y = X + d_numstates;
         Branchtab =
             (unsigned char*)volk_malloc(d_numstates / 2 * rate, volk_get_alignment());
-        D = (unsigned char*)volk_malloc((d_numstates / 8) * (framebits + 6),
-                                        volk_get_alignment());
 
         int state, i;
 
@@ -356,8 +375,17 @@ static inline void volk_8u_conv_k7_r2puppet_8u_generic(unsigned char* dec,
     // unbias the old_metrics
     memset(X, 31, d_numstates);
 
+    // (re)size the decision buffer to the current framebits; grows monotonically
+    static size_t D_size = 0;
+    size_t d_decisions_size = (size_t)(d_numstates / 8) * ((size_t)framebits + 6);
+    if (d_decisions_size > D_size) {
+        volk_free(D); /* volk_free(NULL) is safe on the first call */
+        D = (unsigned char*)volk_malloc(d_decisions_size, volk_get_alignment());
+        D_size = D ? d_decisions_size : 0; /* don't record size if alloc failed */
+    }
+
     // initialize decisions
-    memset(D, 0, (d_numstates / 8) * (framebits + 6));
+    memset(D, 0, d_decisions_size);
 
     volk_8u_x4_conv_k7_r2_8u_generic(
         Y, X, syms, D, framebits / 2 - excess, excess, Branchtab);
@@ -402,8 +430,6 @@ static inline void volk_8u_conv_k7_r2puppet_8u_rvv(unsigned char* dec,
         X = (unsigned char*)volk_malloc(3 * d_numstates, volk_get_alignment());
         Y = X + d_numstates;
         Branchtab = Y + d_numstates;
-        D = (unsigned char*)volk_malloc((d_numstates / 8) * (framebits + 6),
-                                        volk_get_alignment());
 
         /*  Initialize the branch table */
         for (size_t state = 0; state < d_numstates / 2; state++) {
@@ -412,8 +438,18 @@ static inline void volk_8u_conv_k7_r2puppet_8u_rvv(unsigned char* dec,
         }
     }
 
-    memset(X, 31, d_numstates);                        // unbias the old_metrics
-    memset(D, 0, (d_numstates / 8) * (framebits + 6)); // initialize decisions
+    memset(X, 31, d_numstates); // unbias the old_metrics
+
+    // (re)size the decision buffer to the current framebits; grows monotonically
+    static size_t D_size = 0;
+    size_t d_decisions_size = (size_t)(d_numstates / 8) * ((size_t)framebits + 6);
+    if (d_decisions_size > D_size) {
+        volk_free(D); /* volk_free(NULL) is safe on the first call */
+        D = (unsigned char*)volk_malloc(d_decisions_size, volk_get_alignment());
+        D_size = D ? d_decisions_size : 0; /* don't record size if alloc failed */
+    }
+
+    memset(D, 0, d_decisions_size); // initialize decisions
 
     volk_8u_x4_conv_k7_r2_8u_rvv(
         Y, X, syms, D, framebits / 2 - excess, excess, Branchtab);
