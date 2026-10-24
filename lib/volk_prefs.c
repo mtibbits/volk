@@ -38,12 +38,38 @@ void volk_get_config_path(char* path, bool read)
         }
     }
 
-    // check for user-local config file
+    // check for XDG_CONFIG_HOME (Linux/Unix)
+    // XDG spec: "If $XDG_CONFIG_HOME is either not set or empty,
+    // a default equal to $HOME/.config should be used."
+    home = getenv("XDG_CONFIG_HOME");
+    if (home != NULL && home[0] != '\0') {
+        strncpy(path, home, 512);
+        strcat(path, suffix2);
+        if (!read || access(path, F_OK) != -1) {
+            return;
+        }
+    }
+
+    // check for XDG default location ($HOME/.config/volk)
+    home = getenv("HOME");
+    if (home != NULL && home[0] != '\0') {
+        strncpy(path, home, 512);
+        strcat(path, "/.config");
+        strcat(path, suffix2);
+        if (!read || access(path, F_OK) != -1) {
+            return;
+        }
+    }
+
+    // check for legacy user-local config file (read-only fallback)
+    // Note: read-only so that new profiles write to XDG locations above.
+    // volk_profile.cc migration logic depends on read and write paths
+    // diverging here to detect legacy configs that should be migrated.
     home = getenv("HOME");
     if (home != NULL) {
         strncpy(path, home, 512);
         strcat(path, suffix);
-        if (!read || (access(path, F_OK) != -1)) {
+        if (read && (access(path, F_OK) != -1)) {
             return;
         }
     }
