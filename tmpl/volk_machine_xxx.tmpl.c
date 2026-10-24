@@ -8,10 +8,13 @@
  */
 
 <% this_machine = machine_dict[args[0]] %>
-<% arch_names = this_machine.arch_names %>
+<% arch_names = this_machine.impl_arch_names %>
 
 %for arch in this_machine.archs:
 #define LV_HAVE_${arch.name.upper()} 1
+%for prov in arch.provides:
+#define LV_HAVE_${prov.upper()} 1
+%endfor
 %endfor
 
 #include <volk/volk_common.h>

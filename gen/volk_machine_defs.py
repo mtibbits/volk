@@ -23,6 +23,19 @@ class machine_class(object):
             self.arch_names.append(arch_name)
         self.alignment = max([a.alignment for a in self.archs])
 
+    @property
+    def impl_arch_names(self):
+        # arch_names plus each arch's <provides> names. Used by the
+        # per-machine kernel-impl filter in get_impls; downstream consumers
+        # that care about *real* (declared) arch entries — like the
+        # machine-availability check in volk_compile_utils — stick with
+        # arch_names. Provides count as arch names only for source-gate
+        # dispatch (LV_HAVE_<provides>), not for CPUID detection.
+        names = list(self.arch_names)
+        for arch in self.archs:
+            names.extend(arch.provides)
+        return names
+
     def __repr__(self): return self.name
 
 def register_machine(name, archs):

@@ -162,27 +162,40 @@ at the top, as a last resort.
     <alignment>32</alignment>
 </arch>
 
+<!--
+    SKX-baseline AVX-512 tier. Bundles F + CD + DQ + BW + VL because every
+    AVX-512-capable CPU shipping in 2017 or later carries all five
+    sub-extensions (Skylake-X and successors, Zen 4+); the only F-without-
+    the-others parts (Xeon Phi Knights Landing / Knights Mill) are
+    discontinued. The arch name remains "avx512f" for kernel-header source
+    compatibility: 49 kernels gate on LV_HAVE_AVX512F directly. The
+    <provides> children define LV_HAVE_AVX512CD/DQ/BW/VL on the generated
+    machine .c so the 4 DQ-gated and 6 BW-gated kernels also compile
+    unchanged. See issue mtibbits/volk#53.
+-->
 <arch name="avx512f">
     <check name="avx512f"></check>
-    <flag compiler="gnu">-mavx512f</flag>
-    <flag compiler="clang">-mavx512f</flag>
-    <flag compiler="msvc">/arch:AVX512F</flag>
-    <alignment>64</alignment>
-</arch>
-
-<arch name="avx512cd">
     <check name="avx512cd"></check>
-    <flag compiler="gnu">-mavx512cd</flag>
-    <flag compiler="clang">-mavx512cd</flag>
-    <flag compiler="msvc">/arch:AVX512CD</flag>
-    <alignment>64</alignment>
-</arch>
-
-<arch name="avx512dq">
     <check name="avx512dq"></check>
+    <check name="avx512bw"></check>
+    <check name="avx512vl"></check>
+    <flag compiler="gnu">-mavx512f</flag>
+    <flag compiler="gnu">-mavx512cd</flag>
     <flag compiler="gnu">-mavx512dq</flag>
+    <flag compiler="gnu">-mavx512bw</flag>
+    <flag compiler="gnu">-mavx512vl</flag>
+    <flag compiler="clang">-mavx512f</flag>
+    <flag compiler="clang">-mavx512cd</flag>
     <flag compiler="clang">-mavx512dq</flag>
+    <flag compiler="clang">-mavx512bw</flag>
+    <flag compiler="clang">-mavx512vl</flag>
+    <flag compiler="msvc">/arch:AVX512F</flag>
+    <flag compiler="msvc">/arch:AVX512CD</flag>
     <flag compiler="msvc">/arch:AVX512DQ</flag>
+    <provides>avx512cd</provides>
+    <provides>avx512dq</provides>
+    <provides>avx512bw</provides>
+    <provides>avx512vl</provides>
     <alignment>64</alignment>
 </arch>
 
