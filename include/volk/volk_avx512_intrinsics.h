@@ -268,4 +268,23 @@ static inline __m512 _mm512_log2_poly_avx512(const __m512 x)
     return poly;
 }
 
+////////////////////////////////////////////////////////////////////////
+// Youngs & Cramer recurrence accumulator: update a running square-sum
+// triple (sq_acc, acc, val) over 16 parallel lanes. Algebraic form:
+//   aux = (n+1) * val - acc
+//   sq_acc += rec * aux * aux
+// where rec = 1 / (n * (n+1)) is precomputed scalar broadcast.
+// AVX-512 variant fuses the (n+1)*val - acc into a single fmsub,
+// strictly more accurate than the AVX sibling's mul + sub pair.
+// Requires AVX512F.
+////////////////////////////////////////////////////////////////////////
+static inline __m512 _mm512_accumulate_square_sum_ps(
+    __m512 sq_acc, __m512 acc, __m512 val, __m512 rec, __m512 aux)
+{
+    aux = _mm512_fmsub_ps(aux, val, acc);
+    aux = _mm512_mul_ps(aux, aux);
+    aux = _mm512_mul_ps(aux, rec);
+    return _mm512_add_ps(sq_acc, aux);
+}
+
 #endif /* INCLUDE_VOLK_VOLK_AVX512_INTRINSICS_H_ */
