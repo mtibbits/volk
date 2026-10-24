@@ -20,6 +20,7 @@ volk_32f_x2_add_32f_a_neonasm:
 	stmfd	sp!, {r7, r8, sl}	@ prologue - save register states
 
 	movs quarterPoints, num_points, lsr #2
+	moveq	number, #0	@ no main-loop iterations here: tail counter starts at 0
 	beq .loop2 @ if zero into quarterPoints
 
 	mov	number, #0	@ number, 0

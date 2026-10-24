@@ -32,6 +32,7 @@
     veor realAccQ, realAccQ @ zero out accumulators
     veor compAccQ, compAccQ @ zero out accumulators
     movs quarterPoints, num_points, lsr #2
+    moveq number, #0 @ no main-loop iterations here: tail counter starts at 0
     beq .loop2 @ if zero into quarterPoints
     
     mov number, quarterPoints

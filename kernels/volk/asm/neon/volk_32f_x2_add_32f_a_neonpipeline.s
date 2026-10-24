@@ -21,6 +21,7 @@ volk_32f_x2_add_32f_a_neonpipeline:
 	pld [bVector, #128] @ pre-load hint - this is implementation specific!
 
 	movs quarterPoints, num_points, lsr #2
+	moveq	number, #0	@ no main-loop iterations here: tail counter starts at 0
 	beq .loop2 @ if zero into quarterPoints
 
 	mov number, quarterPoints
