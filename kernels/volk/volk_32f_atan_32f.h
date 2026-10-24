@@ -36,6 +36,20 @@
  * code paths and are not covered by these measurements. For accuracy-critical
  * use with |x| > 1, prefer the generic or polynomial implementation.
  *
+ * Numerical accuracy (measured on x86 SIMD implementations against libm atanf,
+ * relative error): at most ~8e-7 for |x| <= 1 (every implementation, including
+ * the scalar `polynomial` path and all tails). For |x| > 1 the SIMD lanes
+ * compute atan(x) = +-pi/2 - atan(1/x) with a hardware reciprocal
+ * APPROXIMATION (12-bit rcpps; a 14-bit variant on avx512dq), so accuracy
+ * degrades in a band just above |x| = 1: worst-case ~1.9e-4 (sse4_1/avx2/
+ * avx2_fma) or ~2.7e-5 (avx512dq) near |x| ~ 1.007, decaying with |x| and
+ * re-entering 1e-6 beyond |x| ~ 167 (avx512dq: ~32). Large arguments saturate
+ * exactly: atan(+-1e10), atan(+-inf) return +-pi/2; NaN propagates. The scalar
+ * tail path divides exactly and stays at the ~8e-7 level everywhere, as does
+ * the `polynomial` implementation. The NEON/RVV implementations are separate
+ * code paths and are not covered by these measurements. For accuracy-critical
+ * use with |x| > 1, prefer the generic or polynomial implementation.
+ *
  * <b>Dispatcher Prototype</b>
  * \code
  * void volk_32f_atan_32f(float* out, const float* in, unsigned int num_points)
