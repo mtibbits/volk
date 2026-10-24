@@ -349,6 +349,16 @@ static void get_signatures_from_name(std::vector<volk_type_t>& inputsig,
     assert(inputsig.size() != 0);
 }
 
+// Suppress Clang -fsanitize=function on each of the 10 run_cast_test*
+// helpers below. Conditional form avoids -Wattributes on GCC, which
+// doesn't recognize "function" as a sanitizer name.
+#if defined(__clang__)
+#define VOLK_QA_NO_SANITIZE_FUNCTION __attribute__((no_sanitize("function")))
+#else
+#define VOLK_QA_NO_SANITIZE_FUNCTION
+#endif
+
+VOLK_QA_NO_SANITIZE_FUNCTION
 inline void run_cast_test1(volk_fn_1arg func,
                            std::vector<void*>& buffs,
                            unsigned int vlen,
@@ -360,6 +370,7 @@ inline void run_cast_test1(volk_fn_1arg func,
     }
 }
 
+VOLK_QA_NO_SANITIZE_FUNCTION
 inline void run_cast_test2(volk_fn_2arg func,
                            std::vector<void*>& buffs,
                            unsigned int vlen,
@@ -371,6 +382,7 @@ inline void run_cast_test2(volk_fn_2arg func,
     }
 }
 
+VOLK_QA_NO_SANITIZE_FUNCTION
 inline void run_cast_test3(volk_fn_3arg func,
                            std::vector<void*>& buffs,
                            unsigned int vlen,
@@ -382,6 +394,7 @@ inline void run_cast_test3(volk_fn_3arg func,
     }
 }
 
+VOLK_QA_NO_SANITIZE_FUNCTION
 inline void run_cast_test4(volk_fn_4arg func,
                            std::vector<void*>& buffs,
                            unsigned int vlen,
@@ -393,6 +406,7 @@ inline void run_cast_test4(volk_fn_4arg func,
     }
 }
 
+VOLK_QA_NO_SANITIZE_FUNCTION
 inline void run_cast_test1_s32f(volk_fn_1arg_s32f func,
                                 std::vector<void*>& buffs,
                                 float scalar,
@@ -405,6 +419,7 @@ inline void run_cast_test1_s32f(volk_fn_1arg_s32f func,
     }
 }
 
+VOLK_QA_NO_SANITIZE_FUNCTION
 inline void run_cast_test2_s32f(volk_fn_2arg_s32f func,
                                 std::vector<void*>& buffs,
                                 float scalar,
@@ -417,6 +432,7 @@ inline void run_cast_test2_s32f(volk_fn_2arg_s32f func,
     }
 }
 
+VOLK_QA_NO_SANITIZE_FUNCTION
 inline void run_cast_test3_s32f(volk_fn_3arg_s32f func,
                                 std::vector<void*>& buffs,
                                 float scalar,
@@ -429,6 +445,7 @@ inline void run_cast_test3_s32f(volk_fn_3arg_s32f func,
     }
 }
 
+VOLK_QA_NO_SANITIZE_FUNCTION
 inline void run_cast_test1_s32fc(volk_fn_1arg_s32fc func,
                                  std::vector<void*>& buffs,
                                  lv_32fc_t scalar,
@@ -441,6 +458,7 @@ inline void run_cast_test1_s32fc(volk_fn_1arg_s32fc func,
     }
 }
 
+VOLK_QA_NO_SANITIZE_FUNCTION
 inline void run_cast_test2_s32fc(volk_fn_2arg_s32fc func,
                                  std::vector<void*>& buffs,
                                  lv_32fc_t scalar,
@@ -453,6 +471,7 @@ inline void run_cast_test2_s32fc(volk_fn_2arg_s32fc func,
     }
 }
 
+VOLK_QA_NO_SANITIZE_FUNCTION
 inline void run_cast_test3_s32fc(volk_fn_3arg_s32fc func,
                                  std::vector<void*>& buffs,
                                  lv_32fc_t scalar,
@@ -464,6 +483,9 @@ inline void run_cast_test3_s32fc(volk_fn_3arg_s32fc func,
         func(buffs[0], buffs[1], buffs[2], &scalar, vlen, arch.c_str());
     }
 }
+
+// Keep the macro scoped to the helper cluster.
+#undef VOLK_QA_NO_SANITIZE_FUNCTION
 
 template <class t>
 bool fcompare(t* expected,
