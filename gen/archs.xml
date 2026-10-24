@@ -9,21 +9,6 @@ at the top, as a last resort.
 <arch name="generic"> <!-- name is required-->
 </arch>
 
-<arch name="softfp">
-  <flag compiler="gnu">-mfloat-abi=softfp</flag>
-  <flag compiler="clang">-mfloat-abi=softfp</flag>
-</arch>
-
-<arch name="hardfp">
-  <flag compiler="gnu">-mfloat-abi=hard</flag>
-  <flag compiler="clang">-mfloat-abi=hard</flag>
-</arch>
-
-<arch name="32">
-  <flag compiler="gnu">-m32</flag>
-  <flag compiler="clang">-m32</flag>
-</arch>
-
 <arch name="64">
   <!-- <check name="check_extended_cpuid"> -->
       <!-- <param>0x80000001</param>
@@ -35,13 +20,6 @@ at the top, as a last resort.
   <!-- </check> -->
   <flag compiler="gnu">-m64</flag>
   <flag compiler="clang">-m64</flag>
-</arch>
-
-<arch name="popcount">
-  <check name="popcnt"></check>
-  <flag compiler="gnu">-mpopcnt</flag>
-  <flag compiler="clang">-mpopcnt</flag>
-  <flag compiler="msvc">/arch:AVX</flag>
 </arch>
 
 <arch name="mmx">
@@ -76,10 +54,6 @@ at the top, as a last resort.
 </arch>
 
 <arch name="orc">
-</arch>
-
-<!-- it's here for overrule stuff. -->
-<arch name="norc">
 </arch>
 
 <arch name="neon">
@@ -120,13 +94,6 @@ at the top, as a last resort.
   <flag compiler="gnu">-mssse3</flag>
   <flag compiler="clang">-mssse3</flag>
   <flag compiler="msvc">/arch:AVX</flag>
-  <alignment>16</alignment>
-</arch>
-
-<arch name="sse4_a">
-  <check name="sse4a"></check>
-  <flag compiler="gnu">-msse4a</flag>
-  <flag compiler="clang">-msse4a</flag>
   <alignment>16</alignment>
 </arch>
 
