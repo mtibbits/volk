@@ -278,6 +278,73 @@ volk_32f_sin_32f_a_avx2(float* bVector, const float* aVector, unsigned int num_p
 
 #endif /* LV_HAVE_AVX2 */
 
+#ifdef LV_HAVE_AVX
+#include <immintrin.h>
+#include <volk/volk_avx_intrinsics.h>
+
+static inline void
+volk_32f_sin_32f_a_avx(float* bVector, const float* aVector, unsigned int num_points)
+{
+    float* bPtr = bVector;
+    const float* aPtr = aVector;
+
+    unsigned int number = 0;
+    unsigned int eighthPoints = num_points / 8;
+
+    // Constants for Cody-Waite argument reduction
+    // n = round(x * 2/pi), then r = x - n * pi/2
+    const __m256 two_over_pi = _mm256_set1_ps(0x1.45f306p-1f);    // 2/pi
+    const __m256 pi_over_2_hi = _mm256_set1_ps(0x1.921fb6p+0f);   // pi/2 high
+    const __m256 pi_over_2_lo = _mm256_set1_ps(-0x1.777a5cp-25f); // pi/2 low
+
+    // 128-bit integer constants -- used per-half because AVX1 has no
+    // 256-bit integer AND / CMPEQ.
+    const __m128i ones_128 = _mm_set1_epi32(1);
+    const __m128i twos_128 = _mm_set1_epi32(2);
+    const __m256 sign_bit = _mm256_set1_ps(-0.0f);
+
+    for (; number < eighthPoints; number++) {
+        __m256 x = _mm256_load_ps(aPtr);
+
+        // Argument reduction: n = round(x * 2/pi)
+        __m256 n_f = _mm256_round_ps(_mm256_mul_ps(x, two_over_pi),
+                                     _MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC);
+        __m256i n = _mm256_cvtps_epi32(n_f);
+
+        // r = x - n * (pi/2), using extended precision
+        __m256 r = _mm256_sub_ps(x, _mm256_mul_ps(n_f, pi_over_2_hi));
+        r = _mm256_sub_ps(r, _mm256_mul_ps(n_f, pi_over_2_lo));
+
+        // Evaluate both sin and cos polynomials
+        __m256 sin_r = _mm256_sin_poly_avx(r);
+        __m256 cos_r = _mm256_cos_poly_avx(r);
+
+        // Quadrant-based reconstruction. Split n once and reuse halves
+        // across both masks via the _mm256_mask_bit_set_avx helper.
+        __m128i n_lo = _mm256_castsi256_si128(n);
+        __m128i n_hi = _mm256_extractf128_si256(n, 1);
+
+        // swap when (n & 1) == 1 -> use cos_r instead of sin_r
+        __m256 swap_mask = _mm256_mask_bit_set_avx(n_lo, n_hi, ones_128);
+        __m256 result = _mm256_blendv_ps(sin_r, cos_r, swap_mask);
+
+        // negate when (n & 2) == 2
+        __m256 neg_mask = _mm256_mask_bit_set_avx(n_lo, n_hi, twos_128);
+        result = _mm256_xor_ps(result, _mm256_and_ps(neg_mask, sign_bit));
+
+        _mm256_store_ps(bPtr, result);
+        aPtr += 8;
+        bPtr += 8;
+    }
+
+    number = eighthPoints * 8;
+    for (; number < num_points; number++) {
+        *bPtr++ = sinf(*aPtr++);
+    }
+}
+
+#endif /* LV_HAVE_AVX */
+
 #ifdef LV_HAVE_SSE4_1
 #include <smmintrin.h>
 #include <volk/volk_sse_intrinsics.h>
@@ -550,6 +617,62 @@ volk_32f_sin_32f_u_avx2(float* bVector, const float* aVector, unsigned int num_p
 }
 
 #endif /* LV_HAVE_AVX2 */
+
+#ifdef LV_HAVE_AVX
+#include <immintrin.h>
+#include <volk/volk_avx_intrinsics.h>
+
+static inline void
+volk_32f_sin_32f_u_avx(float* bVector, const float* aVector, unsigned int num_points)
+{
+    float* bPtr = bVector;
+    const float* aPtr = aVector;
+
+    unsigned int number = 0;
+    unsigned int eighthPoints = num_points / 8;
+
+    const __m256 two_over_pi = _mm256_set1_ps(0x1.45f306p-1f);
+    const __m256 pi_over_2_hi = _mm256_set1_ps(0x1.921fb6p+0f);
+    const __m256 pi_over_2_lo = _mm256_set1_ps(-0x1.777a5cp-25f);
+
+    const __m128i ones_128 = _mm_set1_epi32(1);
+    const __m128i twos_128 = _mm_set1_epi32(2);
+    const __m256 sign_bit = _mm256_set1_ps(-0.0f);
+
+    for (; number < eighthPoints; number++) {
+        __m256 x = _mm256_loadu_ps(aPtr);
+
+        __m256 n_f = _mm256_round_ps(_mm256_mul_ps(x, two_over_pi),
+                                     _MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC);
+        __m256i n = _mm256_cvtps_epi32(n_f);
+
+        __m256 r = _mm256_sub_ps(x, _mm256_mul_ps(n_f, pi_over_2_hi));
+        r = _mm256_sub_ps(r, _mm256_mul_ps(n_f, pi_over_2_lo));
+
+        __m256 sin_r = _mm256_sin_poly_avx(r);
+        __m256 cos_r = _mm256_cos_poly_avx(r);
+
+        __m128i n_lo = _mm256_castsi256_si128(n);
+        __m128i n_hi = _mm256_extractf128_si256(n, 1);
+
+        __m256 swap_mask = _mm256_mask_bit_set_avx(n_lo, n_hi, ones_128);
+        __m256 result = _mm256_blendv_ps(sin_r, cos_r, swap_mask);
+
+        __m256 neg_mask = _mm256_mask_bit_set_avx(n_lo, n_hi, twos_128);
+        result = _mm256_xor_ps(result, _mm256_and_ps(neg_mask, sign_bit));
+
+        _mm256_storeu_ps(bPtr, result);
+        aPtr += 8;
+        bPtr += 8;
+    }
+
+    number = eighthPoints * 8;
+    for (; number < num_points; number++) {
+        *bPtr++ = sinf(*aPtr++);
+    }
+}
+
+#endif /* LV_HAVE_AVX */
 
 
 #ifdef LV_HAVE_SSE4_1

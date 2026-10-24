@@ -322,4 +322,82 @@ static inline __m256 _mm256_log2_poly_avx(const __m256 x)
     return poly;
 }
 
+/*
+ * Approximate sin(x) via polynomial expansion
+ * on the interval [-pi/4, pi/4]
+ *
+ * Maximum absolute error ~7.3e-9
+ * sin(x) = x + x^3 * (s1 + x^2 * (s2 + x^2 * s3))
+ *
+ * AVX-only sibling of _mm256_sin_poly_avx2 in volk_avx2_intrinsics.h.
+ * The AVX2 version uses only AVX1 intrinsics; this copy lets the AVX
+ * tier of volk_32f_sin_32f / volk_32f_sincos_32f_x2 include it without
+ * depending on the AVX2 intrinsics header.
+ */
+static inline __m256 _mm256_sin_poly_avx(const __m256 x)
+{
+    const __m256 s1 = _mm256_set1_ps(-0x1.555552p-3f);
+    const __m256 s2 = _mm256_set1_ps(+0x1.110be2p-7f);
+    const __m256 s3 = _mm256_set1_ps(-0x1.9ab22ap-13f);
+
+    const __m256 x2 = _mm256_mul_ps(x, x);
+    const __m256 x3 = _mm256_mul_ps(x2, x);
+
+    __m256 poly = _mm256_add_ps(_mm256_mul_ps(x2, s3), s2);
+    poly = _mm256_add_ps(_mm256_mul_ps(x2, poly), s1);
+    return _mm256_add_ps(_mm256_mul_ps(x3, poly), x);
+}
+
+/*
+ * Approximate cos(x) via polynomial expansion
+ * on the interval [-pi/4, pi/4]
+ *
+ * Maximum absolute error ~1.1e-7
+ * cos(x) = 1 + x^2 * (c1 + x^2 * (c2 + x^2 * c3))
+ *
+ * AVX-only sibling of _mm256_cos_poly_avx2 in volk_avx2_intrinsics.h.
+ */
+static inline __m256 _mm256_cos_poly_avx(const __m256 x)
+{
+    const __m256 c1 = _mm256_set1_ps(-0x1.fffff4p-2f);
+    const __m256 c2 = _mm256_set1_ps(+0x1.554a46p-5f);
+    const __m256 c3 = _mm256_set1_ps(-0x1.661be2p-10f);
+    const __m256 one = _mm256_set1_ps(1.0f);
+
+    const __m256 x2 = _mm256_mul_ps(x, x);
+
+    __m256 poly = _mm256_add_ps(_mm256_mul_ps(x2, c3), c2);
+    poly = _mm256_add_ps(_mm256_mul_ps(x2, poly), c1);
+    return _mm256_add_ps(_mm256_mul_ps(x2, poly), one);
+}
+
+/*
+ * Compute mask = (n & K) == K, returned as a 256-bit blend mask suitable
+ * for _mm256_blendv_ps (sign bit is read; 0xFFFFFFFF cast to float has
+ * the sign bit set).
+ *
+ * AVX1-only — emulates the AVX2 _mm256_and_si256 + _mm256_cmpeq_epi32
+ * sequence by splitting the 256-bit integer vector into two 128-bit
+ * halves, performing the test in SSE2, and recombining.
+ *
+ * Inputs: n_lo, n_hi are the lower and upper 128-bit halves of a 256-bit
+ *         integer vector. Callers extract once per loop iteration via
+ *         _mm256_castsi256_si128 (lo, free) and _mm256_extractf128_si256
+ *         (hi) and reuse across multiple masks.
+ *         K_128 is a 128-bit broadcast of the test mask
+ *         (e.g. _mm_set1_epi32(1) or _mm_set1_epi32(2)).
+ *
+ * Used by the AVX tiers of volk_32f_sin_32f, volk_32f_cos_32f, and
+ * volk_32f_sincos_32f_x2 for quadrant-bit tests in sin/cos
+ * reconstruction.
+ */
+static inline __m256
+_mm256_mask_bit_set_avx(const __m128i n_lo, const __m128i n_hi, const __m128i K_128)
+{
+    const __m128i mask_lo = _mm_cmpeq_epi32(_mm_and_si128(n_lo, K_128), K_128);
+    const __m128i mask_hi = _mm_cmpeq_epi32(_mm_and_si128(n_hi, K_128), K_128);
+    return _mm256_castsi256_ps(
+        _mm256_insertf128_si256(_mm256_castsi128_si256(mask_lo), mask_hi, 1));
+}
+
 #endif /* INCLUDE_VOLK_VOLK_AVX_INTRINSICS_H_ */
