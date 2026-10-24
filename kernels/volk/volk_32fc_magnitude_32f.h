@@ -87,43 +87,42 @@ static inline void volk_32fc_magnitude_32f_u_avx512f(float* magnitudeVector,
                                                      unsigned int num_points)
 {
     unsigned int number = 0;
-    const unsigned int eighthPoints = num_points / 8;
+    const unsigned int sixteenthPoints = num_points / 16;
 
     const float* complexVectorPtr = (float*)complexVector;
     float* magnitudeVectorPtr = magnitudeVector;
 
-    __m512 cplxValue;
-    __m512 iValues, qValues;
-    __m512 result;
+    // De-interleave indices for two 512-bit loads (32 floats = 16 complex):
+    // gather all real (even) lanes, then all imag (odd) lanes, across both regs.
+    const __m512i idxReal =
+        _mm512_setr_epi32(0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30);
+    const __m512i idxImag =
+        _mm512_setr_epi32(1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31);
 
-    for (; number < eighthPoints; number++) {
-        // Load 8 complex numbers (16 floats): I0,Q0,I1,Q1,...,I7,Q7
-        cplxValue = _mm512_loadu_ps(complexVectorPtr);
+    __m512 cplx0, cplx1;
+    __m512 iValues, qValues, result;
 
-        // Separate I and Q values using permute
-        // Extract I values (even indices: 0,2,4,6,8,10,12,14)
-        iValues = _mm512_permutexvar_ps(
-            _mm512_setr_epi32(0, 2, 4, 6, 8, 10, 12, 14, 0, 0, 0, 0, 0, 0, 0, 0),
-            cplxValue);
-        // Extract Q values (odd indices: 1,3,5,7,9,11,13,15)
-        qValues = _mm512_permutexvar_ps(
-            _mm512_setr_epi32(1, 3, 5, 7, 9, 11, 13, 15, 0, 0, 0, 0, 0, 0, 0, 0),
-            cplxValue);
+    for (; number < sixteenthPoints; number++) {
+        // Load 16 complex numbers (32 floats): cplx0 holds samples 0-7, cplx1 8-15
+        cplx0 = _mm512_loadu_ps(complexVectorPtr);
+        cplx1 = _mm512_loadu_ps(complexVectorPtr + 16);
 
-        // Square and add: I^2 + Q^2
+        // De-interleave into full 16-lane I and Q vectors
+        iValues = _mm512_permutex2var_ps(cplx0, idxReal, cplx1);
+        qValues = _mm512_permutex2var_ps(cplx0, idxImag, cplx1);
+
+        // |z| = sqrt(I^2 + Q^2)
         result = _mm512_fmadd_ps(iValues, iValues, _mm512_mul_ps(qValues, qValues));
-
-        // Square root
         result = _mm512_sqrt_ps(result);
 
-        // Store only first 8 results
-        _mm256_storeu_ps(magnitudeVectorPtr, _mm512_castps512_ps256(result));
+        // Store all 16 results
+        _mm512_storeu_ps(magnitudeVectorPtr, result);
 
-        complexVectorPtr += 16;
-        magnitudeVectorPtr += 8;
+        complexVectorPtr += 32;
+        magnitudeVectorPtr += 16;
     }
 
-    number = eighthPoints * 8;
+    number = sixteenthPoints * 16;
     volk_32fc_magnitude_32f_generic(
         magnitudeVectorPtr, (const lv_32fc_t*)complexVectorPtr, num_points - number);
 }
@@ -255,41 +254,42 @@ static inline void volk_32fc_magnitude_32f_a_avx512f(float* magnitudeVector,
                                                      unsigned int num_points)
 {
     unsigned int number = 0;
-    const unsigned int eighthPoints = num_points / 8;
+    const unsigned int sixteenthPoints = num_points / 16;
 
     const float* complexVectorPtr = (float*)complexVector;
     float* magnitudeVectorPtr = magnitudeVector;
 
-    __m512 cplxValue;
-    __m512 iValues, qValues;
-    __m512 result;
+    // De-interleave indices for two 512-bit loads (32 floats = 16 complex):
+    // gather all real (even) lanes, then all imag (odd) lanes, across both regs.
+    const __m512i idxReal =
+        _mm512_setr_epi32(0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30);
+    const __m512i idxImag =
+        _mm512_setr_epi32(1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31);
 
-    for (; number < eighthPoints; number++) {
-        // Load 8 complex numbers (16 floats): I0,Q0,I1,Q1,...,I7,Q7
-        cplxValue = _mm512_load_ps(complexVectorPtr);
+    __m512 cplx0, cplx1;
+    __m512 iValues, qValues, result;
 
-        // Separate I and Q values using permute
-        iValues = _mm512_permutexvar_ps(
-            _mm512_setr_epi32(0, 2, 4, 6, 8, 10, 12, 14, 0, 0, 0, 0, 0, 0, 0, 0),
-            cplxValue);
-        qValues = _mm512_permutexvar_ps(
-            _mm512_setr_epi32(1, 3, 5, 7, 9, 11, 13, 15, 0, 0, 0, 0, 0, 0, 0, 0),
-            cplxValue);
+    for (; number < sixteenthPoints; number++) {
+        // Load 16 complex numbers (32 floats): cplx0 holds samples 0-7, cplx1 8-15
+        cplx0 = _mm512_load_ps(complexVectorPtr);
+        cplx1 = _mm512_load_ps(complexVectorPtr + 16);
 
-        // Square and add: I^2 + Q^2
+        // De-interleave into full 16-lane I and Q vectors
+        iValues = _mm512_permutex2var_ps(cplx0, idxReal, cplx1);
+        qValues = _mm512_permutex2var_ps(cplx0, idxImag, cplx1);
+
+        // |z| = sqrt(I^2 + Q^2)
         result = _mm512_fmadd_ps(iValues, iValues, _mm512_mul_ps(qValues, qValues));
-
-        // Square root
         result = _mm512_sqrt_ps(result);
 
-        // Store only first 8 results
-        _mm256_store_ps(magnitudeVectorPtr, _mm512_castps512_ps256(result));
+        // Store all 16 results
+        _mm512_store_ps(magnitudeVectorPtr, result);
 
-        complexVectorPtr += 16;
-        magnitudeVectorPtr += 8;
+        complexVectorPtr += 32;
+        magnitudeVectorPtr += 16;
     }
 
-    number = eighthPoints * 8;
+    number = sixteenthPoints * 16;
     volk_32fc_magnitude_32f_generic(
         magnitudeVectorPtr, (const lv_32fc_t*)complexVectorPtr, num_points - number);
 }
